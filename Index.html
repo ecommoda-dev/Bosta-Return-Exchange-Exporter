@@ -456,7 +456,7 @@
     <div class="app-header-btns">
       <!-- زرار الموظف — §7.1 -->
       <button class="hbtn active-user" id="activeUserBtn" onclick="doLogout()">👤 —</button>
-      <button class="hbtn ver-btn" onclick="openChangelog()">v2.0.0 📋</button>
+      <button class="hbtn ver-btn" onclick="openChangelog()">v2.1.0 📋</button>
       <button class="hbtn" id="settingsBtn" onclick="openSettings()">⚙️ الإعدادات</button>
     </div>
   </div>
@@ -513,7 +513,17 @@
     <div class="changelog-body">
       <div class="cl-version-block">
         <div class="cl-version-row">
-          <span class="cl-ver-badge">v2.0.0</span>
+          <span class="cl-ver-badge">v2.1.0</span>
+          <span class="cl-ver-date">05-05-2026</span>
+        </div>
+        <ul class="cl-items">
+          <li class="cl-item"><span class="cl-tag fix">إصلاح</span><span>عمود W (Return Package Description) يُملأ بالمنتجات المرتجعة من الـ returns</span></li>
+        </ul>
+      </div>
+
+      <div class="cl-version-block">
+        <div class="cl-version-row">
+          <span class="cl-ver-badge old">v2.0.0</span>
           <span class="cl-ver-date">05-05-2026</span>
         </div>
         <ul class="cl-items">
@@ -1000,6 +1010,17 @@ async function exportToExcel(orders) {
     const items = (order.lineItems?.edges || []).map(e => e.node).filter(li => li.currentQuantity > 0);
     const cash  = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0) || null;
     const count = items.reduce((s, li) => s + (li.currentQuantity || 1), 0) || null;
+
+    // بيانات المرتجعات — عمود W
+    const returnLineItems = (order.returns?.edges || [])
+      .flatMap(r => r.node.returnLineItems.edges)
+      .map(e => {
+        const li = e.node.fulfillmentLineItem?.lineItem;
+        return li ? `${li.sku || li.name} x${e.node.quantity}` : null;
+      })
+      .filter(Boolean);
+    const returnDesc = returnLineItems.join(' | ') || null;
+
     ws.addRow({
       fullName:    [addr.firstName, addr.lastName].filter(Boolean).join(' ') || null,
       phone:       addr.phone    || null, phone2: null,
@@ -1012,7 +1033,7 @@ async function exportToExcel(orders) {
       orderRef:    order.name || null,
       goodsValue: null, bostaCredits: null, flexship: null,
       openPackage: null, brandName: null, _sep2: null,
-      returnItems: null, returnDesc: null, _sep3: null, packageType: null,
+      returnItems: null, returnDesc, _sep3: null, packageType: null,
     });
   });
 
