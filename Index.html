@@ -456,7 +456,7 @@
     <div class="app-header-btns">
       <!-- زرار الموظف — §7.1 -->
       <button class="hbtn active-user" id="activeUserBtn" onclick="doLogout()">👤 —</button>
-      <button class="hbtn ver-btn" onclick="openChangelog()">v2.1.0 📋</button>
+      <button class="hbtn ver-btn" onclick="openChangelog()">v2.2.0 📋</button>
       <button class="hbtn" id="settingsBtn" onclick="openSettings()">⚙️ الإعدادات</button>
     </div>
   </div>
@@ -513,7 +513,24 @@
     <div class="changelog-body">
       <div class="cl-version-block">
         <div class="cl-version-row">
-          <span class="cl-ver-badge">v2.1.0</span>
+          <span class="cl-ver-badge">v2.2.0</span>
+          <span class="cl-ver-date">09-05-2026</span>
+        </div>
+        <ul class="cl-items">
+          <li class="cl-item"><span class="cl-tag change">تغيير</span><span>إعادة هيكلة الـ XLSX — حذف صف العناوين العلوية، 21 عمود بترتيب وأسماء جديدة</span></li>
+          <li class="cl-item"><span class="cl-tag new">جديد</span><span>عمود Second Phone — من Customer phone (customer.phone) في Shopify</span></li>
+          <li class="cl-item"><span class="cl-tag new">جديد</span><span>عمود Delivery Notes — من ملاحظات الأوردر (order.note)</span></li>
+          <li class="cl-item"><span class="cl-tag new">جديد</span><span>عمود Goods Value Amount — سعر منتجات الاستبدال أو المرتجعة تلقائياً</span></li>
+          <li class="cl-item"><span class="cl-tag new">جديد</span><span>عمود Return #Items — عدد القطع المرتجعة تلقائياً</span></li>
+          <li class="cl-item"><span class="cl-tag change">تغيير</span><span>Apply Flexship Fees و Allow Opening Package — قيمة ثابتة "Yes" تلقائياً</span></li>
+          <li class="cl-item"><span class="cl-tag change">تغيير</span><span>Brand Name — قيمة ثابتة "Ecommoda" تلقائياً</span></li>
+          <li class="cl-item"><span class="cl-tag change">تغيير</span><span>Worker — إضافة note وcustomer.phone وoriginalUnitPriceSet وexchangeLineItems للـ GraphQL query</span></li>
+        </ul>
+      </div>
+
+      <div class="cl-version-block">
+        <div class="cl-version-row">
+          <span class="cl-ver-badge old">v2.1.0</span>
           <span class="cl-ver-date">05-05-2026</span>
         </div>
         <ul class="cl-items">
@@ -941,7 +958,7 @@ async function processOrders() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// EXCEL — متوافق مع Bosta Upload Template V3.4
+// EXCEL — تنسيق محدّث v2.2.0
 // ══════════════════════════════════════════════════════════════
 async function exportToExcel(orders) {
   const wb = new ExcelJS.Workbook();
@@ -949,61 +966,55 @@ async function exportToExcel(orders) {
   const ws = wb.addWorksheet('Add orders here');
 
   ws.columns = [
-    { key:'fullName',     width:30   }, { key:'phone',        width:14   },
-    { key:'phone2',       width:8.5  }, { key:'city',         width:14   },
-    { key:'area',         width:17   }, { key:'address1',     width:22   },
-    { key:'address2',     width:15   }, { key:'workAddress',  width:14.5 },
-    { key:'locationLink', width:14   }, { key:'notes',        width:14   },
-    { key:'_sep1',        width:3    }, { key:'cashAmount',   width:13.5 },
-    { key:'itemCount',    width:10.5 }, { key:'description',  width:13.5 },
-    { key:'orderRef',     width:11.5 }, { key:'goodsValue',   width:15   },
-    { key:'bostaCredits', width:18   }, { key:'flexship',     width:18   },
-    { key:'openPackage',  width:18.5 }, { key:'brandName',    width:18.5 },
-    { key:'_sep2',        width:3    }, { key:'returnItems',  width:15.5 },
-    { key:'returnDesc',   width:17   }, { key:'_sep3',        width:3.5  },
-    { key:'packageType',  width:30   },
+    { key:'fullName',      width:25   }, // A — Full Name
+    { key:'phone',         width:14   }, // B — Phone
+    { key:'city',          width:14   }, // C — City
+    { key:'streetName',    width:22   }, // D — Street Name
+    { key:'cashAmount',    width:13.5 }, // E — Cash Amount
+    { key:'area',          width:10   }, // F — Area
+    { key:'landmark',      width:15   }, // G — Landmark
+    { key:'workAddress',   width:14   }, // H — Work address?
+    { key:'secondPhone',   width:14   }, // I — Second Phone
+    { key:'flexship',      width:20   }, // J — Apply Flexship Fees?
+    { key:'openPackage',   width:20   }, // K — Allow Opening Package?
+    { key:'packageType',   width:20   }, // L — Package Type
+    { key:'itemCount',     width:11   }, // M — No. of Items
+    { key:'description',   width:20   }, // N — Package Description
+    { key:'deliveryNotes', width:16   }, // O — Delivery Notes
+    { key:'orderRef',      width:14   }, // P — Order Reference
+    { key:'returnItems',   width:14   }, // Q — Return #Items
+    { key:'returnDesc',    width:22   }, // R — Return Package Description
+    { key:'goodsValue',    width:16   }, // S — Goods Value Amount
+    { key:'bostaCredits',  width:18   }, // T — Pay With Bosta Credits?
+    { key:'brandName',     width:14   }, // U — Brand Name
   ];
 
-  const GR = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF666666' } };
-  const RD = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFF0000' } };
-  const BL = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF3C78D8' } };
-  const GN = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF92D050' } };
-  const WF = { color:{ argb:'FFFFFFFF' }, bold:true, name:'Calibri', size:11 };
   const RF = { color:{ argb:'FFFF0000' }, bold:true, name:'Calibri', size:10 };
   const BF = { color:{ argb:'FF000000' }, bold:true, name:'Calibri', size:10 };
   const CT = { horizontal:'center', vertical:'middle' };
 
   ws.addRow([]);
-  ws.getRow(1).height = 30;
-  ws.mergeCells('A1:J1');
-  Object.assign(ws.getCell('A1'), { value:'CUSTOMER  INFORMATION', fill:GR, font:WF, alignment:CT });
-  ws.mergeCells('L1:T1');
-  Object.assign(ws.getCell('L1'), { value:'ORDER DETAILS', fill:RD, font:WF, alignment:CT });
-  ws.mergeCells('V1:W1');
-  Object.assign(ws.getCell('V1'), { value:'Fill this info if Order Type is EXHANGE', fill:BL, font:WF, alignment:{...CT,wrapText:true} });
-  Object.assign(ws.getCell('Y1'), { value:'Fill this field if Order Type is Deliver\n(BULKY/DOCUMENT)', fill:GN, font:WF, alignment:{...CT,wrapText:true} });
-
-  ws.addRow([]);
-  ws.getRow(2).height = 42;
+  ws.getRow(1).height = 42;
   const H = {
-    A:['* Full Name',RF], B:['* Phone\nMobile only',RF], C:['Second Phone\nMobile or Landline',BF],
-    D:['* City',RF], E:[' Area',BF], F:['* Street Name (Address Line 1)',RF],
-    G:['Landmark (Address Line 2)',BF], H:['Work address?\nLeave empty if\nit is a home address',BF],
-    I:['Location Link',BF], J:['Delivery Notes',BF],
-    L:['Cash Amount\nLeave empty if \nno cash to collect',BF],
-    M:['#Items\nLeave empty if \n1 item',BF], N:['Package Description',BF],
-    O:['Order Reference',BF], P:['Goods Value Amount',BF],
-    Q:['Pay With Bosta Credits?',BF], R:['Apply Flexship Fees',BF],
-    S:['Allow\nOpening Package?\nLeave empty if Not allowed',BF], T:['Brand Name',BF],
-    V:['Return #Items\nLeave empty if \n1 item',BF], W:['Return Package \nDescription',BF],
-    Y:['Package Type\nLeave empty if \nit is normal Parcel',BF],
+    A:['Full Name',RF],        B:['Phone',RF],
+    C:['City',RF],             D:['Street Name',RF],
+    E:['Cash Amount',BF],      F:['Area',BF],
+    G:['Landmark',BF],         H:['Work address?',BF],
+    I:['Second Phone',BF],
+    J:['Apply Flexship\nFees?',BF], K:['Allow\nOpening Package?',BF],
+    L:['Package Type',BF],     M:['No. of Items',BF],
+    N:['Package Description',BF], O:['Delivery Notes',BF],
+    P:['Order Reference',BF],  Q:['Return #Items',BF],
+    R:['Return Package\nDescription',BF],
+    S:['Goods Value\nAmount',BF], T:['Pay With Bosta\nCredits?',BF],
+    U:['Brand Name',BF],
   };
   Object.entries(H).forEach(([col,[text,font]]) => {
-    const c = ws.getCell(`${col}2`);
+    const c = ws.getCell(`${col}1`);
     c.value = text; c.font = font; c.alignment = {...CT, wrapText:true};
   });
 
-  ws.views = [{ state:'frozen', ySplit:2, rightToLeft:false }];
+  ws.views = [{ state:'frozen', ySplit:1, rightToLeft:false }];
 
   orders.forEach(order => {
     const addr  = order.shippingAddress || {};
@@ -1011,29 +1022,70 @@ async function exportToExcel(orders) {
     const cash  = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0) || null;
     const count = items.reduce((s, li) => s + (li.currentQuantity || 1), 0) || null;
 
-    // بيانات المرتجعات — عمود W
-    const returnLineItems = (order.returns?.edges || [])
-      .flatMap(r => r.node.returnLineItems.edges)
+    const allReturns = order.returns?.edges || [];
+
+    // R — Return Package Description
+    const returnLineItemsList = allReturns
+      .flatMap(r => r.node.returnLineItems?.edges || [])
       .map(e => {
         const li = e.node.fulfillmentLineItem?.lineItem;
         return li ? `${li.sku || li.name} x${e.node.quantity}` : null;
       })
       .filter(Boolean);
-    const returnDesc = returnLineItems.join(' | ') || null;
+    const returnDesc = returnLineItemsList.join(' | ') || null;
+
+    // Q — Return #Items (null لو 1)
+    const returnQtyTotal = allReturns
+      .flatMap(r => r.node.returnLineItems?.edges || [])
+      .reduce((s, e) => s + (e.node.quantity || 1), 0);
+    const returnItemsCount = returnQtyTotal > 1 ? returnQtyTotal : null;
+
+    // S — Goods Value Amount
+    // استبدال: سعر منتجات الاستبدال — استرجاع: سعر المرتجعات
+    const hasExchange = allReturns.some(r => (r.node.exchangeLineItems?.edges || []).length > 0);
+    let goodsValue = 0;
+    if (hasExchange) {
+      allReturns.forEach(r => {
+        (r.node.exchangeLineItems?.edges || []).forEach(e => {
+          const qty = e.node.quantity || 1;
+          (e.node.lineItems || []).forEach(li => {
+            goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
+          });
+        });
+      });
+    } else {
+      allReturns.forEach(r => {
+        (r.node.returnLineItems?.edges || []).forEach(e => {
+          const li  = e.node.fulfillmentLineItem?.lineItem;
+          const qty = e.node.quantity || 1;
+          if (li) goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
+        });
+      });
+    }
+    const goodsValueFinal = goodsValue > 0 ? goodsValue : null;
 
     ws.addRow({
-      fullName:    [addr.firstName, addr.lastName].filter(Boolean).join(' ') || null,
-      phone:       addr.phone    || null, phone2: null,
-      city:        addr.city     || null, area: null,
-      address1:    addr.address1 || null, address2: addr.address2 || null,
-      workAddress: null, locationLink: null, notes: null, _sep1: null,
-      cashAmount:  cash  !== 0 ? cash  : null,
-      itemCount:   count !== 1 ? count : null,
-      description: items.map(li => `${li.sku || li.name} x${li.currentQuantity}`).join(' | ') || null,
-      orderRef:    order.name || null,
-      goodsValue: null, bostaCredits: null, flexship: null,
-      openPackage: null, brandName: null, _sep2: null,
-      returnItems: null, returnDesc, _sep3: null, packageType: null,
+      fullName:      [addr.firstName, addr.lastName].filter(Boolean).join(' ') || null,
+      phone:         addr.phone    || null,
+      city:          addr.city     || null,
+      streetName:    addr.address1 || null,
+      cashAmount:    cash !== 0 ? cash : null,
+      area:          null,
+      landmark:      addr.address2 || null,
+      workAddress:   null,
+      secondPhone:   order.customer?.phone || null,
+      flexship:      'Yes',
+      openPackage:   'Yes',
+      packageType:   null,
+      itemCount:     count !== 1 ? count : null,
+      description:   items.map(li => `${li.sku || li.name} x${li.currentQuantity}`).join(' | ') || null,
+      deliveryNotes: order.note    || null,
+      orderRef:      order.name    || null,
+      returnItems:   returnItemsCount,
+      returnDesc,
+      goodsValue:    goodsValueFinal,
+      bostaCredits:  null,
+      brandName:     'Ecommoda',
     });
   });
 
