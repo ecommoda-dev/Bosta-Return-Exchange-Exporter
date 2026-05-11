@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bosta R&E Exporter — v3.0.0</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+  <style>
+    /* ─── CSS Variables ─── */
+    :root {
+      --accent:          #2563eb;
+      --accent-dark:     #1d4ed8;
+      --accent-light:    #eff6ff;
+      --surface:         #ffffff;
+      --surface-2:       #f8fafc;
+      --border:          #e2e8f0;
+      --border-strong:   #cbd5e1;
+      --text-primary:    #0f172a;
+      --text-secondary:  #475569;
+      --text-muted:      #94a3b8;
+      --green:           #16a34a;
+      --green-light:     #f0fdf4;
+      --green-border:    #86efac;
+      --red:             #dc2626;
+      --red-light:       #fef2f2;
+      --red-border:      #fca5a5;
+      --purple:          #7c3aed;
+      --purple-light:    #f5f3ff;
+      --purple-border:   #c4b5fd;
+      --shadow:          0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+      --radius:          10px;
+      --radius-sm:       6px;
+      --font-mono:       'IBM Plex Mono', monospace;
+      --header-h:        56px;
+    }
+
+    /* ─── Reset ─── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Noto Sans Arabic', sans-serif; font-size: 13px; color: var(--text-primary); background: #f1f5f9; direction: rtl; min-height: 100vh; }
+    button { font-family: inherit; cursor: pointer; }
+    input, select { font-family: inherit; }
+    a { color: var(--accent); text-decoration: none; }
+
+    /* ─── Login Overlay ─── */
+    .login-overlay { position: fixed; inset: 0; background: #0f172a; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    .login-box { background: var(--surface); border-radius: 14px; padding: 32px; width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+    .login-logo { font-size: 28px; text-align: center; margin-bottom: 4px; }
+    .login-title { font-size: 18px; font-weight: 700; text-align: center; margin-bottom: 4px; }
+    .login-sub   { font-size: 11px; color: var(--text-muted); text-align: center; margin-bottom: 24px; font-family: var(--font-mono); }
+    .login-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; display: block; text-transform: uppercase; letter-spacing: .4px; }
+    .login-input { width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 13px; font-family: inherit; color: var(--text-primary); background: var(--surface); outline: none; margin-bottom: 14px; direction: ltr; }
+    .login-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37,99,235,.1); }
+    .login-input.pin-input { font-size: 20px; letter-spacing: 6px; font-family: var(--font-mono); text-align: center; }
+    .login-btn { width: 100%; padding: 10px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 700; transition: background .15s; }
+    .login-btn:hover { background: var(--accent-dark); }
+    .login-btn:disabled { opacity: .6; cursor: not-allowed; }
+    .login-back { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 10px; cursor: pointer; }
+    .login-back:hover { color: var(--accent); }
+    .login-error { background: var(--red-light); border: 1px solid var(--red-border); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 12px; color: var(--red); margin-bottom: 12px; display: none; }
+    .login-info { background: var(--accent-light); border: 1px solid #bfdbfe; border-radius: var(--radius-sm); padding: 8px 12px; font-size: 12px; color: var(--accent); margin-bottom: 12px; display: none; }
+
+    /* ─── App Container ─── */
+    .container { max-width: 860px; margin: 0 auto; padding: 16px; }
+
+    /* ─── App Header ─── */
+    .app-header { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 12px; box-shadow: var(--shadow); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .app-header-left { display: flex; align-items: center; gap: 10px; }
+    .app-header-icon { font-size: 22px; }
+    .app-header-info .app-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .app-header-info .app-meta  { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); }
+    .app-header-right { display: flex; align-items: center; gap: 8px; }
+    .user-badge { display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: var(--green-light); border: 1px solid var(--green-border); border-radius: 20px; font-size: 11px; font-weight: 600; color: var(--green); }
+    .header-btn { display: flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--surface); transition: all .15s; }
+    .header-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    .header-btn-login { border-color: var(--red-border); color: var(--red); background: var(--red-light); }
+    .header-btn-login:hover { background: var(--red); color: #fff; border-color: var(--red); }
+
+    /* ─── Card ─── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
+    .card-title { font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+
+    /* ─── Buttons ─── */
+    .btn-primary   { padding: 9px 20px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 12px; font-weight: 700; transition: background .15s; }
+    .btn-primary:hover { background: var(--accent-dark); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-secondary { padding: 9px 16px; background: var(--surface); color: var(--text-secondary); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; transition: all .15s; }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    .actions-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .counter-pill { display: inline-block; background: var(--accent-light); border: 1px solid #bfdbfe; color: var(--accent); border-radius: 20px; font-size: 11px; font-weight: 700; padding: 3px 10px; font-family: var(--font-mono); }
+
+    /* ─── Status Bar ─── */
+    .status-bar { font-size: 12px; padding: 0; max-height: 0; overflow: hidden; border-radius: var(--radius-sm); transition: all .2s; margin-top: 0; opacity: 0; }
+    .status-bar.show { padding: 8px 12px; max-height: 60px; margin-top: 10px; opacity: 1; }
+    .status-bar.info    { background: var(--accent-light); color: var(--accent); border: 1px solid #bfdbfe; }
+    .status-bar.success { background: var(--green-light); color: var(--green); border: 1px solid var(--green-border); }
+    .status-bar.error   { background: var(--red-light); color: var(--red); border: 1px solid var(--red-border); }
+
+    /* ─── Main Tabs (Segmented — Mix1 V2) ─── */
+    .main-tabs-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
+    .main-seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 10px; padding: 4px; gap: 3px; }
+    .main-seg-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 32px; border-radius: 7px; font-family: inherit; font-size: 12px; font-weight: 600; color: var(--text-secondary); cursor: pointer; border: none; background: transparent; transition: all .15s; min-width: 130px; }
+    .main-seg-btn .msb-icon { font-size: 16px; }
+    .main-seg-btn.active { background: #2563eb; color: #fff; box-shadow: 0 2px 6px rgba(37,99,235,.3); }
+    .main-seg-btn:not(.active):hover { background: var(--accent-light); color: var(--accent); }
+
+    /* ─── Orders Table ─── */
+    .orders-table-wrap { overflow-x: auto; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+    .orders-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .orders-table th { background: var(--surface-2); padding: 7px 12px; text-align: right; font-weight: 700; font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; border-bottom: 1px solid var(--border-strong); white-space: nowrap; }
+    .orders-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .orders-table tr:last-child td { border-bottom: none; }
+    .orders-table tr:nth-child(even) td { background: #fafbfc; }
+    .order-name-cell { font-family: var(--font-mono); font-weight: 700; color: var(--accent); font-size: 12px; }
+    .dup-badge { display: inline-block; background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+
+    /* ─── Duplicate Warning ─── */
+    .dup-warning { background: #fffbeb; border: 1px solid #fcd34d; border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; }
+    .dup-warning-title { font-size: 12px; font-weight: 700; color: #92400e; margin-bottom: 8px; }
+    .dup-warning-list { list-style: none; margin: 0 0 12px 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+    .dup-warning-list li { font-size: 11px; color: #78350f; font-family: var(--font-mono); }
+    .btn-dup-allow { padding: 7px 16px; background: #f59e0b; color: #fff; border: none; border-radius: var(--radius-sm); font-family: inherit; font-size: 12px; font-weight: 700; transition: background .15s; }
+    .btn-dup-allow:hover { background: #d97706; }
+    .btn-dup-allow:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* ─── Confirm Section ─── */
+    .confirm-section { border-radius: var(--radius); padding: 18px; margin-bottom: 12px; border: 2px solid; }
+    .confirm-section.confirm-return   { background: #eff6ff; border-color: #bfdbfe; }
+    .confirm-section.confirm-exchange { background: var(--green-light); border-color: var(--green-border); }
+    .confirm-section-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+    .confirm-section-body  { font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.6; }
+    .btn-confirm-return { padding: 11px 24px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); font-family: inherit; font-size: 13px; font-weight: 700; transition: background .15s; }
+    .btn-confirm-return:hover { background: var(--accent-dark); }
+    .btn-confirm-return:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-confirm-exchange { padding: 11px 24px; background: var(--green); color: #fff; border: none; border-radius: var(--radius-sm); font-family: inherit; font-size: 13px; font-weight: 700; transition: background .15s; }
+    .btn-confirm-exchange:hover { background: #15803d; }
+    .btn-confirm-exchange:disabled { opacity: .5; cursor: not-allowed; }
+    .confirm-result { display: none; margin-top: 12px; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 12px; border: 1px solid; }
+    .confirm-result-ok    { background: var(--green-light); border-color: var(--green-border); color: var(--green); }
+    .confirm-result-warn  { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+    .confirm-result-error { background: var(--red-light); border-color: var(--red-border); color: var(--red); }
+
+    /* ─── Log Tab ─── */
+    .log-tab-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+    .log-filters-section { border-bottom: 1px solid var(--border); }
+    .log-filters-header { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; background: var(--surface-2); cursor: pointer; user-select: none; transition: background .12s; }
+    .log-filters-header:hover { background: #f0f4f8; }
+    .log-filters-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+    .log-filters-toggle { font-size: 13px; color: var(--text-muted); transition: transform .25s; }
+    .log-filters-toggle.open { transform: rotate(180deg); }
+    .log-filters-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .log-filters-body.collapsed { display: none; }
+    .log-frow { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+    .log-fg { display: flex; flex-direction: column; gap: 3px; }
+    .log-flabel { font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+    .log-fsel, .log-finput { border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 10px; font-family: inherit; font-size: 12px; color: var(--text-primary); background: var(--surface); outline: none; height: 34px; box-sizing: border-box; }
+    .log-fsel:focus, .log-finput:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
+    .log-fsel.w-emp  { width: 160px; }
+    .log-fsel.w-type { width: 165px; }
+    .log-finput.w-search { width: 220px; }
+    .log-date-wrap { position: relative; display: flex; align-items: center; }
+    .log-date-wrap input[type=date] { width: 160px; height: 34px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 10px; font-family: inherit; font-size: 12px; color: var(--text-primary); background: var(--surface); outline: none; box-sizing: border-box; cursor: pointer; }
+    .log-date-wrap input[type=date]:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
+    .log-date-wrap input[type=date].empty::-webkit-datetime-edit { color: var(--text-secondary); }
+    .log-preset-wrap { position: relative; align-self: flex-end; }
+    .log-preset-btn { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: inherit; font-size: 12px; font-weight: 600; color: var(--text-secondary); background: var(--surface); cursor: pointer; transition: all .15s; height: 34px; white-space: nowrap; }
+    .log-preset-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    .log-preset-btn.has-preset { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    .log-preset-btn .pr-arrow { font-size: 10px; transition: transform .2s; }
+    .log-preset-btn.open .pr-arrow { transform: rotate(180deg); }
+    .log-preset-menu { position: absolute; top: calc(100% + 4px); right: 0; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: 0 4px 20px rgba(0,0,0,.12); z-index: 200; min-width: 170px; padding: 4px; display: none; }
+    .log-preset-menu.open { display: block; }
+    .log-preset-item { padding: 7px 12px; font-size: 12px; font-weight: 500; border-radius: 6px; cursor: pointer; color: var(--text-primary); transition: background .1s; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .log-preset-item:hover { background: var(--surface-2); }
+    .log-preset-item.active { background: var(--accent-light); color: var(--accent); }
+    .log-preset-item .pr-check { font-size: 11px; color: var(--accent); display: none; }
+    .log-preset-item.active .pr-check { display: block; }
+    .log-preset-sep { height: 1px; background: var(--border); margin: 3px 4px; }
+    .log-clear-btn { display: flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1px solid var(--red-border); border-radius: var(--radius-sm); font-family: inherit; font-size: 12px; font-weight: 600; color: var(--red); background: var(--red-light); cursor: pointer; transition: all .15s; white-space: nowrap; height: 34px; }
+    .log-clear-btn:hover { background: var(--red); color: #fff; border-color: var(--red); }
+    .log-stats-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+    .log-refresh-btn { display: flex; align-items: center; gap: 5px; padding: 5px 12px; border: 1px solid var(--green-border); border-radius: var(--radius-sm); font-family: inherit; font-size: 11px; font-weight: 600; color: var(--green); background: var(--green-light); cursor: pointer; transition: all .15s; white-space: nowrap; }
+    .log-refresh-btn:hover { background: var(--green); color: #fff; }
+    .log-stat-chip { font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; }
+    .log-stat-chip strong { color: var(--text-primary); }
+    .log-stat-chip.filtered strong { color: var(--accent); }
+    .log-export-btn { display: flex; align-items: center; gap: 5px; padding: 5px 12px; border: 1px solid var(--green-border); border-radius: var(--radius-sm); font-family: inherit; font-size: 11px; font-weight: 600; color: var(--green); background: var(--green-light); cursor: pointer; transition: all .15s; margin-right: auto; opacity: .5; pointer-events: none; }
+    .log-export-btn.enabled { opacity: 1; pointer-events: all; }
+    .log-export-btn:hover { background: var(--green); color: #fff; }
+    .log-list-head { display: flex; align-items: center; gap: 10px; padding: 7px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+    .log-list-head input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); }
+    .log-list-head-lbl { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+    .log-body { overflow-y: auto; max-height: 600px; }
+    .log-entry { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; transition: background .1s; }
+    .log-entry:hover { background: var(--surface-2); }
+    .log-entry.selected { background: var(--accent-light); }
+    .log-cb { flex-shrink: 0; padding-top: 3px; }
+    .log-cb input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); }
+    .log-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+    .log-dot-exp-r  { background: #f59e0b; }
+    .log-dot-exp-e  { background: #2563eb; }
+    .log-dot-cnf-r  { background: #16a34a; }
+    .log-dot-cnf-e  { background: #0d9488; }
+    .log-entry-content { flex: 1; min-width: 0; }
+    .log-entry-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 3px; }
+    .log-order-badge { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--accent); background: var(--accent-light); border: 1px solid #bfdbfe; border-radius: 4px; padding: 1px 7px; }
+    .log-type-badge { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 4px; }
+    .lt-exp-r  { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+    .lt-exp-e  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    .lt-cnf-r  { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
+    .lt-cnf-e  { background: #f0fdfa; color: #0d9488; border: 1px solid #99f6e4; }
+    .log-emp-badge { font-size: 11px; font-weight: 600; color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; padding: 1px 7px; }
+    .log-meta { font-size: 11px; color: var(--text-muted); }
+    .log-notes { font-size: 11px; color: var(--text-secondary); font-style: italic; margin-top: 2px; display: flex; align-items: flex-start; gap: 4px; }
+    .log-empty { padding: 40px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+    /* ─── Modal ─── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 500; display: none; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: var(--surface); border-radius: 12px; width: 480px; max-width: 95vw; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .modal-title { font-size: 14px; font-weight: 700; }
+    .modal-close { background: none; border: none; font-size: 18px; color: var(--text-muted); cursor: pointer; padding: 2px 6px; }
+    .modal-close:hover { color: var(--text-primary); }
+    .modal-body { padding: 20px; }
+    .settings-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; display: block; margin-bottom: 5px; }
+    .settings-input { width: 100%; padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--surface); outline: none; margin-bottom: 14px; direction: ltr; }
+    .settings-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37,99,235,.1); }
+    .settings-save { width: 100%; padding: 10px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s; }
+    .settings-save:hover { background: var(--accent-dark); }
+    .changelog-entry { margin-bottom: 18px; }
+    .changelog-version { font-size: 12px; font-weight: 700; font-family: var(--font-mono); color: var(--accent); margin-bottom: 6px; }
+    .changelog-date { color: var(--text-muted); font-weight: 400; }
+    .changelog-items { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+    .changelog-items li { font-size: 12px; color: var(--text-secondary); display: flex; align-items: flex-start; gap: 6px; }
+    .changelog-items .tag { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
+    .tag-new    { background: #dcfce7; color: #15803d; }
+    .tag-change { background: #fef9c3; color: #a16207; }
+    .tag-fix    { background: #fee2e2; color: #b91c1c; }
+
+    /* ─── Toast ─── */
+    .toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+    .toast { padding: 10px 20px; border-radius: 8px; font-size: 12px; font-weight: 600; color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.2); animation: toast-in .25s ease; pointer-events: all; white-space: nowrap; }
+    .toast.success { background: var(--green); }
+    .toast.error   { background: var(--red); }
+    .toast.info    { background: var(--accent); }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ─── Loading Spinner ─── */
+    .loading-spinner { width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════
+     LOGIN OVERLAY
+═════════════════════════════════════════════════════════════ -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <div class="login-logo">📦</div>
+    <div class="login-title">Bosta R&amp;E Exporter</div>
+    <div class="login-sub">EcomModa — Internal Tools</div>
+
+    <!-- Step 1: Username -->
+    <div id="loginStep1">
+      <div class="login-error" id="loginErr1"></div>
+      <label class="login-label">اسم المستخدم</label>
+      <input type="text" class="login-input" id="loginUsername" placeholder="username" autocomplete="username" />
+      <button class="login-btn" id="loginNextBtn" onclick="handleLoginStep1()">التالي ←</button>
+    </div>
+
+    <!-- Step 2: PIN -->
+    <div id="loginStep2" style="display:none;">
+      <div class="login-info" id="loginInfo2"></div>
+      <div class="login-error" id="loginErr2"></div>
+      <label class="login-label">الـ PIN</label>
+      <input type="password" inputmode="numeric" maxlength="8" class="login-input pin-input" id="loginPin" placeholder="••••" autocomplete="current-password" />
+      <button class="login-btn" id="loginPinBtn" onclick="handleLoginStep2()">دخول</button>
+      <div class="login-back" onclick="backToStep1()">← تغيير المستخدم</div>
+    </div>
+
+    <!-- Step 3: Register PIN -->
+    <div id="loginStep3" style="display:none;">
+      <div class="login-info" id="loginInfo3"></div>
+      <div class="login-error" id="loginErr3"></div>
+      <label class="login-label">أنشئ PIN جديد</label>
+      <input type="password" inputmode="numeric" maxlength="8" class="login-input pin-input" id="loginNewPin" placeholder="أدخل PIN" />
+      <label class="login-label">تأكيد الـ PIN</label>
+      <input type="password" inputmode="numeric" maxlength="8" class="login-input pin-input" id="loginConfirmPin" placeholder="أعد الإدخال" />
+      <button class="login-btn" id="loginRegBtn" onclick="handleRegisterPin()">تسجيل الـ PIN</button>
+      <div class="login-back" onclick="backToStep1()">← تغيير المستخدم</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     APP
+═════════════════════════════════════════════════════════════ -->
+<div class="container">
+
+  <!-- App Header -->
+  <div class="app-header">
+    <div class="app-header-left">
+      <div class="app-header-icon">📦</div>
+      <div class="app-header-info">
+        <div class="app-title">Bosta Return &amp; Exchange Exporter</div>
+        <div class="app-meta">EcomModa — v3.0.0</div>
+      </div>
+    </div>
+    <div class="app-header-right">
+      <div class="user-badge" id="userBadge" style="display:none;">
+        <span>👤</span>
+        <span id="userBadgeName">—</span>
+      </div>
+      <button class="header-btn" onclick="openSettings()">⚙️ إعدادات</button>
+      <button class="header-btn" onclick="openChangelog()">📋 Changelog</button>
+      <button class="header-btn header-btn-login" id="logoutBtn" style="display:none;" onclick="handleLogout()">خروج</button>
+    </div>
+  </div>
+
+  <!-- Main Segmented Tabs -->
+  <div class="main-tabs-wrap">
+    <div class="main-seg">
+      <button class="main-seg-btn active" id="mainTabReturn" onclick="switchMainTab('return')">
+        <span class="msb-icon">📥</span>
+        <span>الاسترجاع</span>
+      </button>
+      <button class="main-seg-btn" id="mainTabExchange" onclick="switchMainTab('exchange')">
+        <span class="msb-icon">🔄</span>
+        <span>الاستبدال</span>
+      </button>
+      <button class="main-seg-btn" id="mainTabLog" onclick="switchMainTab('log')">
+        <span class="msb-icon">📜</span>
+        <span>سجل العمليات</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       TAB: الاسترجاع
+  ════════════════════════════════════════════════════════ -->
+  <div id="returnTabContent">
+    <div class="card">
+      <div class="card-title">أوردرات الاسترجاع — Confirmed + RETURN / Courier: Bosta</div>
+      <div class="actions-row">
+        <button class="btn-primary" id="fetchReturnBtn" onclick="fetchOrders('RETURN')">🔍 جلب الأوردرات من Shopify</button>
+        <button class="btn-secondary" id="resetReturnBtn" onclick="resetTab('RETURN')" style="display:none;">↺ جلب من جديد</button>
+        <span class="counter-pill" id="returnCounterPill" style="display:none;">0 أوردر</span>
+      </div>
+      <div class="status-bar" id="returnStatusBar"></div>
+    </div>
+
+    <div class="dup-warning" id="returnDupWarning" style="display:none;">
+      <div class="dup-warning-title">⚠️ تحذير — أوردرات سبق تأكيدها</div>
+      <div id="returnDupBody"></div>
+    </div>
+
+    <div class="card" id="returnTableCard" style="display:none;">
+      <div class="card-title">الأوردرات المجلوبة</div>
+      <div class="orders-table-wrap">
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th>رقم الأوردر</th>
+              <th>العميل</th>
+              <th>المدينة</th>
+              <th>قطع مرتجعة</th>
+              <th>المبلغ</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="returnOrdersBody"></tbody>
+        </table>
+      </div>
+      <div class="actions-row" style="margin-top:14px;">
+        <button class="btn-primary" id="exportReturnBtn" onclick="doExport('RETURN')" style="display:none;">📥 تصدير الاسترجاع للإكسل</button>
+      </div>
+    </div>
+
+    <div class="confirm-section confirm-return" id="returnConfirmSection" style="display:none;">
+      <div class="confirm-section-title">📤 تأكيد رفع الأوردرات على بوسطة</div>
+      <div class="confirm-section-body">
+        بعد الضغط سيتم تحويل حالة جميع الأوردرات المُصدَّرة من <strong>Confirmed + RETURN</strong> إلى <strong>In-Return</strong>
+      </div>
+      <button class="btn-confirm-return" id="confirmReturnBtn" onclick="doConfirm('RETURN')">
+        ✅ تأكيد رفع الأوردرات على بوسطة
+      </button>
+      <div class="confirm-result" id="returnConfirmResult"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       TAB: الاستبدال
+  ════════════════════════════════════════════════════════ -->
+  <div id="exchangeTabContent" style="display:none;">
+    <div class="card">
+      <div class="card-title">أوردرات الاستبدال — Confirmed + EXCHANGE / Courier: Bosta</div>
+      <div class="actions-row">
+        <button class="btn-primary" id="fetchExchangeBtn" onclick="fetchOrders('EXCHANGE')">🔍 جلب الأوردرات من Shopify</button>
+        <button class="btn-secondary" id="resetExchangeBtn" onclick="resetTab('EXCHANGE')" style="display:none;">↺ جلب من جديد</button>
+        <span class="counter-pill" id="exchangeCounterPill" style="display:none;">0 أوردر</span>
+      </div>
+      <div class="status-bar" id="exchangeStatusBar"></div>
+    </div>
+
+    <div class="dup-warning" id="exchangeDupWarning" style="display:none;">
+      <div class="dup-warning-title">⚠️ تحذير — أوردرات سبق تأكيدها</div>
+      <div id="exchangeDupBody"></div>
+    </div>
+
+    <div class="card" id="exchangeTableCard" style="display:none;">
+      <div class="card-title">الأوردرات المجلوبة</div>
+      <div class="orders-table-wrap">
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th>رقم الأوردر</th>
+              <th>العميل</th>
+              <th>المدينة</th>
+              <th>قطع مستبدلة</th>
+              <th>المبلغ</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="exchangeOrdersBody"></tbody>
+        </table>
+      </div>
+      <div class="actions-row" style="margin-top:14px;">
+        <button class="btn-primary" id="exportExchangeBtn" onclick="doExport('EXCHANGE')" style="display:none;">📥 تصدير الاستبدال للإكسل</button>
+      </div>
+    </div>
+
+    <div class="confirm-section confirm-exchange" id="exchangeConfirmSection" style="display:none;">
+      <div class="confirm-section-title">🚚 رفع الأوردرات وإرسال الفواتير للمخزن</div>
+      <div class="confirm-section-body">
+        بعد الضغط سيتم تحويل حالة جميع الأوردرات المُصدَّرة من <strong>Confirmed + EXCHANGE</strong> إلى <strong>Ready</strong>
+      </div>
+      <button class="btn-confirm-exchange" id="confirmExchangeBtn" onclick="doConfirm('EXCHANGE')">
+        ✅ رفع الأوردرات وإرسال الفواتير للمخزن
+      </button>
+      <div class="confirm-result" id="exchangeConfirmResult"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       TAB: سجل العمليات
+  ════════════════════════════════════════════════════════ -->
+  <div id="logTabContent" style="display:none;">
+    <div class="log-tab-wrap">
+
+      <!-- قسم الفلاتر -->
+      <div class="log-filters-section">
+        <div class="log-filters-header" onclick="toggleLogFilters()">
+          <div class="log-filters-title"><span>🔽</span><span>الفلاتر</span></div>
+          <span class="log-filters-toggle open" id="logFiltersToggleIcon">▲</span>
+        </div>
+        <div class="log-filters-body" id="logFiltersBody">
+          <div class="log-frow">
+            <div class="log-fg">
+              <span class="log-flabel">الموظف</span>
+              <select class="log-fsel w-emp" id="logFilterEmployee" onchange="onLogEmpFilterChange()">
+                <option value="">كل الموظفين</option>
+              </select>
+            </div>
+            <div class="log-fg">
+              <span class="log-flabel">نوع العملية</span>
+              <select class="log-fsel w-type" id="logFilterType" onchange="onLogFilterChange()">
+                <option value="">كل العمليات</option>
+                <option value="export">التصدير فقط</option>
+                <option value="confirmed">التأكيد فقط</option>
+                <option value="export_return">تصدير استرجاع</option>
+                <option value="export_exchange">تصدير استبدال</option>
+                <option value="confirmed_return">تأكيد استرجاع</option>
+                <option value="confirmed_exchange">تأكيد استبدال</option>
+              </select>
+            </div>
+            <button class="log-clear-btn" onclick="clearLogFilters()">✕ مسح الفلاتر</button>
+          </div>
+          <div class="log-frow">
+            <div class="log-fg">
+              <span class="log-flabel">من تاريخ</span>
+              <div class="log-date-wrap">
+                <input type="date" id="logFilterDateFrom" class="empty" onchange="updateDateEmptyClass(this); onLogFilterChange()" />
+              </div>
+            </div>
+            <div class="log-fg">
+              <span class="log-flabel">إلى تاريخ</span>
+              <div class="log-date-wrap">
+                <input type="date" id="logFilterDateTo" class="empty" onchange="updateDateEmptyClass(this); onLogFilterChange()" />
+              </div>
+            </div>
+            <div class="log-preset-wrap">
+              <button class="log-preset-btn" id="logPresetBtn" onclick="togglePresetMenu(event)">
+                <span id="logPresetLabel">⚡ اختار فترة</span>
+                <span class="pr-arrow">▾</span>
+              </button>
+              <div class="log-preset-menu" id="logPresetMenu">
+                <div class="log-preset-item" data-preset="today"      onclick="applyPreset('today')">      اليوم           <span class="pr-check">✓</span></div>
+                <div class="log-preset-item" data-preset="yesterday"  onclick="applyPreset('yesterday')">  أمس             <span class="pr-check">✓</span></div>
+                <div class="log-preset-sep"></div>
+                <div class="log-preset-item" data-preset="last7"      onclick="applyPreset('last7')">      آخر 7 أيام      <span class="pr-check">✓</span></div>
+                <div class="log-preset-item" data-preset="last30"     onclick="applyPreset('last30')">     آخر 30 يوم      <span class="pr-check">✓</span></div>
+                <div class="log-preset-item" data-preset="last90"     onclick="applyPreset('last90')">     آخر 90 يوم      <span class="pr-check">✓</span></div>
+                <div class="log-preset-sep"></div>
+                <div class="log-preset-item" data-preset="thisMonth"  onclick="applyPreset('thisMonth')">  هذا الشهر       <span class="pr-check">✓</span></div>
+                <div class="log-preset-item" data-preset="lastMonth"  onclick="applyPreset('lastMonth')">  الشهر السابق    <span class="pr-check">✓</span></div>
+                <div class="log-preset-item" data-preset="thisYear"   onclick="applyPreset('thisYear')">   هذه السنة       <span class="pr-check">✓</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="log-frow">
+            <div class="log-fg">
+              <span class="log-flabel">بحث برقم الأوردر</span>
+              <input type="text" class="log-finput w-search" id="logSearch" placeholder="مثال: #1234" oninput="onLogSearchInput()" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- شريط الإحصاء -->
+      <div class="log-stats-bar">
+        <button class="log-refresh-btn" onclick="loadLog()">↺ تحديث</button>
+        <div class="log-stat-chip">إجمالي السجل: <strong id="logTotalCount">—</strong></div>
+        <div class="log-stat-chip filtered">نتائج الفلتر: <strong id="logFilteredCount">—</strong></div>
+        <button class="log-export-btn" id="logExportBtn" onclick="exportSelectedLog()">⬇ تصدير المحدد .xlsx</button>
+      </div>
+
+      <!-- رأس القائمة -->
+      <div class="log-list-head">
+        <input type="checkbox" id="logSelectAll" onchange="toggleLogSelectAll(this)" />
+        <span class="log-list-head-lbl">تحديد الكل</span>
+      </div>
+
+      <!-- قائمة السجل -->
+      <div class="log-body" id="logBody">
+        <div class="log-empty">اضغط تحديث لتحميل السجل</div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- ════════════════════════════════════════════════════════════
+     MODALS
+═════════════════════════════════════════════════════════════ -->
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">⚙️ الإعدادات</div>
+      <button class="modal-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="settings-label">Worker URL</label>
+      <input type="text" class="settings-input" id="cfgWorkerUrl" placeholder="https://xxx.workers.dev" />
+      <label class="settings-label">Worker Secret</label>
+      <input type="text" class="settings-input" id="cfgWorkerSecret" placeholder="WORKER_SECRET" />
+      <label class="settings-label">Admin Worker URL (للموظفين)</label>
+      <input type="text" class="settings-input" id="cfgAdminUrl" placeholder="https://ecommoda-admin-worker.workers.dev" />
+      <button class="settings-save" onclick="saveSettings()">💾 حفظ الإعدادات</button>
+    </div>
+  </div>
+</div>
+
+<!-- Changelog Modal -->
+<div class="modal-overlay" id="changelogModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">📋 Changelog</div>
+      <button class="modal-close" onclick="closeChangelog()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="changelog-entry">
+        <div class="changelog-version">v3.0.0 <span class="changelog-date">— 10-05-2026</span></div>
+        <ul class="changelog-items">
+          <li><span class="tag tag-new">جديد</span> جلب الأوردرات تلقائياً من Shopify بدل الإدخال اليدوي</li>
+          <li><span class="tag tag-new">جديد</span> تاب الاسترجاع المنفصل — flow كامل (جلب + تصدير + تأكيد)</li>
+          <li><span class="tag tag-new">جديد</span> تاب الاستبدال المنفصل — flow كامل (جلب + تصدير + تأكيد)</li>
+          <li><span class="tag tag-new">جديد</span> مرحلة التأكيد — تحديث S2 إلى In-Return أو Ready</li>
+          <li><span class="tag tag-new">جديد</span> تاب سجل العمليات — Log-Tab-Reference v1.2.0</li>
+          <li><span class="tag tag-new">جديد</span> كشف التكرار مع زرار "السماح بإعادة التصدير"</li>
+          <li><span class="tag tag-change">تغيير</span> إزالة الإدخال اليدوي لأرقام الأوردرات</li>
+          <li><span class="tag tag-change">تغيير</span> Worker — إضافة fetch_pending_orders, log_export, confirm_upload</li>
+        </ul>
+      </div>
+      <div class="changelog-entry">
+        <div class="changelog-version">v2.2.0 <span class="changelog-date">— 02-05-2026</span></div>
+        <ul class="changelog-items">
+          <li><span class="tag tag-change">تغيير</span> نظام Auth — D1 Universal Login</li>
+          <li><span class="tag tag-new">جديد</span> دعم Return Items من refundLineItems</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ════════════════════════════════════════════════════════════
+     JAVASCRIPT
+═════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════════════════════
+// CONFIG & SETTINGS
+// ══════════════════════════════════════════════════════════════
+const CFG_KEY = 'bosta_re_exporter_v3_cfg';
+
+function getConfig() {
+  try { return JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch { return {}; }
+}
+
+function isConfigured() {
+  const c = getConfig();
+  return !!(c.workerUrl && c.workerSecret);
+}
+
+function openSettings() {
+  const c = getConfig();
+  document.getElementById('cfgWorkerUrl').value    = c.workerUrl    || '';
+  document.getElementById('cfgWorkerSecret').value = c.workerSecret || '';
+  document.getElementById('cfgAdminUrl').value     = c.adminUrl     || '';
+  document.getElementById('settingsModal').classList.add('open');
+}
+function closeSettings()   { document.getElementById('settingsModal').classList.remove('open'); }
+function openChangelog()   { document.getElementById('changelogModal').classList.add('open'); }
+function closeChangelog()  { document.getElementById('changelogModal').classList.remove('open'); }
+
+function saveSettings() {
+  const c = {
+    workerUrl:    document.getElementById('cfgWorkerUrl').value.trim().replace(/\/$/, ''),
+    workerSecret: document.getElementById('cfgWorkerSecret').value.trim(),
+    adminUrl:     document.getElementById('cfgAdminUrl').value.trim().replace(/\/$/, ''),
+  };
+  localStorage.setItem(CFG_KEY, JSON.stringify(c));
+  closeSettings();
+  showToast('✓ تم حفظ الإعدادات', 'success');
+  loadEmployeesList();
+}
+
+// Close modal on backdrop click
+document.querySelectorAll('.modal-overlay').forEach(el =>
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); })
+);
+
+// ══════════════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════════════
+function showToast(msg, type = 'info', duration = 3000) {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  document.getElementById('toastContainer').appendChild(t);
+  setTimeout(() => t.remove(), duration);
+}
+
+// ══════════════════════════════════════════════════════════════
+// AUTH — D1 Universal Login
+// ══════════════════════════════════════════════════════════════
+let currentEmployee = null;
+let employeesList   = [];
+
+function showLoginStep(step) {
+  [1, 2, 3].forEach(s => document.getElementById(`loginStep${s}`).style.display = s === step ? '' : 'none');
+}
+
+function backToStep1() {
+  showLoginStep(1);
+  document.getElementById('loginUsername').value = '';
+}
+
+async function handleLoginStep1() {
+  if (!isConfigured()) { openSettings(); return; }
+  const username = document.getElementById('loginUsername').value.trim();
+  const errEl = document.getElementById('loginErr1');
+  if (!username) { errEl.textContent = 'اكتب اسم المستخدم'; errEl.style.display = ''; return; }
+  errEl.style.display = 'none';
+  const btn = document.getElementById('loginNextBtn');
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const cfg = getConfig();
+    const res = await fetch(`${cfg.workerUrl}?action=check_employee&username=${encodeURIComponent(username)}`, {
+      headers: { 'Authorization': `Bearer ${cfg.workerSecret}` }
+    });
+    const data = await res.json();
+    if (!data.ok || !data.exists)    { errEl.textContent = 'اسم المستخدم غير موجود'; errEl.style.display = ''; return; }
+    if (!data.isActive)              { errEl.textContent = 'الحساب موقوف — تواصل مع المسؤول'; errEl.style.display = ''; return; }
+    if (data.hasPin) {
+      document.getElementById('loginPin').value = '';
+      showLoginStep(2);
+    } else {
+      document.getElementById('loginInfo3').textContent = `مرحباً! أنشئ PIN لحسابك (${username})`;
+      document.getElementById('loginInfo3').style.display = '';
+      document.getElementById('loginNewPin').value = '';
+      document.getElementById('loginConfirmPin').value = '';
+      showLoginStep(3);
+    }
+  } catch (e) { errEl.textContent = 'خطأ: ' + e.message; errEl.style.display = ''; }
+  finally { btn.disabled = false; btn.textContent = 'التالي ←'; }
+}
+
+async function handleLoginStep2() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const pin      = document.getElementById('loginPin').value.trim();
+  const errEl    = document.getElementById('loginErr2');
+  if (!pin) { errEl.textContent = 'أدخل الـ PIN'; errEl.style.display = ''; return; }
+  errEl.style.display = 'none';
+  const btn = document.getElementById('loginPinBtn');
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const cfg = getConfig();
+    const res = await fetch(`${cfg.workerUrl}?action=verify_employee`, {
+      method: 'POST', headers: { 'Authorization': `Bearer ${cfg.workerSecret}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, pin })
+    });
+    const data = await res.json();
+    if (!data.ok) { errEl.textContent = data.error || 'PIN خطأ'; errEl.style.display = ''; return; }
+    finishLogin(username, data.displayName);
+  } catch (e) { errEl.textContent = 'خطأ: ' + e.message; errEl.style.display = ''; }
+  finally { btn.disabled = false; btn.textContent = 'دخول'; }
+}
+
+async function handleRegisterPin() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const pin      = document.getElementById('loginNewPin').value.trim();
+  const confirm  = document.getElementById('loginConfirmPin').value.trim();
+  const errEl    = document.getElementById('loginErr3');
+  errEl.style.display = 'none';
+  if (!pin)         { errEl.textContent = 'أدخل PIN'; errEl.style.display = ''; return; }
+  if (pin.length < 4) { errEl.textContent = 'الـ PIN يجب يكون 4 أرقام على الأقل'; errEl.style.display = ''; return; }
+  if (pin !== confirm) { errEl.textContent = 'الـ PIN غير متطابق'; errEl.style.display = ''; return; }
+  const btn = document.getElementById('loginRegBtn');
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const cfg = getConfig();
+    const res = await fetch(`${cfg.workerUrl}?action=register_pin`, {
+      method: 'POST', headers: { 'Authorization': `Bearer ${cfg.workerSecret}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, pin })
+    });
+    const data = await res.json();
+    if (!data.ok) { errEl.textContent = data.error || 'خطأ'; errEl.style.display = ''; return; }
+    document.getElementById('loginPin').value = '';
+    showLoginStep(2);
+    document.getElementById('loginInfo2').textContent = '✓ تم تسجيل الـ PIN — ادخل الآن';
+    document.getElementById('loginInfo2').style.display = '';
+  } catch (e) { errEl.textContent = 'خطأ: ' + e.message; errEl.style.display = ''; }
+  finally { btn.disabled = false; btn.textContent = 'تسجيل الـ PIN'; }
+}
+
+function finishLogin(username, displayName) {
+  currentEmployee = { username, displayName };
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('userBadge').style.display = '';
+  document.getElementById('userBadgeName').textContent = displayName;
+  document.getElementById('logoutBtn').style.display = '';
+  showToast(`مرحباً ${displayName}!`, 'success');
+}
+
+async function handleLogout() {
+  if (!confirm('هل تريد تسجيل الخروج؟')) return;
+  if (currentEmployee) {
+    const cfg = getConfig();
+    fetch(`${cfg.workerUrl}?action=log_logout&username=${encodeURIComponent(currentEmployee.username)}`, {
+      headers: { 'Authorization': `Bearer ${cfg.workerSecret}` }
+    }).catch(() => {});
+  }
+  currentEmployee = null;
+  document.getElementById('loginOverlay').style.display = '';
+  document.getElementById('userBadge').style.display = 'none';
+  document.getElementById('logoutBtn').style.display = 'none';
+  document.getElementById('loginUsername').value = '';
+  document.getElementById('loginPin').value = '';
+  showLoginStep(1);
+}
+
+// Enter key support
+document.getElementById('loginUsername').addEventListener('keydown', e => { if (e.key === 'Enter') handleLoginStep1(); });
+document.getElementById('loginPin').addEventListener('keydown', e => { if (e.key === 'Enter') handleLoginStep2(); });
+document.getElementById('loginConfirmPin').addEventListener('keydown', e => { if (e.key === 'Enter') handleRegisterPin(); });
+
+// ── Load employees list ──
+async function loadEmployeesList() {
+  if (!isConfigured()) return;
+  try {
+    const cfg = getConfig();
+    const adminUrl = cfg.adminUrl || cfg.workerUrl;
+    const res = await fetch(`${adminUrl}?action=get_employees`, {
+      headers: { 'Authorization': `Bearer ${cfg.workerSecret}` }
+    });
+    const data = await res.json();
+    if (!data.ok) return;
+    employeesList = data.employees || [];
+    populateLogEmpFilter(employeesList);
+  } catch { /* silent */ }
+}
+
+function populateLogEmpFilter(employees) {
+  const sel = document.getElementById('logFilterEmployee');
+  if (!sel) return;
+  const cur = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  employees.forEach(emp => {
+    const opt = document.createElement('option');
+    opt.value = emp.username;
+    opt.textContent = emp.display_name;
+    sel.appendChild(opt);
+  });
+  if (cur) sel.value = cur;
+}
+
+// ══════════════════════════════════════════════════════════════
+// TAB STATE
+// ══════════════════════════════════════════════════════════════
+let returnState   = { orders: [], duplicates: [], exported: false, dupAcknowledged: false };
+let exchangeState = { orders: [], duplicates: [], exported: false, dupAcknowledged: false };
+
+function getState(type) { return type === 'RETURN' ? returnState : exchangeState; }
+
+function getIds(type) {
+  const p = type === 'RETURN' ? 'return'  : 'exchange';
+  const P = type === 'RETURN' ? 'Return'  : 'Exchange';
+  return {
+    tabContent:     `${p}TabContent`,
+    fetchBtn:       `fetch${P}Btn`,
+    resetBtn:       `reset${P}Btn`,
+    statusBar:      `${p}StatusBar`,
+    dupWarning:     `${p}DupWarning`,
+    dupBody:        `${p}DupBody`,
+    tableCard:      `${p}TableCard`,
+    ordersBody:     `${p}OrdersBody`,
+    counterPill:    `${p}CounterPill`,
+    exportBtn:      `export${P}Btn`,
+    confirmSection: `${p}ConfirmSection`,
+    confirmBtn:     `confirm${P}Btn`,
+    confirmResult:  `${p}ConfirmResult`,
+  };
+}
+
+// ── Switch Tabs ──
+let logLoaded = false;
+
+function switchMainTab(tab) {
+  ['return', 'exchange', 'log'].forEach(t => {
+    const cap = t.charAt(0).toUpperCase() + t.slice(1);
+    document.getElementById(`mainTab${cap}`)?.classList.toggle('active', t === tab);
+    const c = document.getElementById(`${t}TabContent`);
+    if (c) c.style.display = t === tab ? 'block' : 'none';
+  });
+  if (tab === 'log' && !logLoaded) loadLog();
+}
+
+// ── Status Bar ──
+function showStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `status-bar ${type} show`;
+}
+function hideStatus(id) {
+  const el = document.getElementById(id);
+  if (el) el.className = 'status-bar';
+}
+
+// ══════════════════════════════════════════════════════════════
+// FETCH ORDERS
+// ══════════════════════════════════════════════════════════════
+async function fetchOrders(type) {
+  if (!currentEmployee) { showToast('سجّل الدخول أولاً', 'error'); return; }
+  if (!isConfigured())  { openSettings(); return; }
+
+  const ids   = getIds(type);
+  const state = getState(type);
+  const fetchBtn = document.getElementById(ids.fetchBtn);
+
+  fetchBtn.disabled = true;
+  fetchBtn.textContent = '⏳ جارٍ الجلب من Shopify...';
+  showStatus(ids.statusBar, 'جارٍ جلب الأوردرات المعلقة من Shopify...', 'info');
+
+  try {
+    const cfg = getConfig();
+    const res = await fetch(`${cfg.workerUrl}?action=fetch_pending_orders`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${cfg.workerSecret}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, employee: currentEmployee.username }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'فشل الجلب');
+
+    state.orders           = data.orders     || [];
+    state.duplicates       = data.duplicates || [];
+    state.exported         = false;
+    state.dupAcknowledged  = false;
+
+    if (state.orders.length === 0) {
+      showStatus(ids.statusBar, '✓ لا توجد أوردرات معلقة بهذا النوع حالياً', 'info');
+      fetchBtn.disabled    = false;
+      fetchBtn.textContent = '🔍 جلب الأوردرات من Shopify';
+      return;
+    }
+
+    showStatus(ids.statusBar, `✓ تم جلب ${state.orders.length} أوردر من Shopify`, 'success');
+
+    // Counter + reset button
+    document.getElementById(ids.resetBtn).style.display     = '';
+    document.getElementById(ids.counterPill).style.display  = '';
+    document.getElementById(ids.counterPill).textContent    = `${state.orders.length} أوردر`;
+    fetchBtn.style.display = 'none';
+
+    // Render table
+    renderOrdersTable(type);
+    document.getElementById(ids.tableCard).style.display = 'block';
+
+    // Duplicate warning or export button
+    if (state.duplicates.length > 0) {
+      renderDupWarning(type);
+      document.getElementById(ids.dupWarning).style.display = 'block';
+      document.getElementById(ids.exportBtn).style.display  = 'none';
+    } else {
+      document.getElementById(ids.dupWarning).style.display = 'none';
+      document.getElementById(ids.exportBtn).style.display  = '';
+    }
+
+  } catch (e) {
+    showStatus(ids.statusBar, '✕ خطأ: ' + e.message, 'error');
+    showToast('فشل الجلب: ' + e.message, 'error');
+    fetchBtn.disabled    = false;
+    fetchBtn.textContent = '🔍 جلب الأوردرات من Shopify';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// RENDER ORDERS TABLE
+// ══════════════════════════════════════════════════════════════
+function renderOrdersTable(type) {
+  const state  = getState(type);
+  const ids    = getIds(type);
+  const dupSet = new Set(state.duplicates.map(d => d.order_name));
+  const tbody  = document.getElementById(ids.ordersBody);
+  if (!tbody) return;
+
+  tbody.innerHTML = state.orders.map(order => {
+    const addr    = order.shippingAddress || {};
+    const name    = [addr.firstName, addr.lastName].filter(Boolean).join(' ') || '—';
+    const city    = addr.city || '—';
+    const cash    = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0);
+    const cashStr = cash ? cash.toLocaleString('en-US') + ' EGP' : '—';
+    const isDup   = dupSet.has(order.name);
+
+    const qty = type === 'RETURN'
+      ? (order.returns?.edges || []).flatMap(r => r.node.returnLineItems?.edges   || []).reduce((s, e) => s + (e.node.quantity || 0), 0)
+      : (order.returns?.edges || []).flatMap(r => r.node.exchangeLineItems?.edges || []).reduce((s, e) => s + (e.node.quantity || 0), 0);
+
+    return `<tr>
+      <td class="order-name-cell">${order.name}</td>
+      <td>${name}</td>
+      <td>${city}</td>
+      <td style="text-align:center;">${qty || '—'}</td>
+      <td style="text-align:left;font-family:var(--font-mono);font-size:11px;">${cashStr}</td>
+      <td style="text-align:center;">${isDup ? '<span class="dup-badge">🔁 مكرر</span>' : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderDupWarning(type) {
+  const state  = getState(type);
+  const ids    = getIds(type);
+  const body   = document.getElementById(ids.dupBody);
+  if (!body) return;
+
+  body.innerHTML = `
+    <p style="font-size:12px;color:#78350f;margin-bottom:8px;">
+      الأوردرات التالية (${state.duplicates.length}) سبق تأكيدها بهذه الأداة:
+    </p>
+    <ul class="dup-warning-list">
+      ${state.duplicates.map(d =>
+        `<li>${d.order_name} — آخر تأكيد: ${formatDateOnly(d.last_confirmed)}</li>`
+      ).join('')}
+    </ul>
+    <button class="btn-dup-allow" onclick="allowDuplicates('${type}')">
+      ⚠️ السماح بإعادة التصدير والتأكيد
+    </button>
+  `;
+}
+
+function allowDuplicates(type) {
+  const ids   = getIds(type);
+  const state = getState(type);
+  state.dupAcknowledged = true;
+  // Disable allow button
+  const btn = document.querySelector(`#${ids.dupBody} .btn-dup-allow`);
+  if (btn) { btn.disabled = true; btn.textContent = '✓ تم السماح'; }
+  document.getElementById(ids.exportBtn).style.display = '';
+  showToast('تم السماح بإعادة التصدير', 'info');
+}
+
+// ══════════════════════════════════════════════════════════════
+// RESET TAB
+// ══════════════════════════════════════════════════════════════
+function resetTab(type) {
+  const ids   = getIds(type);
+  const state = getState(type);
+
+  Object.assign(state, { orders: [], duplicates: [], exported: false, dupAcknowledged: false });
+
+  const fetchBtn = document.getElementById(ids.fetchBtn);
+  fetchBtn.style.display  = '';
+  fetchBtn.disabled       = false;
+  fetchBtn.textContent    = '🔍 جلب الأوردرات من Shopify';
+  document.getElementById(ids.resetBtn).style.display    = 'none';
+  document.getElementById(ids.counterPill).style.display = 'none';
+  document.getElementById(ids.tableCard).style.display   = 'none';
+  document.getElementById(ids.dupWarning).style.display  = 'none';
+  document.getElementById(ids.confirmSection).style.display = 'none';
+  document.getElementById(ids.exportBtn).style.display   = 'none';
+
+  const resultEl = document.getElementById(ids.confirmResult);
+  if (resultEl) { resultEl.textContent = ''; resultEl.className = 'confirm-result'; resultEl.style.display = 'none'; }
+
+  const confirmBtn = document.getElementById(ids.confirmBtn);
+  if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = type === 'RETURN'
+      ? '✅ تأكيد رفع الأوردرات على بوسطة'
+      : '✅ رفع الأوردرات وإرسال الفواتير للمخزن';
+  }
+
+  hideStatus(ids.statusBar);
+}
+
+// ══════════════════════════════════════════════════════════════
+// EXPORT — إنشاء ملف Excel للـ Bosta
+// ══════════════════════════════════════════════════════════════
+async function doExport(type) {
+  const state     = getState(type);
+  const ids       = getIds(type);
+  const exportBtn = document.getElementById(ids.exportBtn);
+
+  if (!state.orders.length) { showToast('لا توجد أوردرات للتصدير', 'error'); return; }
+
+  exportBtn.disabled    = true;
+  exportBtn.textContent = '⏳ جارٍ التصدير...';
+
+  try {
+    await exportToExcel(state.orders, type);
+    state.exported = true;
+
+    // Fire-and-forget log
+    logExportEvent(type, state.orders.map(o => o.name));
+
+    // Show confirm section
+    document.getElementById(ids.confirmSection).style.display = 'block';
+
+    exportBtn.textContent = `📥 تم التصدير ✓ (${state.orders.length} أوردر)`;
+    showToast(`✓ تم تصدير ${state.orders.length} أوردر`, 'success');
+
+  } catch (e) {
+    showToast('فشل التصدير: ' + e.message, 'error');
+    exportBtn.disabled    = false;
+    exportBtn.textContent = type === 'RETURN' ? '📥 تصدير الاسترجاع للإكسل' : '📥 تصدير الاستبدال للإكسل';
+  }
+}
+
+function logExportEvent(type, orderNames) {
+  if (!isConfigured()) return;
+  const cfg = getConfig();
+  fetch(`${cfg.workerUrl}?action=log_export`, {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${cfg.workerSecret}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ type, orderNames, employee: currentEmployee?.username }),
+  }).catch(() => {});
+}
+
+// ── Excel Export Function (Bosta format) ──
+async function exportToExcel(orders, type) {
+  const wb = new ExcelJS.Workbook();
+  wb.views = [{ rightToLeft: false }];
+  const ws = wb.addWorksheet('Add orders here');
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+  ws.columns = [
+    { header: "Consignee's Name",    key: 'consignee_name',    width: 28 },
+    { header: "Consignee's Phone",   key: 'consignee_phone',   width: 18 },
+    { header: "Consignee's City",    key: 'consignee_city',    width: 18 },
+    { header: "Consignee's Address", key: 'consignee_address', width: 42 },
+    { header: 'COD Amount',          key: 'cod_amount',        width: 14 },
+    { header: 'Special Instructions',key: 'special_inst',      width: 36 },
+    { header: 'Reference Number',    key: 'reference',         width: 16 },
+    { header: 'Notes',               key: 'notes',             width: 55 },
+  ];
+
+  // Header style
+  ws.getRow(1).eachCell(cell => {
+    cell.font      = { bold: true, size: 11 };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border    = { bottom: { style: 'thin', color: { argb: 'FFAAAAAA' } } };
+  });
+
+  for (const order of orders) {
+    const addr = order.shippingAddress || {};
+    const phone = addr.phone || order.customer?.phone || '';
+    const cleanPhone = phone.replace(/\D/g, '').replace(/^0+/, '');
+    const fullPhone = cleanPhone.startsWith('2') ? cleanPhone : `2${cleanPhone}`;
+
+    const addrParts = [addr.address1, addr.address2].filter(Boolean).join(', ');
+    const codRaw    = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0);
+    const cod       = codRaw > 0 ? Math.round(codRaw) : 0;
+
+    // Build notes: return items OR exchange items
+    let notesLines = [];
+
+    if (type === 'RETURN') {
+      // Return items from returnLineItems
+      const returnLines = (order.returns?.edges || [])
+        .flatMap(r => r.node.returnLineItems?.edges || [])
+        .filter(e => (e.node.quantity || 0) > 0)
+        .map(e => {
+          const li  = e.node.fulfillmentLineItem?.lineItem || {};
+          const qty = e.node.quantity;
+          const sku = li.sku || '';
+          const nm  = li.name || '';
+          return `${qty}x ${nm}${sku ? ' [' + sku + ']' : ''}`;
+        });
+      if (returnLines.length) notesLines.push('Return items: ' + returnLines.join(', '));
+    } else {
+      // Exchange items from exchangeLineItems
+      const exchangeLines = (order.returns?.edges || [])
+        .flatMap(r => r.node.exchangeLineItems?.edges || [])
+        .filter(e => (e.node.quantity || 0) > 0)
+        .map(e => {
+          const li  = e.node.lineItems || {};
+          const qty = e.node.quantity;
+          const sku = li.sku || '';
+          const nm  = li.name || '';
+          return `${qty}x ${nm}${sku ? ' [' + sku + ']' : ''}`;
+        });
+      if (exchangeLines.length) notesLines.push('Exchange items: ' + exchangeLines.join(', '));
+
+      // Also show the return items (what's coming back)
+      const returnBack = (order.returns?.edges || [])
+        .flatMap(r => r.node.returnLineItems?.edges || [])
+        .filter(e => (e.node.quantity || 0) > 0)
+        .map(e => {
+          const li  = e.node.fulfillmentLineItem?.lineItem || {};
+          const qty = e.node.quantity;
+          const sku = li.sku || '';
+          const nm  = li.name || '';
+          return `${qty}x ${nm}${sku ? ' [' + sku + ']' : ''}`;
+        });
+      if (returnBack.length) notesLines.push('Return items: ' + returnBack.join(', '));
+    }
+
+    if (order.note) notesLines.push('Note: ' + order.note);
+
+    const consigneeName = [addr.firstName, addr.lastName].filter(Boolean).join(' ') || '—';
+
+    const rowData = {
+      consignee_name:    consigneeName,
+      consignee_phone:   fullPhone,
+      consignee_city:    addr.city || '',
+      consignee_address: addrParts,
+      cod_amount:        cod || null,
+      special_inst:      '',
+      reference:         order.name,
+      notes:             notesLines.join(' | ') || null,
+    };
+
+    const row = ws.addRow(rowData);
+
+    // Alternating row color
+    const rowNum = row.number;
+    if (rowNum % 2 === 0) {
+      row.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F6FB' } };
+      });
+    }
+
+    // Reference cell — LTR
+    row.getCell('reference').alignment  = { horizontal: 'left' };
+    row.getCell('consignee_phone').alignment = { horizontal: 'left' };
+    row.getCell('cod_amount').alignment = { horizontal: 'right' };
+    if (rowData.cod_amount) row.getCell('cod_amount').numFmt = '#,##0';
+  }
+
+  // Generate filename
+  const now  = new Date(Date.now() + 3 * 60 * 60 * 1000); // Cairo UTC+3
+  const pad  = n => String(n).padStart(2, '0');
+  const date = `${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())}`;
+  const prefix = type === 'RETURN' ? 'Bosta_Return_Orders' : 'Bosta_Exchange_Orders';
+
+  const buf = await wb.xlsx.writeBuffer();
+  const a   = document.createElement('a');
+  a.href     = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  a.download = `${prefix}_${date}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ══════════════════════════════════════════════════════════════
+// CONFIRM — تحديث ميتافيلد S2
+// ══════════════════════════════════════════════════════════════
+async function doConfirm(type) {
+  const state     = getState(type);
+  const ids       = getIds(type);
+  const newStatus = type === 'RETURN' ? 'In-Return' : 'Ready';
+  const typeLabel = type === 'RETURN' ? 'استرجاع' : 'استبدال';
+
+  if (!state.orders.length)  { showToast('لا توجد أوردرات', 'error'); return; }
+  if (!state.exported)        { showToast('يجب تصدير الإكسل أولاً', 'error'); return; }
+  if (!confirm(`سيتم تحديث ${state.orders.length} أوردر ${typeLabel}\nالحالة الجديدة: "${newStatus}"\n\nهل أنت متأكد؟`)) return;
+
+  const confirmBtn = document.getElementById(ids.confirmBtn);
+  const resultEl   = document.getElementById(ids.confirmResult);
+
+  confirmBtn.disabled    = true;
+  confirmBtn.textContent = '⏳ جارٍ التأكيد...';
+
+  try {
+    const cfg = getConfig();
+    const res = await fetch(`${cfg.workerUrl}?action=confirm_upload`, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${cfg.workerSecret}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        type,
+        orders:   state.orders.map(o => ({ id: o.id, name: o.name })),
+        employee: currentEmployee?.username,
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'فشل التأكيد');
+
+    const hasErrors = data.errors?.length > 0;
+    resultEl.style.display = 'block';
+
+    if (hasErrors) {
+      resultEl.className = 'confirm-result confirm-result-warn';
+      resultEl.innerHTML = `⚠️ ${data.successCount} أوردر تم تأكيده — ${data.errors.length} فشل: ${data.errors[0]}`;
+    } else {
+      resultEl.className = 'confirm-result confirm-result-ok';
+      resultEl.innerHTML = `✓ تم تأكيد ${data.successCount} أوردر بنجاح — الحالة الجديدة: <strong>${data.newStatus}</strong>`;
+    }
+
+    confirmBtn.textContent = 'تم التأكيد ✓';
+    showToast(`✓ ${data.successCount} أوردر — تم التأكيد`, 'success');
+
+    // Refresh log if open
+    if (logLoaded) { logLoaded = false; }
+
+  } catch (e) {
+    resultEl.style.display = 'block';
+    resultEl.className     = 'confirm-result confirm-result-error';
+    resultEl.textContent   = '✕ خطأ: ' + e.message;
+    confirmBtn.disabled    = false;
+    confirmBtn.textContent = type === 'RETURN'
+      ? '✅ تأكيد رفع الأوردرات على بوسطة'
+      : '✅ رفع الأوردرات وإرسال الفواتير للمخزن';
+    showToast('فشل التأكيد: ' + e.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// DATE / TIME HELPERS
+// ══════════════════════════════════════════════════════════════
+function toCairo(iso) {
+  const d = new Date(iso);
+  d.setUTCHours(d.getUTCHours() + 3);
+  return d;
+}
+
+function formatDateTime(iso) {
+  if (!iso) return '—';
+  const d   = toCairo(iso);
+  const pad = n => String(n).padStart(2, '0');
+  const date = `${pad(d.getUTCDate())}-${pad(d.getUTCMonth()+1)}-${d.getUTCFullYear()}`;
+  let h = d.getUTCHours();
+  const ampm = h >= 12 ? 'م' : 'ص';
+  h = h % 12 || 12;
+  return `${date}  ${pad(h)}:${pad(d.getUTCMinutes())} ${ampm}`;
+}
+
+function formatDateOnly(iso) {
+  if (!iso) return '—';
+  const d   = toCairo(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getUTCDate())}-${pad(d.getUTCMonth()+1)}-${d.getUTCFullYear()}`;
+}
+
+function toLocalISO(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// LOG TAB
+// ══════════════════════════════════════════════════════════════
+let logAllData     = [];
+let logTotalAll    = 0;
+let logSelectedIds = new Set();
+let logDebounce    = null;
+let logFiltersOpen = true;
+
+const PRESET_LABELS = {
+  today:'اليوم', yesterday:'أمس',
+  last7:'آخر 7 أيام', last30:'آخر 30 يوم', last90:'آخر 90 يوم',
+  thisMonth:'الشهر الحالي', lastMonth:'الشهر السابق', thisYear:'هذه السنة'
+};
+
+function toggleLogFilters() {
+  logFiltersOpen = !logFiltersOpen;
+  document.getElementById('logFiltersBody').classList.toggle('collapsed', !logFiltersOpen);
+  document.getElementById('logFiltersToggleIcon').classList.toggle('open', logFiltersOpen);
+}
+
+function updateDateEmptyClass(el) { el.classList.toggle('empty', !el.value); }
+
+let activePreset = '';
+
+function togglePresetMenu(e) {
+  e.stopPropagation();
+  const btn  = document.getElementById('logPresetBtn');
+  const menu = document.getElementById('logPresetMenu');
+  const open = menu.classList.contains('open');
+  menu.classList.toggle('open', !open);
+  btn.classList.toggle('open', !open);
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('logPresetMenu')?.classList.remove('open');
+  document.getElementById('logPresetBtn')?.classList.remove('open');
+});
+
+function applyPreset(preset) {
+  document.getElementById('logPresetMenu').classList.remove('open');
+  document.getElementById('logPresetBtn').classList.remove('open');
+
+  const now   = new Date(new Date().getTime() + 3 * 60 * 60 * 1000);
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  let from, to;
+
+  switch (preset) {
+    case 'today':      from = to = today; break;
+    case 'yesterday':  { const y = new Date(today); y.setUTCDate(y.getUTCDate()-1); from = to = y; break; }
+    case 'last7':      { from = new Date(today); from.setUTCDate(from.getUTCDate()-6);  to = today; break; }
+    case 'last30':     { from = new Date(today); from.setUTCDate(from.getUTCDate()-29); to = today; break; }
+    case 'last90':     { from = new Date(today); from.setUTCDate(from.getUTCDate()-89); to = today; break; }
+    case 'thisMonth':  { from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)); to = today; break; }
+    case 'lastMonth':  { from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth()-1, 1)); to = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0)); break; }
+    case 'thisYear':   { from = new Date(Date.UTC(today.getUTCFullYear(), 0, 1)); to = today; break; }
+    default: return;
+  }
+
+  const fi = document.getElementById('logFilterDateFrom');
+  const ti = document.getElementById('logFilterDateTo');
+  fi.value = toLocalISO(from);
+  ti.value = toLocalISO(to);
+  updateDateEmptyClass(fi);
+  updateDateEmptyClass(ti);
+
+  activePreset = preset;
+  document.querySelectorAll('.log-preset-item').forEach(el => el.classList.toggle('active', el.dataset.preset === preset));
+  document.getElementById('logPresetLabel').textContent = `⚡ ${PRESET_LABELS[preset]}`;
+  document.getElementById('logPresetBtn').classList.add('has-preset');
+
+  if (!logLoaded) loadLog(); else applyLogFilters();
+}
+
+function onLogFilterChange() {
+  activePreset = '';
+  document.querySelectorAll('.log-preset-item').forEach(el => el.classList.remove('active'));
+  const btn = document.getElementById('logPresetBtn');
+  if (btn) { document.getElementById('logPresetLabel').textContent = '⚡ اختار فترة'; btn.classList.remove('has-preset'); }
+  if (!logLoaded) { loadLog(); return; }
+  applyLogFilters();
+}
+
+async function onLogEmpFilterChange() {
+  logTotalAll = 0;
+  await loadLog();
+}
+
+function onLogSearchInput() {
+  clearTimeout(logDebounce);
+  logDebounce = setTimeout(applyLogFilters, 300);
+}
+
+function clearLogFilters() {
+  document.getElementById('logFilterEmployee').value = '';
+  document.getElementById('logFilterType').value     = '';
+  const fi = document.getElementById('logFilterDateFrom');
+  const ti = document.getElementById('logFilterDateTo');
+  fi.value = ''; ti.value = '';
+  updateDateEmptyClass(fi); updateDateEmptyClass(ti);
+  document.getElementById('logSearch').value = '';
+  activePreset = '';
+  document.querySelectorAll('.log-preset-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('logPresetLabel').textContent = '⚡ اختار فترة';
+  document.getElementById('logPresetBtn').classList.remove('has-preset');
+  loadLog();
+}
+
+// ── Load Log ──
+async function loadLog() {
+  const body = document.getElementById('logBody');
+  body.innerHTML = '<div class="log-empty"><div class="loading-spinner"></div><p style="margin-top:8px;font-size:12px;">جارٍ التحميل...</p></div>';
+  document.getElementById('logFilteredCount').textContent = '—';
+
+  try {
+    const cfg = getConfig();
+    const url = cfg.workerUrl;
+    const emp = document.getElementById('logFilterEmployee').value;
+
+    // إجمالي كلي (بدون فلتر موظف) — مرة واحدة
+    if (logTotalAll === 0 || !emp) {
+      const pTotal = new URLSearchParams({ action: 'get_logs', limit: '5000' });
+      const rTotal = await fetch(`${url}?${pTotal}`, { headers: { 'Authorization': `Bearer ${cfg.workerSecret}` } });
+      const dTotal = await rTotal.json();
+      if (dTotal.ok) {
+        logTotalAll = (dTotal.entries || []).filter(e => e.type !== 'login' && e.type !== 'logout').length;
+      }
+    }
+    document.getElementById('logTotalCount').textContent = logTotalAll.toLocaleString('en-US');
+
+    const params = new URLSearchParams({ action: 'get_logs', limit: '2000' });
+    if (emp) params.set('employee', emp);
+
+    const res  = await fetch(`${url}?${params}`, { headers: { 'Authorization': `Bearer ${cfg.workerSecret}` } });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'خطأ في جلب السجل');
+
+    logAllData = (data.entries || []).filter(e => e.type !== 'login' && e.type !== 'logout');
+    logLoaded  = true;
+    applyLogFilters();
+  } catch (e) {
+    body.innerHTML = `<div class="log-empty">⚠️ ${e.message}</div>`;
+    document.getElementById('logTotalCount').textContent = '—';
+  }
+}
+
+// ── Apply Filters (client-side) ──
+function typeMatchesFilter(entryType, filterVal) {
+  if (!filterVal)        return true;
+  if (filterVal === 'export')     return entryType === 'export_return'    || entryType === 'export_exchange';
+  if (filterVal === 'confirmed')  return entryType === 'confirmed_return'  || entryType === 'confirmed_exchange';
+  return entryType === filterVal;
+}
+
+function applyLogFilters() {
+  const typeFilter = document.getElementById('logFilterType').value;
+  const dateFrom   = document.getElementById('logFilterDateFrom').value;
+  const dateTo     = document.getElementById('logFilterDateTo').value;
+  const search     = document.getElementById('logSearch').value.trim().toLowerCase();
+
+  const filtered = logAllData.filter(e => {
+    if (!typeMatchesFilter(e.type || '', typeFilter)) return false;
+    if (dateFrom || dateTo) {
+      const ts = e.timestamp ? e.timestamp.substring(0, 10) : '';
+      if (dateFrom && ts < dateFrom) return false;
+      if (dateTo   && ts > dateTo)   return false;
+    }
+    if (search) {
+      const orderMatch = (e.order_name || '').toLowerCase().includes(search);
+      const notesMatch = (e.notes      || '').toLowerCase().includes(search);
+      if (!orderMatch && !notesMatch) return false;
+    }
+    return true;
+  });
+
+  document.getElementById('logFilteredCount').textContent = filtered.length.toLocaleString('en-US');
+  renderLog(filtered);
+}
+
+// ── Render Log ──
+function renderLog(entries) {
+  const body = document.getElementById('logBody');
+  logSelectedIds.clear();
+  updateLogExportBtn();
+  document.getElementById('logSelectAll').checked = false;
+
+  if (!entries.length) {
+    body.innerHTML = '<div class="log-empty">لا توجد نتائج تطابق الفلاتر المحددة</div>';
+    return;
+  }
+
+  body.innerHTML = entries.map((e, idx) => {
+    const type      = e.type      || '';
+    const orderName = e.order_name || null;
+    const employee  = e.employee   || null;
+    const notes     = e.notes      || null;
+    const timestamp = e.timestamp  || null;
+    const entryId   = e.id         || idx;
+
+    let dotClass, typeHtml;
+    switch (type) {
+      case 'export_return':
+        dotClass = 'log-dot-exp-r';
+        typeHtml = '<span class="log-type-badge lt-exp-r">📦 تصدير استرجاع</span>';
+        break;
+      case 'export_exchange':
+        dotClass = 'log-dot-exp-e';
+        typeHtml = '<span class="log-type-badge lt-exp-e">🔄 تصدير استبدال</span>';
+        break;
+      case 'confirmed_return':
+        dotClass = 'log-dot-cnf-r';
+        typeHtml = '<span class="log-type-badge lt-cnf-r">✅ تأكيد استرجاع</span>';
+        break;
+      case 'confirmed_exchange':
+        dotClass = 'log-dot-cnf-e';
+        typeHtml = '<span class="log-type-badge lt-cnf-e">✅ تأكيد استبدال</span>';
+        break;
+      default:
+        dotClass = '';
+        typeHtml = `<span class="log-type-badge" style="background:var(--surface-2);color:var(--text-muted);">${type}</span>`;
+    }
+
+    const orderHtml = orderName ? `<span class="log-order-badge">${orderName}</span>` : '';
+    const empHtml   = employee  ? `<span class="log-emp-badge">👤 ${employee.replace(/_/g, ' ')}</span>` : '';
+    const notesHtml = notes     ? `<div class="log-notes">📝 ${notes}</div>` : '';
+    const dateStr   = timestamp ? formatDateTime(timestamp) : '—';
+
+    return `<div class="log-entry" id="log-entry-${entryId}">
+      <div class="log-cb"><input type="checkbox" class="log-entry-cb" data-id="${entryId}" data-idx="${idx}" onchange="onLogCbChange(this)" /></div>
+      <div class="log-dot ${dotClass}"></div>
+      <div class="log-entry-content">
+        <div class="log-entry-top">${orderHtml}${typeHtml}${empHtml}</div>
+        <div class="log-meta">${dateStr}</div>
+        ${notesHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Checkbox ──
+function onLogCbChange(cb) {
+  const id = cb.dataset.id;
+  if (cb.checked) logSelectedIds.add(id); else logSelectedIds.delete(id);
+  updateLogExportBtn();
+  const allCbs = document.querySelectorAll('.log-entry-cb');
+  document.getElementById('logSelectAll').checked = allCbs.length > 0 && [...allCbs].every(c => c.checked);
+  document.getElementById(`log-entry-${id}`)?.classList.toggle('selected', cb.checked);
+}
+
+function toggleLogSelectAll(master) {
+  document.querySelectorAll('.log-entry-cb').forEach(cb => {
+    cb.checked = master.checked;
+    const id = cb.dataset.id;
+    if (master.checked) logSelectedIds.add(id); else logSelectedIds.delete(id);
+    document.getElementById(`log-entry-${id}`)?.classList.toggle('selected', master.checked);
+  });
+  updateLogExportBtn();
+}
+
+function updateLogExportBtn() {
+  const btn = document.getElementById('logExportBtn');
+  if (!btn) return;
+  const has = logSelectedIds.size > 0;
+  btn.classList.toggle('enabled', has);
+  btn.textContent = has ? `⬇ تصدير المحدد (${logSelectedIds.size}) .xlsx` : '⬇ تصدير المحدد .xlsx';
+}
+
+// ── Log Export (ExcelJS) ──
+async function exportSelectedLog() {
+  if (logSelectedIds.size === 0) return;
+
+  const cbs  = [...document.querySelectorAll('.log-entry-cb')].filter(c => c.checked);
+  const TYPE_LABELS = {
+    export_return:    'تصدير استرجاع',
+    export_exchange:  'تصدير استبدال',
+    confirmed_return: 'تأكيد استرجاع',
+    confirmed_exchange: 'تأكيد استبدال',
+  };
+
+  const rows = cbs.map(cb => {
+    const idx = parseInt(cb.dataset.idx);
+    const e   = logAllData[idx];
+    if (!e) return null;
+
+    let dateOnly = '—', timeOnly = '—';
+    if (e.timestamp) {
+      const d   = toCairo(e.timestamp);
+      const pad = n => String(n).padStart(2, '0');
+      dateOnly  = `${pad(d.getUTCDate())}-${pad(d.getUTCMonth()+1)}-${d.getUTCFullYear()}`;
+      let h     = d.getUTCHours();
+      const ap  = h >= 12 ? 'مساءً' : 'صباحاً';
+      h         = h % 12 || 12;
+      timeOnly  = `${pad(h)}:${pad(d.getUTCMinutes())} ${ap}`;
+    }
+
+    return {
+      'التاريخ':     dateOnly,
+      'الوقت':       timeOnly,
+      'الموظف':      (e.employee || '').replace(/_/g, ' '),
+      'نوع العملية': TYPE_LABELS[e.type] || e.type || '—',
+      'رقم الأوردر': e.order_name || null,
+      'الملاحظات':   e.notes      || null,
+    };
+  }).filter(Boolean);
+
+  if (!rows.length) return;
+
+  try {
+    const wb = new ExcelJS.Workbook();
+    wb.views = [{ rightToLeft: true }];
+    const ws = wb.addWorksheet('سجل العمليات');
+    ws.views  = [{ state: 'frozen', ySplit: 1, rightToLeft: true }];
+
+    ws.columns = [
+      { header: 'التاريخ',     key: 'التاريخ',     width: 14 },
+      { header: 'الوقت',       key: 'الوقت',       width: 14 },
+      { header: 'الموظف',      key: 'الموظف',      width: 18 },
+      { header: 'نوع العملية', key: 'نوع العملية', width: 18 },
+      { header: 'رقم الأوردر', key: 'رقم الأوردر', width: 14 },
+      { header: 'الملاحظات',   key: 'الملاحظات',   width: 50 },
+    ];
+
+    rows.forEach(r => {
+      const cleaned = {};
+      for (const k of Object.keys(rows[0])) cleaned[k] = r[k] ?? null;
+      ws.addRow(cleaned);
+    });
+
+    ws.eachRow((r, i) => { if (i === 1) return; r.eachCell(c => { if (typeof c.value === 'number') c.numFmt = '#,##0'; }); });
+
+    const buf = await wb.xlsx.writeBuffer();
+    const a   = document.createElement('a');
+    a.href     = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = `re-exporter-log-${new Date().toISOString().substring(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast(`تم تصدير ${rows.length} عملية ✓`, 'success');
+  } catch (err) {
+    showToast('خطأ في التصدير: ' + err.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+(function init() {
+  // If not configured, open settings on first load
+  if (!isConfigured()) setTimeout(openSettings, 500);
+  else loadEmployeesList();
+
+  // Date empty class init
+  ['logFilterDateFrom', 'logFilterDateTo'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) updateDateEmptyClass(el);
+  });
+})();
+</script>
+</body>
+</html>
