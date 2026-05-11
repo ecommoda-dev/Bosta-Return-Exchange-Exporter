@@ -1447,193 +1447,154 @@
     }
 
     // ══════════════════════════════════════════════════════════════
-    // EXCEL EXPORT
+    // EXCEL EXPORT — Bosta official template preserved from v2.2.0
     // ══════════════════════════════════════════════════════════════
-    function orderIdName(order) {
-      return String(order?.name || '').trim();
-    }
-
-    function money(v) {
-      const n = Number(v ?? 0);
-      return Number.isFinite(n) ? n : 0;
-    }
-
-    function lineSkuName(line) {
-      const sku = String(line?.sku || '').trim();
-      const name = String(line?.name || '').trim();
-      if (sku && name && !name.includes(sku)) return `${sku} / ${name}`;
-      return sku || name || '';
-    }
-
-    function packageDescFromLine(line, qty = 1) {
-      const sku = String(line?.sku || '').trim();
-      const name = String(line?.name || '').trim();
-      const label = sku || name || '';
-      return label ? `${label} x${qty || 1}` : '';
-    }
-
-    function getReturnPackageDescriptions(order) {
-      const out = [];
-      const returns = order?.returns?.edges || [];
-      for (const r of returns) {
-        const retLines = r?.node?.returnLineItems?.edges || [];
-        for (const edge of retLines) {
-          const node = edge?.node || {};
-          const line = node.fulfillmentLineItem?.lineItem || {};
-          const desc = packageDescFromLine(line, node.quantity || 1);
-          if (desc) out.push(desc);
-        }
-      }
-      return out;
-    }
-
-    function getExchangeLineDescriptions(order) {
-      const out = [];
-      const returns = order?.returns?.edges || [];
-      for (const r of returns) {
-        const exLines = r?.node?.exchangeLineItems?.edges || [];
-        for (const edge of exLines) {
-          const node = edge?.node || {};
-          const lines = node.lineItems || [];
-          for (const line of lines) {
-            const desc = packageDescFromLine(line, node.quantity || 1);
-            if (desc) out.push(desc);
-          }
-        }
-      }
-      return out;
-    }
-
-    function getPackageDescription(order, jobType) {
-      if (jobType === 'exchange') {
-        const ex = getExchangeLineDescriptions(order);
-        if (ex.length) return ex.join('\n');
-      }
-      const items = order?.lineItems?.edges || [];
-      return items
-        .map(e => packageDescFromLine(e.node, e.node?.currentQuantity || 1))
-        .filter(Boolean)
-        .join('\n');
-    }
-
-    function getGoodsValue(order, jobType) {
-      if (jobType === 'exchange') {
-        const returns = order?.returns?.edges || [];
-        let total = 0;
-        for (const r of returns) {
-          const exLines = r?.node?.exchangeLineItems?.edges || [];
-          for (const edge of exLines) {
-            const node = edge?.node || {};
-            const qty = Number(node.quantity || 1);
-            const lines = node.lineItems || [];
-            for (const line of lines) {
-              total += money(line?.originalUnitPriceSet?.shopMoney?.amount) * qty;
-            }
-          }
-        }
-        if (total > 0) return total;
-      }
-      return money(order?.totalOutstandingSet?.shopMoney?.amount);
-    }
-
-    function contactPhone(order) {
-      const addr = order?.shippingAddress || {};
-      return addr.phone || order?.customer?.phone || '';
-    }
-
-    function customerName(order) {
-      const addr = order?.shippingAddress || {};
-      return [addr.firstName, addr.lastName].filter(Boolean).join(' ').trim();
-    }
-
-    function fullAddress(order) {
-      const addr = order?.shippingAddress || {};
-      return [addr.address1, addr.address2, addr.city, addr.province].filter(Boolean).join(' - ');
-    }
-
     async function exportToExcel(orders, jobType) {
       const wb = new ExcelJS.Workbook();
-      wb.creator = 'EcomModa';
-      wb.created = new Date();
-      const ws = wb.addWorksheet(jobType === 'return' ? 'Return Orders' : 'Exchange Orders');
+      wb.views = [{ rightToLeft: false }];
+      const ws = wb.addWorksheet('Add orders here');
 
-      const columns = [
-        { header: 'Receiver Name', key: 'receiverName', width: 24 },
-        { header: 'Receiver Phone', key: 'receiverPhone', width: 18 },
-        { header: 'Receiver Second Phone', key: 'receiverSecondPhone', width: 18 },
-        { header: 'Receiver Address', key: 'receiverAddress', width: 42 },
-        { header: 'City', key: 'city', width: 16 },
-        { header: 'Zone', key: 'zone', width: 16 },
-        { header: 'District', key: 'district', width: 16 },
-        { header: 'Delivery Type', key: 'deliveryType', width: 16 },
-        { header: 'Payment Type', key: 'paymentType', width: 16 },
-        { header: 'Amount', key: 'amount', width: 12 },
-        { header: 'COD', key: 'cod', width: 12 },
-        { header: 'Goods Value Amount', key: 'goodsValueAmount', width: 18 },
-        { header: 'Business Reference', key: 'businessReference', width: 20 },
-        { header: 'Package Description', key: 'packageDescription', width: 32 },
-        { header: 'Delivery Notes', key: 'deliveryNotes', width: 22 },
-        { header: 'Order Reference', key: 'orderReference', width: 18 },
-        { header: 'Return #Items', key: 'returnItems', width: 14 },
-        { header: 'Return Package Description', key: 'returnPackageDescription', width: 34 },
+      // IMPORTANT: Keep Bosta template columns A:U exactly as v2.2.0.
+      ws.columns = [
+        { key:'fullName',      width:25   }, // A — Full Name
+        { key:'phone',         width:14   }, // B — Phone
+        { key:'city',          width:14   }, // C — City
+        { key:'streetName',    width:22   }, // D — Street Name
+        { key:'cashAmount',    width:13.5 }, // E — Cash Amount
+        { key:'area',          width:10   }, // F — Area
+        { key:'landmark',      width:15   }, // G — Landmark
+        { key:'workAddress',   width:14   }, // H — Work address?
+        { key:'secondPhone',   width:14   }, // I — Second Phone
+        { key:'flexship',      width:20   }, // J — Apply Flexship Fees?
+        { key:'openPackage',   width:20   }, // K — Allow Opening Package?
+        { key:'packageType',   width:20   }, // L — Package Type
+        { key:'itemCount',     width:11   }, // M — No. of Items
+        { key:'description',   width:20   }, // N — Package Description
+        { key:'deliveryNotes', width:16   }, // O — Delivery Notes
+        { key:'orderRef',      width:14   }, // P — Order Reference
+        { key:'returnItems',   width:14   }, // Q — Return #Items
+        { key:'returnDesc',    width:22   }, // R — Return Package Description
+        { key:'goodsValue',    width:16   }, // S — Goods Value Amount
+        { key:'bostaCredits',  width:18   }, // T — Pay With Bosta Credits?
+        { key:'brandName',     width:14   }, // U — Brand Name
       ];
-      ws.columns = columns;
 
-      const headerRow = ws.getRow(1);
-      headerRow.font = { bold: true };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-      headerRow.height = 32;
-      headerRow.eachCell(cell => {
-        cell.border = {
-          top: { style: 'thin' }, left: { style: 'thin' },
-          bottom: { style: 'thin' }, right: { style: 'thin' },
-        };
+      const RF = { color:{ argb:'FFFF0000' }, bold:true, name:'Calibri', size:10 };
+      const BF = { color:{ argb:'FF000000' }, bold:true, name:'Calibri', size:10 };
+      const CT = { horizontal:'center', vertical:'middle' };
+
+      ws.addRow([]);
+      ws.getRow(1).height = 42;
+      const H = {
+        A:['Full Name',RF],        B:['Phone',RF],
+        C:['City',RF],             D:['Street Name',RF],
+        E:['Cash Amount',BF],      F:['Area',BF],
+        G:['Landmark',BF],         H:['Work address?',BF],
+        I:['Second Phone',BF],
+        J:['Apply Flexship
+Fees?',BF], K:['Allow
+Opening Package?',BF],
+        L:['Package Type',BF],     M:['No. of Items',BF],
+        N:['Package Description',BF], O:['Delivery Notes',BF],
+        P:['Order Reference',BF],  Q:['Return #Items',BF],
+        R:['Return Package
+Description',BF],
+        S:['Goods Value
+Amount',BF], T:['Pay With Bosta
+Credits?',BF],
+        U:['Brand Name',BF],
+      };
+      Object.entries(H).forEach(([col,[text,font]]) => {
+        const c = ws.getCell(`${col}1`);
+        c.value = text;
+        c.font = font;
+        c.alignment = {...CT, wrapText:true};
       });
 
-      for (const order of orders) {
-        const addr = order.shippingAddress || {};
-        const returnDesc = getReturnPackageDescriptions(order);
+      ws.views = [{ state:'frozen', ySplit:1, rightToLeft:false }];
+
+      orders.forEach(order => {
+        const addr  = order.shippingAddress || {};
+        const items = (order.lineItems?.edges || [])
+          .map(e => e.node)
+          .filter(li => (li.currentQuantity || 0) > 0);
+
+        const cash  = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0) || null;
+        const count = items.reduce((s, li) => s + (li.currentQuantity || 1), 0) || null;
+        const allReturns = order.returns?.edges || [];
+
+        // R — Return Package Description: always products returned by customer.
+        const returnLineItemsList = allReturns
+          .flatMap(r => r.node.returnLineItems?.edges || [])
+          .map(e => {
+            const li = e.node.fulfillmentLineItem?.lineItem;
+            return li ? `${li.sku || li.name} x${e.node.quantity}` : null;
+          })
+          .filter(Boolean);
+        const returnDesc = returnLineItemsList.join(' | ') || null;
+
+        // Q — Return #Items: empty if only 1 item, exactly like v2.2.0.
+        const returnQtyTotal = allReturns
+          .flatMap(r => r.node.returnLineItems?.edges || [])
+          .reduce((s, e) => s + (e.node.quantity || 1), 0);
+        const returnItemsCount = returnQtyTotal > 1 ? returnQtyTotal : null;
+
+        // S — Goods Value Amount
+        // Exchange: price of exchange items. Return: price of returned items.
+        const hasExchange = allReturns.some(r => (r.node.exchangeLineItems?.edges || []).length > 0);
+        let goodsValue = 0;
+        if (hasExchange) {
+          allReturns.forEach(r => {
+            (r.node.exchangeLineItems?.edges || []).forEach(e => {
+              const qty = e.node.quantity || 1;
+              (e.node.lineItems || []).forEach(li => {
+                goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
+              });
+            });
+          });
+        } else {
+          allReturns.forEach(r => {
+            (r.node.returnLineItems?.edges || []).forEach(e => {
+              const li  = e.node.fulfillmentLineItem?.lineItem;
+              const qty = e.node.quantity || 1;
+              if (li) goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
+            });
+          });
+        }
+        const goodsValueFinal = goodsValue > 0 ? goodsValue : null;
+
         ws.addRow({
-          receiverName: customerName(order),
-          receiverPhone: contactPhone(order),
-          receiverSecondPhone: '',
-          receiverAddress: fullAddress(order),
-          city: addr.city || '',
-          zone: '',
-          district: '',
-          deliveryType: jobType === 'return' ? 'Return' : 'Exchange',
-          paymentType: 'Cash',
-          amount: 0,
-          cod: 0,
-          goodsValueAmount: getGoodsValue(order, jobType),
-          businessReference: orderIdName(order),
-          packageDescription: getPackageDescription(order, jobType),
-          deliveryNotes: jobType === 'return' ? 'أوردر استرجاع' : 'أوردر استبدال',
-          orderReference: orderIdName(order),
-          returnItems: returnDesc.length || '',
-          returnPackageDescription: returnDesc.join('\n'),
+          fullName:      [addr.firstName, addr.lastName].filter(Boolean).join(' ') || null,
+          phone:         addr.phone    || null,
+          city:          addr.city     || null,
+          streetName:    addr.address1 || null,
+          cashAmount:    cash !== 0 ? cash : null,
+          area:          null,
+          landmark:      addr.address2 || null,
+          workAddress:   null,
+          secondPhone:   order.customer?.phone || null,
+          flexship:      'Yes',
+          openPackage:   'Yes',
+          packageType:   null,
+          itemCount:     count !== 1 ? count : null,
+          description:   items.map(li => `${li.sku || li.name} x${li.currentQuantity}`).join(' | ') || null,
+          deliveryNotes: order.note    || null,
+          orderRef:      order.name    || null,
+          returnItems:   returnItemsCount,
+          returnDesc,
+          goodsValue:    goodsValueFinal,
+          bostaCredits:  null,
+          brandName:     'Ecommoda',
         });
-      }
-
-      ws.eachRow((row, rowNumber) => {
-        row.eachCell(cell => {
-          cell.alignment = { vertical: 'middle', wrapText: true };
-          cell.border = {
-            top: { style: 'thin' }, left: { style: 'thin' },
-            bottom: { style: 'thin' }, right: { style: 'thin' },
-          };
-        });
-        if (rowNumber > 1) row.height = 28;
       });
 
-      ws.views = [{ state: 'frozen', ySplit: 1 }];
-      ws.autoFilter = { from: 'A1', to: 'R1' };
-
-      const buf = await wb.xlsx.writeBuffer();
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${JOB_META[jobType].filePrefix}_${cairoDateStamp()}.xlsx`;
+      const today = new Date(Date.now() + 3 * 60 * 60 * 1000);
+      const pad   = n => String(n).padStart(2,'0');
+      const date  = `${today.getUTCFullYear()}-${pad(today.getUTCMonth()+1)}-${pad(today.getUTCDate())}`;
+      const buf   = await wb.xlsx.writeBuffer();
+      const a     = document.createElement('a');
+      a.href      = URL.createObjectURL(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      a.download  = `${JOB_META[jobType].filePrefix}_${date}.xlsx`;
       document.body.appendChild(a);
       a.click();
       URL.revokeObjectURL(a.href);
