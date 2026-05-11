@@ -61,24 +61,29 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 12px;
       flex-wrap: wrap;
-      gap: 8px;
     }
     .app-title { display: flex; align-items: center; gap: 10px; }
-    .app-icon  { font-size: 22px; }
-    .app-title-text h1   { font-size: 15px; font-weight: 800; line-height: 1.2; }
+    .app-icon { font-size: 23px; }
+    .app-title-text h1 { font-size: 15px; font-weight: 800; line-height: 1.25; }
     .app-title-text span { font-size: 11px; color: var(--text-muted); }
-    .app-header-btns { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .app-header-btns { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
     .hbtn {
-      display: flex; align-items: center; gap: 5px;
-      padding: 6px 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
       border: 1.5px solid var(--border-strong);
       background: var(--surface);
       border-radius: var(--radius-sm);
-      font-size: 12px; font-weight: 700;
       color: var(--text-secondary);
-      cursor: pointer; transition: all .15s; white-space: nowrap;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
     }
     .hbtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
     .hbtn.settings-configured { border-color: var(--green); color: var(--green); background: var(--green-light); }
@@ -86,80 +91,148 @@
     .hbtn.active-user { border-color: var(--green); color: var(--green); background: var(--green-light); }
     .hbtn.active-user:hover { border-color: var(--red); color: var(--red); background: var(--red-light); }
 
-    .tabs-wrap {
+    .login-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .login-overlay.hidden { display: none; }
+    .login-box {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 10px 16px;
+      padding: 28px 24px;
+      width: 100%;
+      max-width: 370px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.1);
+    }
+    .login-title { font-size: 17px; font-weight: 800; margin-bottom: 4px; text-align: center; }
+    .login-sub { font-size: 12px; color: var(--text-muted); text-align: center; margin-bottom: 20px; }
+    .login-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .login-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; }
+    .login-select {
+      border: 1.5px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      padding: 9px 11px;
+      font-size: 13px;
+      color: var(--text-primary);
+      outline: none;
+      width: 100%;
+      background: var(--surface);
+      transition: border-color .15s;
+    }
+    .login-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+    .pin-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
+    .pin-display { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
+    .pin-dot {
+      width: 40px; height: 40px;
+      border: 1.5px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 800; color: var(--accent);
+      transition: all .15s;
+    }
+    .pin-dot.filled { background: var(--accent-light); border-color: var(--accent); }
+    .pin-dot.error { background: var(--red-light); border-color: var(--red); color: var(--red); }
+    .pin-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 12px; }
+    .pin-key {
+      padding: 11px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all .12s;
+      text-align: center;
+    }
+    .pin-key:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+    .pin-key.del { color: var(--red); font-size: 13px; font-weight: 800; background: var(--red-light); border-color: var(--red-border); }
+    .pin-key.del:hover { background: var(--red); border-color: var(--red); color: #fff; }
+    .login-error {
+      background: var(--red-light); border: 1px solid var(--red-border);
+      border-radius: var(--radius-sm); padding: 8px 12px;
+      font-size: 12px; color: var(--red); font-weight: 700;
+      text-align: center; display: none; margin-bottom: 10px;
+    }
+    .login-error.visible { display: block; }
+    .btn-login {
+      width: 100%; padding: 11px;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--radius-sm); font-size: 14px; font-weight: 800;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-login:hover { background: var(--accent-dark); }
+    .btn-login:disabled { opacity: .5; cursor: not-allowed; }
+
+    .main-tabs-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
       margin-bottom: 12px;
       box-shadow: var(--shadow);
+      display: flex;
+      justify-content: flex-start;
     }
-    .main-seg {
-      display: inline-flex;
-      background: var(--surface-2);
-      border: 1px solid var(--border-strong);
-      border-radius: 10px;
-      padding: 4px;
-      gap: 3px;
-    }
+    .main-seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 10px; padding: 4px; gap: 4px; }
     .main-seg-btn {
       display: flex; flex-direction: column; align-items: center; gap: 2px;
-      padding: 7px 32px;
-      min-width: 145px;
+      padding: 9px 34px;
       border-radius: 7px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-secondary);
+      cursor: pointer;
       border: none;
       background: transparent;
-      color: var(--text-secondary);
-      font-size: 12px; font-weight: 700;
-      cursor: pointer; transition: all .15s;
+      transition: all .15s;
+      min-width: 150px;
     }
-    .main-seg-btn.active { background: var(--accent); color: #fff; box-shadow: 0 2px 6px rgba(37,99,235,.25); }
+    .main-seg-btn .msb-icon { font-size: 17px; }
+    .main-seg-btn.active { background: var(--accent); color: #fff; box-shadow: 0 2px 7px rgba(37,99,235,.3); }
     .main-seg-btn:not(.active):hover { background: var(--accent-light); color: var(--accent); }
-    .msb-icon { font-size: 16px; }
 
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
-
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 18px;
+      padding: 20px;
       margin-bottom: 12px;
       box-shadow: var(--shadow);
     }
-    .card-title {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .card-title h2 { font-size: 14px; font-weight: 800; color: var(--text-primary); }
+    .card-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .card-title h2 { font-size: 15px; font-weight: 800; }
     .card-title span { font-size: 11px; color: var(--text-muted); }
 
     .mode-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
     .mode-card {
       border: 1.5px solid var(--border-strong);
-      background: var(--surface);
       border-radius: var(--radius);
-      padding: 14px;
-      text-align: right;
+      background: var(--surface);
+      padding: 16px;
       cursor: pointer;
+      text-align: right;
       transition: all .15s;
     }
     .mode-card:hover { border-color: var(--accent); background: var(--accent-light); }
-    .mode-card.active {
-      border-color: var(--accent);
-      background: var(--accent-light);
-      box-shadow: inset 0 0 0 1px rgba(37,99,235,.15);
-    }
-    .mode-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-    .mode-ico { font-size: 22px; }
-    .mode-name { font-size: 14px; font-weight: 800; }
-    .mode-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+    .mode-card.active { border-color: var(--accent); background: var(--accent-light); box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
+    .mode-top { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+    .mode-ico { font-size: 20px; }
+    .mode-name { font-size: 15px; font-weight: 800; }
+    .mode-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
 
-    .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-top: 14px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; margin-top: 14px; }
     .stat-box {
       background: var(--surface-2);
       border: 1px solid var(--border);
@@ -172,6 +245,7 @@
     .stat-red .stat-value { color: var(--red); }
     .stat-blue .stat-value { color: var(--accent); }
     .stat-amber .stat-value { color: var(--amber); }
+    .stat-purple .stat-value { color: var(--purple); }
 
     .actions-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
     .btn {
@@ -269,124 +343,60 @@
       font-size: 12px;
     }
     .order-row:last-child { border-bottom: none; }
+    .order-row:hover { background: var(--surface-2); }
     .order-name { direction: ltr; font-family: var(--font-mono); font-weight: 800; color: var(--accent); }
-    .mono { direction: ltr; font-family: var(--font-mono); }
     .badge {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      border-radius: 999px;
-      padding: 2px 8px;
+      padding: 2px 7px;
+      border-radius: 5px;
       font-size: 11px;
       font-weight: 800;
-      width: fit-content;
+      border: 1px solid;
+      white-space: nowrap;
     }
-    .badge-ok { color: var(--green); background: var(--green-light); border: 1px solid var(--green-border); }
-    .badge-dup { color: var(--amber); background: var(--amber-light); border: 1px solid var(--amber-border); }
-    .badge-type { color: var(--accent); background: var(--accent-light); border: 1px solid #bfdbfe; }
-    .badge-purple { color: var(--purple); background: var(--purple-light); border: 1px solid var(--purple-border); }
-
+    .badge-ok { background: var(--green-light); color: var(--green); border-color: var(--green-border); }
+    .badge-warn { background: var(--amber-light); color: var(--amber); border-color: var(--amber-border); }
+    .badge-type { background: var(--accent-light); color: var(--accent-dark); border-color: #bfdbfe; }
+    .badge-purple { background: var(--purple-light); color: var(--purple); border-color: var(--purple-border); }
     .hint {
-      background: var(--surface-2);
       border: 1px dashed var(--border-strong);
-      border-radius: var(--radius);
+      border-radius: var(--radius-sm);
       padding: 12px;
-      font-size: 12px;
+      background: var(--surface-2);
       color: var(--text-secondary);
-      line-height: 1.8;
+      font-size: 12px;
+      line-height: 1.7;
     }
 
-    /* Login */
-    .login-overlay {
-      position: fixed;
-      inset: 0;
-      background: var(--bg);
-      z-index: 300;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .login-overlay.hidden { display: none; }
-    .login-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px 24px;
-      width: 100%;
-      max-width: 360px;
-      box-shadow: 0 8px 32px rgba(0,0,0,.1);
-    }
-    .login-title { font-size: 17px; font-weight: 800; margin-bottom: 4px; text-align: center; }
-    .login-sub { font-size: 12px; color: var(--text-muted); text-align: center; margin-bottom: 20px; }
-    .login-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
-    .login-label { font-size: 11px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; }
-    .login-select, .settings-input, .log-finput, .log-fsel {
-      border: 1.5px solid var(--border-strong);
+    .log-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px; }
+    .log-field { display: flex; flex-direction: column; gap: 4px; }
+    .log-label { font-size: 10px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; }
+    .log-fsel, .log-finput {
+      border: 1px solid var(--border-strong);
       border-radius: var(--radius-sm);
-      padding: 9px 11px;
-      font-size: 13px;
+      padding: 7px 10px;
+      background: var(--surface);
       color: var(--text-primary);
       outline: none;
-      width: 100%;
-      background: var(--surface);
-      transition: border-color .15s;
+      font-size: 12px;
+      min-height: 36px;
     }
-    .settings-input { font-family: var(--font-mono); direction: ltr; }
-    .login-select:focus, .settings-input:focus, .log-finput:focus, .log-fsel:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(37,99,235,.08);
-    }
-    .pin-label { font-size: 11px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
-    .pin-display { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
-    .pin-dot {
-      width: 40px; height: 40px;
-      border: 1.5px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      background: var(--surface-2);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 20px; font-weight: 800; color: var(--accent);
-      transition: all .15s;
-    }
-    .pin-dot.filled { background: var(--accent-light); border-color: var(--accent); }
-    .pin-dot.error { background: var(--red-light); border-color: var(--red); color: var(--red); }
-    .pin-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 12px; }
-    .pin-key {
-      padding: 11px;
-      border: 1px solid var(--border-strong);
-      background: var(--surface);
-      border-radius: var(--radius-sm);
-      font-family: var(--font-mono);
-      font-size: 16px; font-weight: 800;
-      color: var(--text-primary);
-      cursor: pointer; transition: all .12s; text-align: center;
-    }
-    .pin-key:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
-    .pin-key.del { color: var(--red); font-size: 13px; background: var(--red-light); border-color: var(--red-border); }
-    .pin-key.del:hover { background: var(--red); color: #fff; border-color: var(--red); }
-    .login-error {
-      background: var(--red-light); border: 1px solid var(--red-border);
-      border-radius: var(--radius-sm); padding: 8px 12px;
-      font-size: 12px; color: var(--red); font-weight: 800;
-      text-align: center; display: none; margin-bottom: 10px;
-    }
-    .login-error.visible { display: block; }
-    .btn-login {
-      width: 100%;
-      padding: 11px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: var(--radius-sm);
-      font-size: 14px;
-      font-weight: 800;
-      cursor: pointer;
-      transition: background .15s;
-    }
-    .btn-login:disabled { opacity: .5; cursor: not-allowed; }
-    .btn-login:hover:not(:disabled) { background: var(--accent-dark); }
+    .log-finput { min-width: 240px; }
+    .log-list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+    .log-entry { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-entry:hover { background: var(--surface-2); }
+    .log-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--accent); flex-shrink: 0; }
+    .log-dot.export { background: var(--accent); }
+    .log-dot.confirm { background: var(--green); }
+    .log-dot.scan { background: var(--purple); }
+    .log-content { flex: 1; min-width: 0; }
+    .log-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+    .log-notes { color: var(--text-primary); font-size: 12px; line-height: 1.6; }
+    .log-meta { color: var(--text-muted); font-size: 11px; margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .log-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
-    /* Modals */
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -409,98 +419,65 @@
     }
     .modal.wide { max-width: 720px; }
     @keyframes modalIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-    .modal-hdr {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 14px 18px; border-bottom: 1px solid var(--border);
-      font-size: 15px; font-weight: 800;
-    }
-    .modal-close-x {
-      background: none; border: none; font-size: 16px; line-height: 1;
-      cursor: pointer; padding: 3px 7px; border-radius: var(--radius-sm);
-      color: var(--red); transition: background .15s;
-    }
+    .modal-hdr { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 800; font-size: 15px; }
+    .modal-close-x { border: none; background: transparent; color: var(--red); cursor: pointer; border-radius: var(--radius-sm); font-size: 17px; padding: 3px 8px; }
     .modal-close-x:hover { background: var(--red-light); }
     .modal-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; max-height: 75vh; overflow: auto; }
     .modal-ftr { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
     .settings-field { display: flex; flex-direction: column; gap: 5px; }
     .settings-label { font-size: 10px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; }
-
-    .cl-version-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--surface-2); }
-    .cl-version-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .cl-ver-badge { font-family: var(--font-mono); font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--accent-light); color: var(--accent); border: 1px solid #bfdbfe; }
-    .cl-ver-badge.old { background: var(--surface); color: var(--text-secondary); border-color: var(--border-strong); }
-    .cl-ver-date { font-size: 11px; color: var(--text-muted); }
-    .cl-items { list-style: none; display: flex; flex-direction: column; gap: 6px; }
-    .cl-item { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; line-height: 1.6; }
-    .cl-tag { font-size: 10px; font-weight: 800; border-radius: 4px; padding: 1px 6px; flex-shrink: 0; }
-    .cl-tag.new { background: var(--green-light); color: var(--green); }
-    .cl-tag.fix { background: var(--red-light); color: var(--red); }
-    .cl-tag.change { background: var(--accent-light); color: var(--accent); }
-
-    /* Logs */
-    .log-toolbar {
-      display: grid;
-      grid-template-columns: 170px 1fr 110px;
-      gap: 10px;
-      align-items: end;
-      margin-bottom: 12px;
-    }
-    .log-field { display: flex; flex-direction: column; gap: 4px; }
-    .log-label { font-size: 10px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; }
-    .log-list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
-    .log-entry { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; }
-    .log-entry:last-child { border-bottom: none; }
-    .log-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--accent); flex-shrink: 0; }
-    .log-dot.export { background: var(--accent); }
-    .log-dot.confirm { background: var(--green); }
-    .log-dot.scan { background: var(--purple); }
-    .log-content { flex: 1; min-width: 0; }
-    .log-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
-    .log-notes { color: var(--text-primary); font-size: 12px; line-height: 1.6; }
-    .log-meta { color: var(--text-muted); font-size: 11px; margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; }
-    .log-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
-
-    #toastContainer { position: fixed; top: 14px; left: 14px; z-index: 500; display: flex; flex-direction: column; gap: 8px; }
-    .toast {
-      background: var(--surface);
-      border: 1px solid var(--border);
+    .settings-input {
+      border: 1.5px solid var(--border-strong);
       border-radius: var(--radius-sm);
-      box-shadow: 0 8px 24px rgba(0,0,0,.15);
-      padding: 10px 14px;
+      padding: 9px 11px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      direction: ltr;
+      outline: none;
+      width: 100%;
+      background: var(--surface);
+    }
+    .settings-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+
+    .toast-container { position: fixed; bottom: 18px; left: 18px; z-index: 600; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
       font-size: 13px;
       font-weight: 800;
-      min-width: 220px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.14);
+      border: 1px solid;
+      min-width: 260px;
+      animation: toastIn .18s ease;
     }
-    .toast.success { border-color: var(--green-border); color: var(--green); background: var(--green-light); }
-    .toast.error { border-color: var(--red-border); color: var(--red); background: var(--red-light); }
-    .toast.info { border-color: #bfdbfe; color: var(--accent); background: var(--accent-light); }
-    .toast.warn { border-color: var(--amber-border); color: var(--amber); background: var(--amber-light); }
+    .toast.info { background: var(--accent-light); color: var(--accent-dark); border-color: #bfdbfe; }
+    .toast.success { background: var(--green-light); color: var(--green); border-color: var(--green-border); }
+    .toast.error { background: var(--red-light); color: var(--red); border-color: var(--red-border); }
+    .toast.warn { background: var(--amber-light); color: var(--amber); border-color: var(--amber-border); }
+    @keyframes toastIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-    @media (max-width: 780px) {
-      .container { padding: 10px; }
-      .mode-grid, .summary-grid { grid-template-columns: 1fr; }
-      .orders-list-head, .order-row { grid-template-columns: 1fr; gap: 4px; }
-      .orders-list-head { display: none; }
-      .log-toolbar { grid-template-columns: 1fr; }
-      .main-seg { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
-      .main-seg-btn { min-width: 0; padding-inline: 10px; }
+    .mono { font-family: var(--font-mono); direction: ltr; }
+
+    @media (max-width: 760px) {
+      .mode-grid { grid-template-columns: 1fr; }
+      .summary-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .orders-list-head, .order-row { grid-template-columns: 85px 1fr; }
+      .orders-list-head div:nth-child(n+3), .order-row > div:nth-child(n+3) { display: none; }
+      .main-seg-btn { min-width: 120px; padding-inline: 20px; }
     }
   </style>
 </head>
-
 <body>
   <div class="login-overlay" id="loginOverlay">
     <div class="login-box">
       <div style="display:flex;justify-content:flex-start;margin-bottom:4px;">
-        <button id="loginSettingsBtn" onclick="openSettingsFromLogin()"
-          style="display:flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--border-strong);background:var(--surface-2);border-radius:var(--radius-sm);font-family:inherit;font-size:11px;font-weight:800;color:var(--text-secondary);cursor:pointer;">
+        <button id="loginSettingsBtn" onclick="openSettingsFromLogin()" style="display:flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--border-strong);background:var(--surface-2);border-radius:var(--radius-sm);font-family:inherit;font-size:11px;font-weight:700;color:var(--text-secondary);cursor:pointer;">
           ⚙️ الإعدادات
         </button>
       </div>
-
       <div style="text-align:center;margin-bottom:10px;font-size:28px;">🔁</div>
       <div class="login-title">Bosta Return / Exchange Exporter</div>
-      <div class="login-sub" id="loginSub">تصدير Return/Exchange من Shopify تلقائياً</div>
+      <div class="login-sub" id="loginSub">تصدير أوردرات الاسترجاع والاستبدال لبوسطة</div>
 
       <div id="stepMain">
         <div class="login-field">
@@ -528,72 +505,42 @@
           <button class="pin-key" onclick="pinPress('7')">7</button>
           <button class="pin-key" onclick="pinPress('8')">8</button>
           <button class="pin-key" onclick="pinPress('9')">9</button>
-          <button class="pin-key del" onclick="pinPress('clear')">مسح</button>
+          <button class="pin-key del" onclick="pinBackspace()">حذف</button>
           <button class="pin-key" onclick="pinPress('0')">0</button>
-          <button class="pin-key del" onclick="pinPress('back')">⌫</button>
+          <button class="pin-key del" onclick="pinClear()">مسح</button>
         </div>
 
-        <div class="login-error" id="loginError">PIN خطأ أو المستخدم غير موجود</div>
-        <button class="btn-login" id="btnLogin" onclick="doLogin()" disabled>دخول</button>
-      </div>
-
-      <div id="stepConfirmPin" style="display:none;">
-        <div class="pin-label">أكد الـ PIN الجديد</div>
-        <div class="pin-display">
-          <div class="pin-dot" id="cd0">_</div>
-          <div class="pin-dot" id="cd1">_</div>
-          <div class="pin-dot" id="cd2">_</div>
-          <div class="pin-dot" id="cd3">_</div>
-        </div>
-
-        <div class="pin-keypad">
-          <button class="pin-key" onclick="confirmPinPress('1')">1</button>
-          <button class="pin-key" onclick="confirmPinPress('2')">2</button>
-          <button class="pin-key" onclick="confirmPinPress('3')">3</button>
-          <button class="pin-key" onclick="confirmPinPress('4')">4</button>
-          <button class="pin-key" onclick="confirmPinPress('5')">5</button>
-          <button class="pin-key" onclick="confirmPinPress('6')">6</button>
-          <button class="pin-key" onclick="confirmPinPress('7')">7</button>
-          <button class="pin-key" onclick="confirmPinPress('8')">8</button>
-          <button class="pin-key" onclick="confirmPinPress('9')">9</button>
-          <button class="pin-key del" onclick="confirmPinPress('clear')">مسح</button>
-          <button class="pin-key" onclick="confirmPinPress('0')">0</button>
-          <button class="pin-key del" onclick="confirmPinPress('back')">⌫</button>
-        </div>
-
-        <div class="login-error" id="confirmError">الـ PIN غير متطابق</div>
-        <button class="btn-login" id="btnRegister" onclick="doRegister()" disabled>تأكيد وتسجيل الدخول</button>
-        <button class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:8px;" onclick="backToMainStep()">رجوع</button>
+        <div class="login-error" id="loginError"></div>
+        <button class="btn-login" id="loginBtn" onclick="submitPin()" disabled>دخول</button>
       </div>
     </div>
   </div>
 
+  <div class="toast-container" id="toastContainer"></div>
+
   <div class="container">
     <header class="app-header">
       <div class="app-title">
-        <div class="app-icon">🔁</div>
+        <span class="app-icon">🔁</span>
         <div class="app-title-text">
           <h1>Bosta Return / Exchange Exporter</h1>
           <span>Auto-fetch by S2 + Courier metafields — V3.0.0</span>
         </div>
       </div>
-
       <div class="app-header-btns">
-        <button class="hbtn ver-btn" onclick="openChangelog()">V3.0.0</button>
+        <button class="hbtn active-user" id="activeUserBtn" onclick="logout()" title="تسجيل خروج">👤 <span id="activeUserName">—</span></button>
         <button class="hbtn" id="settingsBtn" onclick="openSettings()">⚙️ الإعدادات</button>
-        <button class="hbtn active-user" id="activeUserBtn" onclick="doLogout()">👤 —</button>
+        <button class="hbtn ver-btn" onclick="openChangelog()">V3.0.0</button>
       </div>
     </header>
 
-    <div class="tabs-wrap">
+    <div class="main-tabs-wrap">
       <div class="main-seg">
-        <button class="main-seg-btn active" id="tabExportBtn" onclick="switchMainTab('export')">
-          <span class="msb-icon">📤</span>
-          <span>التصدير</span>
+        <button class="main-seg-btn active" id="tabExport" onclick="switchMainTab('export')">
+          <span class="msb-icon">📤</span><span>التصدير</span>
         </button>
-        <button class="main-seg-btn" id="tabLogsBtn" onclick="switchMainTab('logs')">
-          <span class="msb-icon">📋</span>
-          <span>سجل العمليات</span>
+        <button class="main-seg-btn" id="tabLogs" onclick="switchMainTab('logs')">
+          <span class="msb-icon">📋</span><span>سجل العمليات</span>
         </button>
       </div>
     </div>
@@ -601,19 +548,19 @@
     <section class="tab-panel active" id="exportPanel">
       <div class="card">
         <div class="card-title">
-          <h2>اختار نوع العملية</h2>
+          <h2>اختر نوع العملية</h2>
           <span>كل مرة ملف منفصل: Return أو Exchange</span>
         </div>
 
         <div class="mode-grid">
           <button class="mode-card active" id="modeReturn" onclick="selectJobType('return')">
             <div class="mode-top"><span class="mode-ico">↩️</span><span class="mode-name">أوردرات الاسترجاع</span></div>
-            <div class="mode-desc">S2 = <b>Confirmed + RETURN</b> و المندوب = <b>Bosta</b>. بعد التأكيد S2 تصبح <b>In-Return</b>.</div>
+            <div class="mode-desc">S2 = <b>Confirmed + RETURN</b> و المندوب = <b>Bosta</b>. بعد تحديث S2 تصبح <b>In-Return</b>.</div>
           </button>
 
           <button class="mode-card" id="modeExchange" onclick="selectJobType('exchange')">
             <div class="mode-top"><span class="mode-ico">🔄</span><span class="mode-name">أوردرات الاستبدال</span></div>
-            <div class="mode-desc">S2 = <b>Confirmed + EXCHANGE</b> و المندوب = <b>Bosta</b>. بعد التأكيد S2 تصبح <b>Ready</b>.</div>
+            <div class="mode-desc">S2 = <b>Confirmed + EXCHANGE</b> و المندوب = <b>Bosta</b>. بعد تحديث S2 تصبح <b>Ready</b>.</div>
           </button>
         </div>
 
@@ -630,16 +577,21 @@
             <div class="stat-label">تم التصدير</div>
             <div class="stat-value" id="statExported">لا</div>
           </div>
+          <div class="stat-box stat-purple">
+            <div class="stat-label">تأكيد بوسطة/المخزن</div>
+            <div class="stat-value" id="statManualConfirm">لا</div>
+          </div>
           <div class="stat-box stat-amber">
-            <div class="stat-label">S2 بعد التأكيد</div>
+            <div class="stat-label">S2 بعد التحديث</div>
             <div class="stat-value" id="statNext">In-Return</div>
           </div>
         </div>
 
         <div class="actions-row">
-          <button class="btn btn-primary" id="fetchBtn" onclick="fetchCandidates()">🔎 جلب أوردرات الاسترجاع</button>
+          <button class="btn btn-primary" id="fetchBtn" onclick="fetchCandidates()">🔎 الاستعلام عن أوردرات الاسترجاع</button>
           <button class="btn btn-green" id="exportBtn" onclick="exportCurrentOrders()" disabled>📥 تصدير Excel</button>
-          <button class="btn btn-purple" id="confirmBtn" onclick="confirmUpload()" disabled>✅ تأكيد رفع الأوردرات على بوسطة</button>
+          <button class="btn btn-purple" id="confirmBtn" onclick="confirmManualSteps()" disabled>✅ تأكيد رفع بوسطة/المخزن</button>
+          <button class="btn btn-warning" id="updateS2Btn" onclick="updateS2Status()" disabled>🔄 تحديث S2</button>
           <button class="btn btn-secondary" onclick="resetRun()">تنظيف</button>
         </div>
 
@@ -655,12 +607,12 @@
       <div class="card">
         <div class="card-title">
           <h2>الأوردرات الجاهزة للملف</h2>
-          <span id="orderListHint">اضغط جلب الأول</span>
+          <span id="orderListHint">اضغط الاستعلام الأول</span>
         </div>
 
         <div class="hint" id="emptyOrdersHint">
           الأداة هتسحب من Shopify مباشرة باستخدام:
-          <b>metafields.custom.manual_status</b> + <b>metafields.custom.courier</b>، وبعدها تعمل direct-read verification قبل عرض الأوردرات.
+          <b>metafields.custom.status_2_r_e</b> + <b>metafields.custom.courier</b>، وبعدها تعمل direct-read verification قبل عرض الأوردرات.
         </div>
 
         <div class="orders-list" id="ordersList">
@@ -680,7 +632,7 @@
       <div class="card">
         <div class="card-title">
           <h2>سجل العمليات</h2>
-          <span>Export / Confirm / Scan — بدون login/logout</span>
+          <span>Scan / Export / Manual Confirm / S2 Update — بدون login/logout</span>
         </div>
 
         <div class="log-toolbar">
@@ -691,8 +643,10 @@
               <option value="scan">Scan</option>
               <option value="export_return">Export Return</option>
               <option value="export_exchange">Export Exchange</option>
-              <option value="confirm_return">Confirm Return</option>
-              <option value="confirm_exchange">Confirm Exchange</option>
+              <option value="manual_confirm_return">Manual Confirm Return</option>
+              <option value="manual_confirm_exchange">Manual Confirm Exchange</option>
+              <option value="confirm_return">S2 Update Return</option>
+              <option value="confirm_exchange">S2 Update Exchange</option>
             </select>
           </div>
 
@@ -730,16 +684,8 @@
           <label class="settings-label">Admin Worker URL — اختياري لجلب الموظفين</label>
           <input class="settings-input" id="cfgAdminUrl" />
         </div>
-        <div class="settings-field">
-          <label class="settings-label">Flow Token — اختياري لإرسال فواتير الاستبدال للمخزن</label>
-          <input class="settings-input" id="cfgFlowToken" type="password" />
-        </div>
-        <div class="settings-field">
-          <label class="settings-label">Exchange Flow Specifier — اختياري</label>
-          <input class="settings-input" id="cfgFlowSpecifier" />
-        </div>
         <div class="hint">
-          Flow اختياري. لو مش متظبط، زر الاستبدال هيحدّث S2 إلى Ready فقط، وهيظهر تنبيه إن إرسال الفواتير للمخزن لم يتم.
+          إرسال الفواتير للمخزن خطوة خارج الأداة. المستخدم بيأكدها يدويًا، وبعدها الأداة تحدّث S2 فقط.
         </div>
       </div>
       <div class="modal-ftr">
@@ -752,46 +698,31 @@
   <div class="modal-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="modal wide">
       <div class="modal-hdr">
-        <span>📝 سجل الإصدارات</span>
+        <span>V3.0.0 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">×</button>
       </div>
       <div class="modal-body">
-        <div class="cl-version-block">
-          <div class="cl-version-row">
-            <span class="cl-ver-badge">v3.0.0</span>
-            <span class="cl-ver-date">11-05-2026</span>
-          </div>
-          <ul class="cl-items">
-            <li class="cl-item"><span class="cl-tag new">جديد</span><span>جلب تلقائي من Shopify حسب S2 + Courier بدل إدخال أرقام الأوردرات يدوياً.</span></li>
-            <li class="cl-item"><span class="cl-tag new">جديد</span><span>اختيار مستقل لتصدير Return أو Exchange في ملف منفصل.</span></li>
-            <li class="cl-item"><span class="cl-tag new">جديد</span><span>مرحلة Confirm بعد Excel لتحديث S2 إلى In-Return أو Ready.</span></li>
-            <li class="cl-item"><span class="cl-tag new">جديد</span><span>سجل عمليات مدمج مع تفاصيل scan/export/confirm.</span></li>
-            <li class="cl-item"><span class="cl-tag new">جديد</span><span>تنبيه Duplicate من D1 مع زر السماح بعمل المكرر مرة تانية.</span></li>
-            <li class="cl-item"><span class="cl-tag change">تغيير</span><span>Worker يستخدم Shopify metafield search + direct-read verification لتقليل الضغط ومنع نتائج قديمة بسبب search-index lag.</span></li>
-          </ul>
+        <div class="hint">
+          <b>V3.0.0</b><br>
+          - الاستعلام التلقائي عن الأوردرات من Shopify حسب S2 + Courier.<br>
+          - فصل Return و Exchange في ملفات منفصلة.<br>
+          - خطوات العمل أصبحت 4 مراحل: استعلام، تصدير Excel، تأكيد بوسطة/المخزن يدويًا، ثم تحديث S2.<br>
+          - سجل عمليات D1 + تحذير تكرار مع السماح بالتكرار عند الحاجة.<br>
+          - تحديث S2: Return → In-Return، Exchange → Ready.
         </div>
-
-        <div class="cl-version-block">
-          <div class="cl-version-row">
-            <span class="cl-ver-badge old">v2.2.0</span>
-            <span class="cl-ver-date">06-05-2026</span>
-          </div>
-          <ul class="cl-items">
-            <li class="cl-item"><span class="cl-tag change">تغيير</span><span>كان يعتمد على إدخال أرقام الأوردرات يدوياً ثم جلبها بالـ order name.</span></li>
-          </ul>
-        </div>
+      </div>
+      <div class="modal-ftr">
+        <button class="btn btn-primary" onclick="closeChangelog()">تمام</button>
       </div>
     </div>
   </div>
-
-  <div id="toastContainer"></div>
 
   <script>
     // ══════════════════════════════════════════════════════════════
     // CONFIG
     // ══════════════════════════════════════════════════════════════
     const VERSION = '3.0.0';
-    const CFG_KEY = 'bosta_exchange_exporter_cfg';
+    const CFG_KEY = 'bosta_exchange_export_config_v3';
 
     function getConfig() {
       try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }
@@ -858,6 +789,7 @@
       duplicates: {},
       allowRepeat: false,
       exported: false,
+      manualConfirmed: false,
       logs: [],
       pageInfo: null,
     };
@@ -865,16 +797,18 @@
     const JOB_META = {
       return: {
         label: 'الاسترجاع',
-        fetchText: '🔎 جلب أوردرات الاسترجاع',
-        confirmText: '✅ تأكيد رفع الأوردرات على بوسطة',
+        fetchText: '🔎 الاستعلام عن أوردرات الاسترجاع',
+        confirmText: '✅ تأكيد رفع الأوردرات على داشبورد بوسطة',
+        updateText: '🔄 تحديث S2 إلى In-Return',
         expected: 'Confirmed + RETURN',
         next: 'In-Return',
         filePrefix: 'Bosta_Return_Orders',
       },
       exchange: {
         label: 'الاستبدال',
-        fetchText: '🔎 جلب أوردرات الاستبدال',
-        confirmText: '✅ رفع الأوردرات وارسال الفواتير للمخزن',
+        fetchText: '🔎 الاستعلام عن أوردرات الاستبدال',
+        confirmText: '✅ تأكيد رفع بوسطة + إرسال الفواتير للمخزن',
+        updateText: '🔄 تحديث S2 إلى Ready',
         expected: 'Confirmed + EXCHANGE',
         next: 'Ready',
         filePrefix: 'Bosta_Exchange_Orders',
@@ -889,8 +823,6 @@
       document.getElementById('cfgUrl').value           = c.workerUrl || '';
       document.getElementById('cfgSecret').value        = c.workerSecret || '';
       document.getElementById('cfgAdminUrl').value      = localStorage.getItem('admin_worker_url') || '';
-      document.getElementById('cfgFlowToken').value     = c.flowToken || '';
-      document.getElementById('cfgFlowSpecifier').value = c.flowSpecifier || '';
       document.getElementById('settingsOverlay').classList.add('open');
     }
 
@@ -902,15 +834,13 @@
       const url = normalizeBaseUrl(document.getElementById('cfgUrl').value);
       const secret = document.getElementById('cfgSecret').value.trim();
       const adminUrl = normalizeBaseUrl(document.getElementById('cfgAdminUrl').value);
-      const flowToken = document.getElementById('cfgFlowToken').value.trim();
-      const flowSpecifier = document.getElementById('cfgFlowSpecifier').value.trim();
 
       if (!url || !secret) {
         showToast('الرجاء إدخال الـ URL والـ Secret', 'error');
         return;
       }
 
-      saveConfig({ workerUrl: url, workerSecret: secret, flowToken, flowSpecifier });
+      saveConfig({ workerUrl: url, workerSecret: secret });
       if (adminUrl) localStorage.setItem('admin_worker_url', adminUrl);
       if (!adminUrl) localStorage.removeItem('admin_worker_url');
 
@@ -979,294 +909,216 @@
       return _audioCtx;
     }
 
-    function playErrorBeep() {
+    function beep(freq = 880, dur = 0.06, type = 'sine', vol = 0.03) {
       try {
         const ctx = getAudioCtx();
-        const play = () => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.type = 'triangle';
-          osc.frequency.value = 880;
-          gain.gain.value = 0.7;
-          osc.start();
-          osc.stop(ctx.currentTime + 0.2);
-        };
-        ctx.state === 'suspended' ? ctx.resume().then(play) : play();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = freq;
+        osc.type = type;
+        gain.gain.value = vol;
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + dur);
       } catch {}
-    }
-
-    function resetPinDots(ids) {
-      ids.forEach(id => {
-        const d = document.getElementById(id);
-        d.textContent = '_';
-        d.classList.remove('filled', 'error');
-      });
-    }
-
-    function fillPinDot(ids, idx) {
-      const d = document.getElementById(ids[idx]);
-      d.textContent = '●';
-      d.classList.add('filled');
     }
 
     async function loadEmployeesList() {
-      const adminUrl = normalizeBaseUrl(localStorage.getItem('admin_worker_url'));
-      const cfg = getConfig();
-      const base = adminUrl || normalizeBaseUrl(cfg.workerUrl);
-      if (!base) return;
+      const sel = document.getElementById('loginUsername');
+      sel.innerHTML = '<option value="">— اختر —</option>';
+
+      if (!isConfigured()) {
+        updateLoginSub('اضبط إعدادات Worker أولاً');
+        return;
+      }
 
       try {
-        const u = new URL(base);
-        u.searchParams.set('action', 'get_employees');
-        const headers = {};
-        if (!adminUrl && cfg.workerSecret) headers['Authorization'] = `Bearer ${cfg.workerSecret}`;
-
-        const res = await fetch(u.toString(), { headers });
-        const data = await res.json();
-        if (!data.ok || !data.employees?.length) return;
-
-        const select = document.getElementById('loginUsername');
-        select.innerHTML = '<option value="">— اختر —</option>';
-
-        data.employees.forEach((emp) => {
+        const data = await apiFetch('get_employees');
+        (data.employees || []).forEach((emp) => {
           const opt = document.createElement('option');
           opt.value = emp.username;
-          opt.textContent = emp.display_name;
-          select.appendChild(opt);
+          opt.textContent = emp.display_name || emp.username;
+          sel.appendChild(opt);
         });
+        updateLoginSub('اختر اسمك وأدخل PIN');
+      } catch (e) {
+        updateLoginSub('تعذر جلب الموظفين — راجع الإعدادات');
+      }
+    }
+
+    function updateLoginSub(text) { document.getElementById('loginSub').textContent = text; }
+
+    async function onUsernameChange() {
+      pinClear();
+      hideLoginError();
+      const username = document.getElementById('loginUsername').value;
+      if (!username) return;
+
+      try {
+        const data = await apiFetch('check_employee', { method: 'GET' });
+        void data;
       } catch {}
     }
 
-    function onUsernameChange() {
+    function pinPress(n) {
       const username = document.getElementById('loginUsername').value;
+      if (!username) { showLoginError('اختر اسمك الأول'); return; }
+      hideLoginError();
+      beep(880, .035, 'sine', .02);
+
+      if (isNewUser && firstPin) {
+        if (confirmPinBuffer.length >= 4) return;
+        confirmPinBuffer += n;
+        updatePinDots(confirmPinBuffer);
+        document.getElementById('loginBtn').disabled = confirmPinBuffer.length !== 4;
+      } else {
+        if (pinBuffer.length >= 4) return;
+        pinBuffer += n;
+        updatePinDots(pinBuffer);
+        document.getElementById('loginBtn').disabled = pinBuffer.length !== 4;
+      }
+    }
+
+    function pinBackspace() {
+      if (isNewUser && firstPin) confirmPinBuffer = confirmPinBuffer.slice(0, -1);
+      else pinBuffer = pinBuffer.slice(0, -1);
+      updatePinDots(isNewUser && firstPin ? confirmPinBuffer : pinBuffer);
+      document.getElementById('loginBtn').disabled = (isNewUser && firstPin ? confirmPinBuffer : pinBuffer).length !== 4;
+    }
+
+    function pinClear() {
       pinBuffer = '';
-      firstPin = '';
       confirmPinBuffer = '';
+      firstPin = '';
       isNewUser = false;
-      resetPinDots(['pd0','pd1','pd2','pd3']);
-      resetPinDots(['cd0','cd1','cd2','cd3']);
-      document.getElementById('loginError').classList.remove('visible');
-      document.getElementById('stepMain').style.display = 'block';
-      document.getElementById('stepConfirmPin').style.display = 'none';
-      document.getElementById('loginSub').textContent = 'تصدير Return/Exchange من Shopify تلقائياً';
       document.getElementById('pinLabel').textContent = 'أدخل الـ PIN';
-      document.getElementById('btnLogin').textContent = 'دخول';
-      document.getElementById('btnLogin').disabled = true;
+      document.getElementById('loginBtn').textContent = 'دخول';
+      document.getElementById('loginBtn').disabled = true;
+      updatePinDots('');
+    }
 
-      if (!username || !isConfigured()) return;
+    function updatePinDots(value) {
+      for (let i = 0; i < 4; i++) {
+        const dot = document.getElementById('pd' + i);
+        dot.textContent = value[i] ? '•' : '_';
+        dot.classList.toggle('filled', !!value[i]);
+        dot.classList.remove('error');
+      }
+    }
 
-      const cfg = getConfig();
-      const u = new URL(normalizeBaseUrl(cfg.workerUrl));
-      u.searchParams.set('action', 'check_employee');
-      u.searchParams.set('username', username);
+    function showLoginError(msg) {
+      const el = document.getElementById('loginError');
+      el.textContent = msg;
+      el.classList.add('visible');
+      for (let i = 0; i < 4; i++) document.getElementById('pd' + i).classList.add('error');
+      beep(220, .12, 'square', .02);
+    }
 
-      fetch(u.toString(), { headers: { 'Authorization': `Bearer ${cfg.workerSecret}` } })
-        .then(r => r.json())
-        .then(data => {
-          if (!data.ok || !data.exists || !data.isActive) return;
-          isNewUser = !data.hasPin;
-          if (isNewUser) {
-            document.getElementById('loginSub').textContent = 'أول مرة؟ اختر PIN جديد من 4 أرقام';
-            document.getElementById('pinLabel').textContent = 'اختر PIN جديد';
-            document.getElementById('btnLogin').textContent = 'متابعة →';
+    function hideLoginError() {
+      const el = document.getElementById('loginError');
+      el.classList.remove('visible');
+      for (let i = 0; i < 4; i++) document.getElementById('pd' + i).classList.remove('error');
+    }
+
+    async function submitPin() {
+      const username = document.getElementById('loginUsername').value;
+      if (!username) return showLoginError('اختر اسمك');
+
+      if (!isNewUser) {
+        try {
+          const check = await fetch(apiUrl('check_employee') + `&username=${encodeURIComponent(username)}`, {
+            headers: { Authorization: `Bearer ${getConfig().workerSecret}` },
+          }).then(r => r.json());
+
+          if (!check.ok) throw new Error(check.error || 'تعذر التحقق');
+          if (!check.exists) return showLoginError('اسم المستخدم غير موجود');
+          if (!check.isActive) return showLoginError('الحساب موقوف');
+
+          if (!check.hasPin) {
+            isNewUser = true;
+            firstPin = pinBuffer;
+            confirmPinBuffer = '';
+            updatePinDots('');
+            document.getElementById('pinLabel').textContent = 'أعد إدخال الـ PIN للتأكيد';
+            document.getElementById('loginBtn').textContent = 'تسجيل PIN';
+            document.getElementById('loginBtn').disabled = true;
+            showToast('هذا أول دخول — أعد إدخال PIN للتأكيد', 'info');
+            return;
           }
-        })
-        .catch(() => {});
-    }
 
-    function pinPress(val) {
-      try { getAudioCtx(); } catch {}
-      const ids = ['pd0','pd1','pd2','pd3'];
-
-      if (val === 'clear') {
-        pinBuffer = '';
-        resetPinDots(ids);
-      } else if (val === 'back') {
-        if (pinBuffer.length > 0) {
-          pinBuffer = pinBuffer.slice(0, -1);
-          const d = document.getElementById(ids[pinBuffer.length]);
-          d.textContent = '_';
-          d.classList.remove('filled');
-        }
-      } else if (pinBuffer.length < 4) {
-        fillPinDot(ids, pinBuffer.length);
-        pinBuffer += val;
-      }
-
-      document.getElementById('btnLogin').disabled =
-        (pinBuffer.length !== 4 || !document.getElementById('loginUsername').value);
-    }
-
-    async function doLogin() {
-      const username = document.getElementById('loginUsername').value;
-      const pin = pinBuffer;
-      if (!username || pin.length !== 4) return;
-
-      if (isNewUser) {
-        firstPin = pin;
-        confirmPinBuffer = '';
-        resetPinDots(['cd0','cd1','cd2','cd3']);
-        document.getElementById('confirmError').classList.remove('visible');
-        document.getElementById('btnRegister').disabled = true;
-        document.getElementById('stepMain').style.display = 'none';
-        document.getElementById('stepConfirmPin').style.display = 'block';
-        return;
-      }
-
-      const btn = document.getElementById('btnLogin');
-      btn.disabled = true;
-      btn.textContent = '⏳ جاري التحقق...';
-
-      try {
-        const data = await apiFetch('verify_employee', {
-          method: 'POST',
-          body: { username, pin },
-        });
-
-        finishLogin(username, data.displayName);
-      } catch (e) {
-        playErrorBeep();
-        document.getElementById('loginError').classList.add('visible');
-        const ids = ['pd0','pd1','pd2','pd3'];
-        ids.forEach(id => document.getElementById(id).classList.add('error'));
-        setTimeout(() => {
+          const data = await apiFetch('verify_employee', {
+            method: 'POST',
+            body: { username, pin: pinBuffer },
+          });
+          currentEmployee = { username, displayName: data.displayName || username };
+          afterLogin();
+        } catch (e) {
+          showLoginError(e.message || 'فشل الدخول');
           pinBuffer = '';
-          resetPinDots(ids);
-          document.getElementById('loginError').classList.remove('visible');
-          btn.disabled = true;
-          btn.textContent = 'دخول';
-        }, 1500);
-      }
-    }
-
-    function confirmPinPress(val) {
-      try { getAudioCtx(); } catch {}
-      const ids = ['cd0','cd1','cd2','cd3'];
-
-      if (val === 'clear') {
-        confirmPinBuffer = '';
-        resetPinDots(ids);
-      } else if (val === 'back') {
-        if (confirmPinBuffer.length > 0) {
-          confirmPinBuffer = confirmPinBuffer.slice(0, -1);
-          const d = document.getElementById(ids[confirmPinBuffer.length]);
-          d.textContent = '_';
-          d.classList.remove('filled');
+          setTimeout(() => updatePinDots(''), 350);
         }
-      } else if (confirmPinBuffer.length < 4) {
-        fillPinDot(ids, confirmPinBuffer.length);
-        confirmPinBuffer += val;
-      }
-
-      document.getElementById('btnRegister').disabled = confirmPinBuffer.length !== 4;
-    }
-
-    async function doRegister() {
-      const username = document.getElementById('loginUsername').value;
-
-      if (confirmPinBuffer !== firstPin) {
-        playErrorBeep();
-        document.getElementById('confirmError').classList.add('visible');
-        const ids = ['cd0','cd1','cd2','cd3'];
-        ids.forEach(id => document.getElementById(id).classList.add('error'));
-        setTimeout(() => {
-          confirmPinBuffer = '';
-          resetPinDots(ids);
-          document.getElementById('confirmError').classList.remove('visible');
-          document.getElementById('btnRegister').disabled = true;
-        }, 1500);
         return;
       }
 
-      const btn = document.getElementById('btnRegister');
-      btn.disabled = true;
-      btn.textContent = '⏳ جاري التسجيل...';
+      if (firstPin !== confirmPinBuffer) {
+        showLoginError('الـ PIN غير متطابق');
+        confirmPinBuffer = '';
+        setTimeout(() => updatePinDots(''), 350);
+        return;
+      }
 
       try {
         await apiFetch('register_pin', {
           method: 'POST',
           body: { username, pin: firstPin },
         });
-
         const data = await apiFetch('verify_employee', {
           method: 'POST',
           body: { username, pin: firstPin },
         });
-
-        showToast('تم تسجيل الـ PIN بنجاح ✓', 'success');
-        finishLogin(username, data.displayName);
+        currentEmployee = { username, displayName: data.displayName || username };
+        afterLogin();
       } catch (e) {
-        showToast('خطأ: ' + e.message, 'error');
-        btn.disabled = false;
-        btn.textContent = 'تأكيد وتسجيل الدخول';
+        showLoginError(e.message || 'فشل تسجيل PIN');
       }
     }
 
-    function backToMainStep() {
-      confirmPinBuffer = '';
-      firstPin = '';
-      pinBuffer = '';
-      resetPinDots(['pd0','pd1','pd2','pd3']);
-      resetPinDots(['cd0','cd1','cd2','cd3']);
-      document.getElementById('stepConfirmPin').style.display = 'none';
-      document.getElementById('stepMain').style.display = 'block';
-      document.getElementById('btnLogin').disabled = true;
-    }
-
-    function finishLogin(username, displayName) {
-      currentEmployee = { username, displayName };
+    function afterLogin() {
+      beep(1040, .05, 'sine', .03);
       document.getElementById('loginOverlay').classList.add('hidden');
-      document.getElementById('activeUserBtn').textContent = '👤 ' + displayName;
-      showToast('مرحباً ' + displayName, 'success');
-      loadLogs();
+      document.getElementById('activeUserName').textContent = currentEmployee.displayName || currentEmployee.username;
+      showToast(`أهلاً ${currentEmployee.displayName || currentEmployee.username}`, 'success');
+      loadLogs(false);
     }
 
-    async function doLogout() {
-      if (!confirm('تسجيل الخروج؟')) return;
-
-      if (currentEmployee) {
-        const cfg = getConfig();
-        const u = new URL(normalizeBaseUrl(cfg.workerUrl));
-        u.searchParams.set('action', 'log_logout');
-        u.searchParams.set('username', currentEmployee.username);
-        fetch(u.toString(), { headers: { 'Authorization': `Bearer ${cfg.workerSecret}` } }).catch(() => {});
-      }
-
+    async function logout() {
+      if (!currentEmployee) return;
+      try {
+        await fetch(apiUrl('log_logout') + `&username=${encodeURIComponent(currentEmployee.username)}`, {
+          headers: { Authorization: `Bearer ${getConfig().workerSecret}` },
+        });
+      } catch {}
       currentEmployee = null;
-      pinBuffer = '';
-      firstPin = '';
-      confirmPinBuffer = '';
-      isNewUser = false;
-      document.getElementById('activeUserBtn').textContent = '👤 —';
-      resetPinDots(['pd0','pd1','pd2','pd3']);
-      resetPinDots(['cd0','cd1','cd2','cd3']);
-      document.getElementById('stepConfirmPin').style.display = 'none';
-      document.getElementById('stepMain').style.display = 'block';
-      document.getElementById('loginUsername').value = '';
-      document.getElementById('loginSub').textContent = 'تصدير Return/Exchange من Shopify تلقائياً';
-      document.getElementById('pinLabel').textContent = 'أدخل الـ PIN';
-      document.getElementById('btnLogin').textContent = 'دخول';
-      document.getElementById('btnLogin').disabled = true;
-      document.getElementById('loginError').classList.remove('visible');
+      pinClear();
       document.getElementById('loginOverlay').classList.remove('hidden');
+      document.getElementById('activeUserName').textContent = '—';
+      showToast('تم تسجيل الخروج', 'info');
     }
 
     // ══════════════════════════════════════════════════════════════
-    // EXPORT WORKFLOW
+    // MAIN UI
     // ══════════════════════════════════════════════════════════════
     function switchMainTab(tab) {
-      document.getElementById('tabExportBtn').classList.toggle('active', tab === 'export');
-      document.getElementById('tabLogsBtn').classList.toggle('active', tab === 'logs');
+      document.getElementById('tabExport').classList.toggle('active', tab === 'export');
+      document.getElementById('tabLogs').classList.toggle('active', tab === 'logs');
       document.getElementById('exportPanel').classList.toggle('active', tab === 'export');
       document.getElementById('logsPanel').classList.toggle('active', tab === 'logs');
-      if (tab === 'logs') loadLogs();
+      if (tab === 'logs') loadLogs(false);
     }
 
-    function selectJobType(jobType) {
-      if (state.jobType === jobType) return;
-      state.jobType = jobType;
+    function selectJobType(type) {
+      if (state.jobType === type) return;
+      state.jobType = type;
       resetRun();
     }
 
@@ -1275,12 +1127,14 @@
       state.duplicates = {};
       state.allowRepeat = false;
       state.exported = false;
+      state.manualConfirmed = false;
       state.pageInfo = null;
 
       document.getElementById('modeReturn').classList.toggle('active', state.jobType === 'return');
       document.getElementById('modeExchange').classList.toggle('active', state.jobType === 'exchange');
       document.getElementById('fetchBtn').textContent = JOB_META[state.jobType].fetchText;
       document.getElementById('confirmBtn').textContent = JOB_META[state.jobType].confirmText;
+      document.getElementById('updateS2Btn').textContent = JOB_META[state.jobType].updateText;
       document.getElementById('statNext').textContent = JOB_META[state.jobType].next;
       document.getElementById('emptyOrdersHint').style.display = 'block';
       clearStatus();
@@ -1303,9 +1157,11 @@
       document.getElementById('statOrders').textContent = String(count);
       document.getElementById('statDuplicates').textContent = String(dupCount);
       document.getElementById('statExported').textContent = state.exported ? 'نعم' : 'لا';
+      document.getElementById('statManualConfirm').textContent = state.manualConfirmed ? 'نعم' : 'لا';
 
       document.getElementById('exportBtn').disabled = count === 0 || hasBlockingDuplicates();
-      document.getElementById('confirmBtn').disabled = !state.exported || count === 0;
+      document.getElementById('confirmBtn').disabled = !state.exported || count === 0 || state.manualConfirmed;
+      document.getElementById('updateS2Btn').disabled = !state.manualConfirmed || count === 0;
 
       const panel = document.getElementById('duplicatePanel');
       panel.classList.toggle('show', dupCount > 0);
@@ -1345,8 +1201,8 @@
 
       const btn = document.getElementById('fetchBtn');
       btn.disabled = true;
-      btn.textContent = '⏳ جاري الجلب...';
-      showStatus(`جاري جلب أوردرات ${JOB_META[state.jobType].label} من Shopify...`, 'info');
+      btn.textContent = '⏳ جاري الاستعلام...';
+      showStatus(`جاري الاستعلام عن أوردرات ${JOB_META[state.jobType].label} من Shopify...`, 'info');
 
       try {
         const data = await apiFetch('fetch_candidates', {
@@ -1369,17 +1225,17 @@
         if (!state.orders.length) {
           showStatus(`لم يتم العثور على أوردرات مطابقة: S2 = ${JOB_META[state.jobType].expected} + Courier = Bosta`, 'error');
         } else if (dupCount > 0) {
-          showStatus(`تم جلب ${state.orders.length} أوردر، لكن فيه ${dupCount} أوردر موجودين في السجل قبل كده. لازم تسمح بالتكرار لو هتكمل عليهم.`, 'warn');
+          showStatus(`تم الاستعلام عن ${state.orders.length} أوردر، لكن فيه ${dupCount} أوردر موجودين في السجل قبل كده. لازم تسمح بالتكرار لو هتكمل عليهم.`, 'warn');
         } else {
-          showStatus(`✓ تم جلب ${state.orders.length} أوردر مطابق وجاهز للتصدير.`, 'success');
+          showStatus(`✓ تم الاستعلام عن ${state.orders.length} أوردر مطابق وجاهز للتصدير.`, 'success');
         }
 
         if (state.pageInfo?.stoppedByLimit) {
-          showStatus(`تم جلب ${state.orders.length} أوردر، لكن Worker وقف عند حد الحماية (${state.pageInfo.maxPages} صفحات). لو متوقع أكتر من كده راجع النتائج على دفعات.`, 'warn');
+          showStatus(`تم الاستعلام عن ${state.orders.length} أوردر، لكن Worker وقف عند حد الحماية (${state.pageInfo.maxPages} صفحات). لو متوقع أكتر من كده راجع النتائج على دفعات.`, 'warn');
         }
       } catch (e) {
-        showStatus('خطأ أثناء الجلب: ' + e.message, 'error');
-        showToast('فشل الجلب: ' + e.message, 'error');
+        showStatus('خطأ أثناء الاستعلام: ' + e.message, 'error');
+        showToast('فشل الاستعلام: ' + e.message, 'error');
       } finally {
         btn.disabled = false;
         btn.textContent = JOB_META[state.jobType].fetchText;
@@ -1426,7 +1282,8 @@
         }
 
         state.exported = true;
-        showStatus(`✓ تم تصدير ${state.orders.length} أوردر. بعد رفع الملف على Bosta اضغط زر التأكيد لتحديث S2.`, 'success');
+        state.manualConfirmed = false;
+        showStatus(`✓ تم تصدير ${state.orders.length} أوردر. الخطوة التالية: ارفع الملف على داشبورد بوسطة وأرسل الفواتير للمخزن خارج الأداة، ثم اضغط زر التأكيد اليدوي.`, 'success');
         showToast(`✓ تم تصدير ${state.orders.length} أوردر`, 'success');
         await loadLogs(false);
       } catch (e) {
@@ -1438,7 +1295,7 @@
       }
     }
 
-    async function confirmUpload() {
+    async function confirmManualSteps() {
       if (!state.exported) {
         showToast('صدّر ملف Excel الأول', 'error');
         return;
@@ -1450,12 +1307,62 @@
       }
 
       const confirmText = state.jobType === 'return'
-        ? `تأكيد إن ${state.orders.length} أوردر اترفعوا على Bosta وتحديث S2 إلى In-Return؟`
-        : `تأكيد إن ${state.orders.length} أوردر اترفعوا على Bosta وتحديث S2 إلى Ready؟`;
+        ? `تأكيد إنك رفعت ${state.orders.length} أوردر على داشبورد بوسطة؟\n\nمهم: الخطوة دي تسجيل تأكيد فقط، ومش هتغيّر S2.`
+        : `تأكيد إنك رفعت ${state.orders.length} أوردر على داشبورد بوسطة وأرسلت الفواتير للمخزن؟\n\nمهم: الخطوة دي تسجيل تأكيد فقط، ومش هتغيّر S2.`;
 
       if (!confirm(confirmText)) return;
 
       const btn = document.getElementById('confirmBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ جاري تسجيل التأكيد...';
+      showStatus('جاري تسجيل التأكيد اليدوي في سجل العمليات...', 'info');
+
+      try {
+        await apiFetch('record_manual_confirmation', {
+          method: 'POST',
+          body: {
+            jobType: state.jobType,
+            employee: currentEmployee.username,
+            orders: payloadOrders(),
+            allowRepeat: state.allowRepeat,
+          },
+        });
+
+        state.manualConfirmed = true;
+        showStatus(`✓ تم تسجيل التأكيد اليدوي لـ ${state.orders.length} أوردر. الخطوة الأخيرة: اضغط "${JOB_META[state.jobType].updateText}" لتحديث حالة S2.`, 'success');
+        showToast('✓ تم تسجيل التأكيد اليدوي', 'success');
+        await loadLogs(false);
+      } catch (e) {
+        if (e.data?.code === 'DUPLICATES_FOUND') {
+          state.duplicates = e.data.duplicates || {};
+          updateRunUI();
+          renderOrders();
+          showStatus('فيه أوردرات تم تأكيدها يدويًا قبل كده. اضغط السماح بالتكرار لو عايز تكمل.', 'warn');
+        } else {
+          showStatus('فشل تسجيل التأكيد اليدوي: ' + e.message, 'error');
+          showToast('فشل تسجيل التأكيد اليدوي: ' + e.message, 'error');
+        }
+      } finally {
+        btn.textContent = JOB_META[state.jobType].confirmText;
+        updateRunUI();
+      }
+    }
+
+    async function updateS2Status() {
+      if (!state.manualConfirmed) {
+        showToast('لازم تأكد رفع بوسطة/المخزن الأول', 'error');
+        return;
+      }
+
+      if (!state.orders.length) {
+        showToast('لا توجد أوردرات للتحديث', 'error');
+        return;
+      }
+
+      const confirmText = `تأكيد تحديث S2 لعدد ${state.orders.length} أوردر إلى ${JOB_META[state.jobType].next}؟`;
+      if (!confirm(confirmText)) return;
+
+      const btn = document.getElementById('updateS2Btn');
       btn.disabled = true;
       btn.textContent = '⏳ جاري تحديث S2...';
       showStatus('جاري تحديث S2 في Shopify والتحقق المباشر...', 'info');
@@ -1471,24 +1378,11 @@
           },
         });
 
-        let flowMsg = '';
-        if (state.jobType === 'exchange') {
-          const flowResult = await triggerWarehouseInvoices(state.orders);
-          if (flowResult.skipped) {
-            flowMsg = '<br>⚠️ Flow الفواتير غير متظبط — تم تحديث S2 إلى Ready فقط.';
-            showToast('Flow الفواتير غير متظبط — تم تحديث Ready فقط', 'warn', 6000);
-          } else if (flowResult.failed > 0) {
-            flowMsg = `<br>⚠️ Flow الفواتير: نجح ${flowResult.sent} وفشل ${flowResult.failed}.`;
-            showToast(`Flow الفواتير: نجح ${flowResult.sent} وفشل ${flowResult.failed}`, 'warn', 6000);
-          } else {
-            flowMsg = `<br>✓ تم إرسال Flow الفواتير للمخزن: ${flowResult.sent} أوردر.`;
-          }
-        }
-
-        showStatus(`✓ تم تحديث ${data.count} أوردر إلى ${data.updatedTo}.${flowMsg}`, 'success');
-        showToast(`✓ تم تأكيد ${data.count} أوردر`, 'success');
+        showStatus(`✓ تم تحديث ${data.count} أوردر إلى ${data.updatedTo}.`, 'success');
+        showToast(`✓ تم تحديث S2 لـ ${data.count} أوردر`, 'success');
 
         state.exported = false;
+        state.manualConfirmed = false;
         state.orders = [];
         state.duplicates = {};
         state.allowRepeat = false;
@@ -1500,54 +1394,15 @@
           state.duplicates = e.data.duplicates || {};
           updateRunUI();
           renderOrders();
-          showStatus('فيه أوردرات تم تأكيدها قبل كده. اضغط السماح بالتكرار لو عايز تكمل.', 'warn');
+          showStatus('فيه أوردرات تم تحديثها قبل كده. اضغط السماح بالتكرار لو عايز تكمل.', 'warn');
         } else {
-          showStatus('فشل التأكيد: ' + e.message, 'error');
-          showToast('فشل التأكيد: ' + e.message, 'error');
+          showStatus('فشل تحديث S2: ' + e.message, 'error');
+          showToast('فشل تحديث S2: ' + e.message, 'error');
         }
       } finally {
-        btn.textContent = JOB_META[state.jobType].confirmText;
+        btn.textContent = JOB_META[state.jobType].updateText;
         updateRunUI();
       }
-    }
-
-    async function triggerWarehouseInvoices(orders) {
-      const cfg = getConfig();
-      const token = String(cfg.flowToken || '').trim();
-      const specifier = String(cfg.flowSpecifier || '').trim();
-
-      if (!token || !specifier) return { skipped: true, sent: 0, failed: 0 };
-
-      let sent = 0;
-      let failed = 0;
-
-      for (const order of orders) {
-        const numericId = String(order.id || '').split('/').pop();
-        if (!numericId) { failed += 1; continue; }
-
-        try {
-          const res = await fetch('https://flow-companion.mivicle.app/rest/1/flow/start/order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              bearerToken: token,
-              itemId: numericId,
-              specifier,
-              additionalParameters: {
-                source: 'bosta_return_exchange_exporter_v3',
-                orderName: order.name,
-              },
-            }),
-          });
-
-          if (res.ok) sent += 1;
-          else failed += 1;
-        } catch {
-          failed += 1;
-        }
-      }
-
-      return { skipped: false, sent, failed };
     }
 
     function renderOrders() {
@@ -1558,7 +1413,7 @@
       list.classList.toggle('show', state.orders.length > 0);
 
       document.getElementById('orderListHint').textContent =
-        state.orders.length ? `${state.orders.length} أوردر` : 'اضغط جلب الأول';
+        state.orders.length ? `${state.orders.length} أوردر` : 'اضغط الاستعلام الأول';
 
       state.orders.forEach((order) => {
         const addr = order.shippingAddress || {};
@@ -1576,189 +1431,227 @@
         `;
 
         const status = document.createElement('div');
-        status.innerHTML = `<span class="badge badge-type">${escapeHtml(order.manualStatus?.value || '—')}</span>`;
+        status.innerHTML = `<span class="badge badge-type">${escapeHtml(order.manualStatus?.value || JOB_META[state.jobType].expected)}</span>`;
 
         const courier = document.createElement('div');
-        courier.innerHTML = `<span class="badge badge-ok">${escapeHtml(order.courier?.value || '—')}</span>`;
+        courier.innerHTML = `<span class="badge badge-ok">${escapeHtml(order.courier?.value || 'Bosta')}</span>`;
 
-        const logStatus = document.createElement('div');
-        if (dup) {
-          logStatus.innerHTML = `<span class="badge badge-dup">مكرر</span>`;
-          logStatus.title = `${typeLabel(dup.type)} — ${dup.employee || ''}`;
-        } else {
-          logStatus.innerHTML = `<span class="badge badge-ok">جديد</span>`;
-        }
+        const log = document.createElement('div');
+        log.innerHTML = dup
+          ? `<span class="badge badge-warn">مكرر</span>`
+          : `<span class="badge badge-ok">جديد</span>`;
 
-        row.appendChild(name);
-        row.appendChild(customer);
-        row.appendChild(status);
-        row.appendChild(courier);
-        row.appendChild(logStatus);
+        row.append(name, customer, status, courier, log);
         rows.appendChild(row);
       });
     }
 
     // ══════════════════════════════════════════════════════════════
-    // EXCEL
+    // EXCEL EXPORT
     // ══════════════════════════════════════════════════════════════
+    function orderIdName(order) {
+      return String(order?.name || '').trim();
+    }
+
+    function money(v) {
+      const n = Number(v ?? 0);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function lineSkuName(line) {
+      const sku = String(line?.sku || '').trim();
+      const name = String(line?.name || '').trim();
+      if (sku && name && !name.includes(sku)) return `${sku} / ${name}`;
+      return sku || name || '';
+    }
+
+    function packageDescFromLine(line, qty = 1) {
+      const sku = String(line?.sku || '').trim();
+      const name = String(line?.name || '').trim();
+      const label = sku || name || '';
+      return label ? `${label} x${qty || 1}` : '';
+    }
+
+    function getReturnPackageDescriptions(order) {
+      const out = [];
+      const returns = order?.returns?.edges || [];
+      for (const r of returns) {
+        const retLines = r?.node?.returnLineItems?.edges || [];
+        for (const edge of retLines) {
+          const node = edge?.node || {};
+          const line = node.fulfillmentLineItem?.lineItem || {};
+          const desc = packageDescFromLine(line, node.quantity || 1);
+          if (desc) out.push(desc);
+        }
+      }
+      return out;
+    }
+
+    function getExchangeLineDescriptions(order) {
+      const out = [];
+      const returns = order?.returns?.edges || [];
+      for (const r of returns) {
+        const exLines = r?.node?.exchangeLineItems?.edges || [];
+        for (const edge of exLines) {
+          const node = edge?.node || {};
+          const lines = node.lineItems || [];
+          for (const line of lines) {
+            const desc = packageDescFromLine(line, node.quantity || 1);
+            if (desc) out.push(desc);
+          }
+        }
+      }
+      return out;
+    }
+
+    function getPackageDescription(order, jobType) {
+      if (jobType === 'exchange') {
+        const ex = getExchangeLineDescriptions(order);
+        if (ex.length) return ex.join('\n');
+      }
+      const items = order?.lineItems?.edges || [];
+      return items
+        .map(e => packageDescFromLine(e.node, e.node?.currentQuantity || 1))
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    function getGoodsValue(order, jobType) {
+      if (jobType === 'exchange') {
+        const returns = order?.returns?.edges || [];
+        let total = 0;
+        for (const r of returns) {
+          const exLines = r?.node?.exchangeLineItems?.edges || [];
+          for (const edge of exLines) {
+            const node = edge?.node || {};
+            const qty = Number(node.quantity || 1);
+            const lines = node.lineItems || [];
+            for (const line of lines) {
+              total += money(line?.originalUnitPriceSet?.shopMoney?.amount) * qty;
+            }
+          }
+        }
+        if (total > 0) return total;
+      }
+      return money(order?.totalOutstandingSet?.shopMoney?.amount);
+    }
+
+    function contactPhone(order) {
+      const addr = order?.shippingAddress || {};
+      return addr.phone || order?.customer?.phone || '';
+    }
+
+    function customerName(order) {
+      const addr = order?.shippingAddress || {};
+      return [addr.firstName, addr.lastName].filter(Boolean).join(' ').trim();
+    }
+
+    function fullAddress(order) {
+      const addr = order?.shippingAddress || {};
+      return [addr.address1, addr.address2, addr.city, addr.province].filter(Boolean).join(' - ');
+    }
+
     async function exportToExcel(orders, jobType) {
       const wb = new ExcelJS.Workbook();
       wb.creator = 'EcomModa';
       wb.created = new Date();
-      wb.views = [{ rightToLeft: false }];
+      const ws = wb.addWorksheet(jobType === 'return' ? 'Return Orders' : 'Exchange Orders');
 
-      const ws = wb.addWorksheet('Add orders here');
-
-      ws.columns = [
-        { key:'fullName',      width:25   },
-        { key:'phone',         width:14   },
-        { key:'city',          width:14   },
-        { key:'streetName',    width:22   },
-        { key:'cashAmount',    width:13.5 },
-        { key:'area',          width:10   },
-        { key:'landmark',      width:15   },
-        { key:'workAddress',   width:14   },
-        { key:'secondPhone',   width:14   },
-        { key:'flexship',      width:20   },
-        { key:'openPackage',   width:20   },
-        { key:'packageType',   width:20   },
-        { key:'itemCount',     width:11   },
-        { key:'description',   width:20   },
-        { key:'deliveryNotes', width:16   },
-        { key:'orderRef',      width:14   },
-        { key:'returnItems',   width:14   },
-        { key:'returnDesc',    width:22   },
-        { key:'goodsValue',    width:16   },
-        { key:'bostaCredits',  width:18   },
-        { key:'brandName',     width:14   },
+      const columns = [
+        { header: 'Receiver Name', key: 'receiverName', width: 24 },
+        { header: 'Receiver Phone', key: 'receiverPhone', width: 18 },
+        { header: 'Receiver Second Phone', key: 'receiverSecondPhone', width: 18 },
+        { header: 'Receiver Address', key: 'receiverAddress', width: 42 },
+        { header: 'City', key: 'city', width: 16 },
+        { header: 'Zone', key: 'zone', width: 16 },
+        { header: 'District', key: 'district', width: 16 },
+        { header: 'Delivery Type', key: 'deliveryType', width: 16 },
+        { header: 'Payment Type', key: 'paymentType', width: 16 },
+        { header: 'Amount', key: 'amount', width: 12 },
+        { header: 'COD', key: 'cod', width: 12 },
+        { header: 'Goods Value Amount', key: 'goodsValueAmount', width: 18 },
+        { header: 'Business Reference', key: 'businessReference', width: 20 },
+        { header: 'Package Description', key: 'packageDescription', width: 32 },
+        { header: 'Delivery Notes', key: 'deliveryNotes', width: 22 },
+        { header: 'Order Reference', key: 'orderReference', width: 18 },
+        { header: 'Return #Items', key: 'returnItems', width: 14 },
+        { header: 'Return Package Description', key: 'returnPackageDescription', width: 34 },
       ];
+      ws.columns = columns;
 
-      const RF = { color:{ argb:'FFFF0000' }, bold:true, name:'Calibri', size:10 };
-      const BF = { color:{ argb:'FF000000' }, bold:true, name:'Calibri', size:10 };
-      const CT = { horizontal:'center', vertical:'middle' };
-
-      ws.addRow([]);
-      ws.getRow(1).height = 42;
-
-      const H = {
-        A:['Full Name',RF],        B:['Phone',RF],
-        C:['City',RF],             D:['Street Name',RF],
-        E:['Cash Amount',BF],      F:['Area',BF],
-        G:['Landmark',BF],         H:['Work address?',BF],
-        I:['Second Phone',BF],
-        J:['Apply Flexship\nFees?',BF], K:['Allow\nOpening Package?',BF],
-        L:['Package Type',BF],     M:['No. of Items',BF],
-        N:['Package Description',BF], O:['Delivery Notes',BF],
-        P:['Order Reference',BF],  Q:['Return #Items',BF],
-        R:['Return Package\nDescription',BF],
-        S:['Goods Value\nAmount',BF], T:['Pay With Bosta\nCredits?',BF],
-        U:['Brand Name',BF],
-      };
-
-      Object.entries(H).forEach(([col,[text,font]]) => {
-        const c = ws.getCell(`${col}1`);
-        c.value = text;
-        c.font = font;
-        c.alignment = { ...CT, wrapText:true };
+      const headerRow = ws.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      headerRow.height = 32;
+      headerRow.eachCell(cell => {
+        cell.border = {
+          top: { style: 'thin' }, left: { style: 'thin' },
+          bottom: { style: 'thin' }, right: { style: 'thin' },
+        };
       });
 
-      ws.views = [{ state:'frozen', ySplit:1, rightToLeft:false }];
-
-      orders.forEach((order) => {
-        const addr  = order.shippingAddress || {};
-        const items = (order.lineItems?.edges || []).map(e => e.node).filter(li => (li.currentQuantity || 0) > 0);
-        const cash  = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0) || null;
-        const count = items.reduce((s, li) => s + (li.currentQuantity || 1), 0) || null;
-
-        const allReturns = order.returns?.edges || [];
-
-        const returnLineItemsList = allReturns
-          .flatMap(r => r.node.returnLineItems?.edges || [])
-          .map(e => {
-            const li = e.node.fulfillmentLineItem?.lineItem;
-            return li ? `${li.sku || li.name} x${e.node.quantity}` : null;
-          })
-          .filter(Boolean);
-
-        const returnDesc = returnLineItemsList.join(' | ') || null;
-
-        const returnQtyTotal = allReturns
-          .flatMap(r => r.node.returnLineItems?.edges || [])
-          .reduce((s, e) => s + (e.node.quantity || 1), 0);
-
-        const returnItemsCount = returnQtyTotal > 1 ? returnQtyTotal : null;
-
-        const hasExchange = allReturns.some(r => (r.node.exchangeLineItems?.edges || []).length > 0);
-        let goodsValue = 0;
-
-        if (hasExchange) {
-          allReturns.forEach(r => {
-            (r.node.exchangeLineItems?.edges || []).forEach(e => {
-              const qty = e.node.quantity || 1;
-              (e.node.lineItems || []).forEach(li => {
-                goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
-              });
-            });
-          });
-        } else {
-          allReturns.forEach(r => {
-            (r.node.returnLineItems?.edges || []).forEach(e => {
-              const li = e.node.fulfillmentLineItem?.lineItem;
-              const qty = e.node.quantity || 1;
-              if (li) goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
-            });
-          });
-        }
-
-        const goodsValueFinal = goodsValue > 0 ? goodsValue : null;
-
+      for (const order of orders) {
+        const addr = order.shippingAddress || {};
+        const returnDesc = getReturnPackageDescriptions(order);
         ws.addRow({
-          fullName:      [addr.firstName, addr.lastName].filter(Boolean).join(' ') || null,
-          phone:         addr.phone    || null,
-          city:          addr.city     || null,
-          streetName:    addr.address1 || null,
-          cashAmount:    cash !== 0 ? cash : null,
-          area:          null,
-          landmark:      addr.address2 || null,
-          workAddress:   null,
-          secondPhone:   order.customer?.phone || null,
-          flexship:      'Yes',
-          openPackage:   'Yes',
-          packageType:   null,
-          itemCount:     count !== 1 ? count : null,
-          description:   items.map(li => `${li.sku || li.name} x${li.currentQuantity}`).join(' | ') || null,
-          deliveryNotes: order.note || null,
-          orderRef:      order.name || null,
-          returnItems:   returnItemsCount,
-          returnDesc,
-          goodsValue:    goodsValueFinal,
-          bostaCredits:  null,
-          brandName:     'Ecommoda',
+          receiverName: customerName(order),
+          receiverPhone: contactPhone(order),
+          receiverSecondPhone: '',
+          receiverAddress: fullAddress(order),
+          city: addr.city || '',
+          zone: '',
+          district: '',
+          deliveryType: jobType === 'return' ? 'Return' : 'Exchange',
+          paymentType: 'Cash',
+          amount: 0,
+          cod: 0,
+          goodsValueAmount: getGoodsValue(order, jobType),
+          businessReference: orderIdName(order),
+          packageDescription: getPackageDescription(order, jobType),
+          deliveryNotes: jobType === 'return' ? 'أوردر استرجاع' : 'أوردر استبدال',
+          orderReference: orderIdName(order),
+          returnItems: returnDesc.length || '',
+          returnPackageDescription: returnDesc.join('\n'),
         });
+      }
+
+      ws.eachRow((row, rowNumber) => {
+        row.eachCell(cell => {
+          cell.alignment = { vertical: 'middle', wrapText: true };
+          cell.border = {
+            top: { style: 'thin' }, left: { style: 'thin' },
+            bottom: { style: 'thin' }, right: { style: 'thin' },
+          };
+        });
+        if (rowNumber > 1) row.height = 28;
       });
 
-      const date = cairoDateStamp();
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
+      ws.autoFilter = { from: 'A1', to: 'R1' };
+
       const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-      a.download = `${JOB_META[jobType].filePrefix}_${date}.xlsx`;
+      a.href = URL.createObjectURL(blob);
+      a.download = `${JOB_META[jobType].filePrefix}_${cairoDateStamp()}.xlsx`;
+      document.body.appendChild(a);
       a.click();
       URL.revokeObjectURL(a.href);
+      a.remove();
     }
 
     // ══════════════════════════════════════════════════════════════
     // LOGS
     // ══════════════════════════════════════════════════════════════
-    async function loadLogs(showToastOnDone = true) {
+    async function loadLogs(showMsg = true) {
       if (!isConfigured()) return;
-
       try {
-        const data = await apiFetch('get_logs');
-        state.logs = (data.entries || []).filter(e => e.type !== 'login' && e.type !== 'logout');
+        const data = await apiFetch('get_logs', { method: 'GET' });
+        state.logs = (data.entries || []).filter(e => !['login', 'logout'].includes(e.type));
         renderLogs();
-        if (showToastOnDone) showToast('تم تحديث السجل', 'success');
+        if (showMsg) showToast('تم تحديث السجل', 'success');
       } catch (e) {
-        document.getElementById('logList').innerHTML = `<div class="log-empty">فشل تحميل السجل: ${escapeHtml(e.message)}</div>`;
+        if (showMsg) showToast('فشل تحديث السجل: ' + e.message, 'error');
       }
     }
 
@@ -1784,13 +1677,15 @@
         const div = document.createElement('div');
         div.className = 'log-entry';
 
-        const dotClass = entry.type?.startsWith('confirm') ? 'confirm' : (entry.type === 'scan' ? 'scan' : 'export');
+        const isUpdate = entry.type?.startsWith('confirm');
+        const isManual = entry.type?.startsWith('manual_confirm');
+        const dotClass = isUpdate ? 'confirm' : (isManual ? 'scan' : (entry.type === 'scan' ? 'scan' : 'export'));
 
         div.innerHTML = `
           <div class="log-dot ${dotClass}"></div>
           <div class="log-content">
             <div class="log-top">
-              <span class="badge ${entry.type?.startsWith('confirm') ? 'badge-ok' : (entry.type === 'scan' ? 'badge-purple' : 'badge-type')}">${escapeHtml(typeLabel(entry.type))}</span>
+              <span class="badge ${isUpdate ? 'badge-ok' : (isManual || entry.type === 'scan' ? 'badge-purple' : 'badge-type')}">${escapeHtml(typeLabel(entry.type))}</span>
               ${entry.order_name ? `<span class="order-name">${escapeHtml(entry.order_name)}</span>` : ''}
               ${entry.employee ? `<span class="badge badge-type">${escapeHtml(entry.employee)}</span>` : ''}
             </div>
@@ -1811,8 +1706,10 @@
         scan: 'Scan',
         export_return: 'Export Return',
         export_exchange: 'Export Exchange',
-        confirm_return: 'Confirm Return',
-        confirm_exchange: 'Confirm Exchange',
+        manual_confirm_return: 'Manual Confirm Return',
+        manual_confirm_exchange: 'Manual Confirm Exchange',
+        confirm_return: 'S2 Update Return',
+        confirm_exchange: 'S2 Update Exchange',
         login: 'Login',
         logout: 'Logout',
       };
