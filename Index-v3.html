@@ -1725,61 +1725,55 @@
 
     async function buildExcelExportFile(orders, jobType) {
       const wb = new ExcelJS.Workbook();
-      wb.views = [{ rightToLeft: false }];
-      const ws = wb.addWorksheet('Add orders here');
+      const ws = wb.addWorksheet('Sheet1');
 
       ws.columns = [
-        { key:'fullName',      width:25   },
-        { key:'phone',         width:14   },
-        { key:'city',          width:14   },
-        { key:'streetName',    width:22   },
-        { key:'cashAmount',    width:13.5 },
-        { key:'area',          width:10   },
-        { key:'landmark',      width:15   },
-        { key:'workAddress',   width:14   },
-        { key:'secondPhone',   width:14   },
-        { key:'flexship',      width:20   },
-        { key:'openPackage',   width:20   },
-        { key:'packageType',   width:20   },
-        { key:'itemCount',     width:11   },
-        { key:'description',   width:20   },
-        { key:'deliveryNotes', width:16   },
-        { key:'orderRef',      width:14   },
-        { key:'returnItems',   width:14   },
-        { key:'returnDesc',    width:22   },
-        { key:'goodsValue',    width:16   },
-        { key:'bostaCredits',  width:18   },
-        { key:'brandName',     width:14   },
+        { key:'fullName' },
+        { key:'phone' },
+        { key:'city' },
+        { key:'streetName' },
+        { key:'cashAmount' },
+        { key:'area' },
+        { key:'landmark' },
+        { key:'workAddress' },
+        { key:'secondPhone' },
+        { key:'flexship' },
+        { key:'openPackage' },
+        { key:'packageType' },
+        { key:'itemCount' },
+        { key:'description' },
+        { key:'deliveryNotes' },
+        { key:'orderRef' },
+        { key:'returnItems' },
+        { key:'returnDesc' },
+        { key:'goodsValue' },
+        { key:'bostaCredits' },
+        { key:'brandName' },
       ];
 
-      const RF = { color:{ argb:'FFFF0000' }, bold:true, name:'Calibri', size:10 };
-      const BF = { color:{ argb:'FF000000' }, bold:true, name:'Calibri', size:10 };
-      const CT = { horizontal:'center', vertical:'middle' };
-
-      ws.addRow([]);
-      ws.getRow(1).height = 42;
-      const H = {
-        A:['Full Name',RF],        B:['Phone',RF],
-        C:['City',RF],             D:['Street Name',RF],
-        E:['Cash Amount',BF],      F:['Area',BF],
-        G:['Landmark',BF],         H:['Work address?',BF],
-        I:['Second Phone',BF],
-        J:['Apply Flexship\nFees?',BF], K:['Allow\nOpening Package?',BF],
-        L:['Package Type',BF],     M:['No. of Items',BF],
-        N:['Package Description',BF], O:['Delivery Notes',BF],
-        P:['Order Reference',BF],  Q:['Return #Items',BF],
-        R:['Return Package\nDescription',BF],
-        S:['Goods Value\nAmount',BF], T:['Pay With Bosta\nCredits?',BF],
-        U:['Brand Name',BF],
-      };
-      Object.entries(H).forEach(([col,[text,font]]) => {
-        const c = ws.getCell(`${col}1`);
-        c.value = text;
-        c.font = font;
-        c.alignment = {...CT, wrapText:true};
-      });
-
-      ws.views = [{ state:'frozen', ySplit:1, rightToLeft:false }];
+      ws.addRow([
+        'Full Name',
+        'Phone',
+        'City',
+        'Street Name',
+        'Cash Amount',
+        'Area',
+        'Landmark',
+        'Work address?',
+        'Second Phone',
+        'Apply Flexship\nFees?',
+        'Allow\nOpening Package?',
+        'Package Type',
+        'No. of Items',
+        'Package Description',
+        'Delivery Notes',
+        'Order Reference',
+        'Return #Items',
+        'Return Package\nDescription',
+        'Goods Value\nAmount',
+        'Pay With Bosta\nCredits?',
+        'Brand Name',
+      ]);
 
       orders.forEach(order => {
         const addr  = order.shippingAddress || {};
@@ -1890,14 +1884,11 @@
         });
       });
 
-      const today = new Date(Date.now() + 3 * 60 * 60 * 1000);
-      const pad   = n => String(n).padStart(2,'0');
-      const date  = `${today.getUTCFullYear()}-${pad(today.getUTCMonth()+1)}-${pad(today.getUTCDate())}`;
-      const buf   = await wb.xlsx.writeBuffer();
+      const buf = await wb.xlsx.writeBuffer();
 
       return {
         buf,
-        filename: `${JOB_META[jobType].filePrefix}_${date}.xlsx`,
+        filename: 'Bosta_Export.xlsx',
       };
     }
 
