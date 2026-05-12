@@ -613,7 +613,7 @@
         <div class="mode-grid">
           <button class="mode-card active" id="modeReturn" onclick="selectJobType('return')">
             <div class="mode-top"><span class="mode-ico">↩️</span><span class="mode-name">أوردرات الاسترجاع</span></div>
-            <div class="mode-desc">S2 = <b>Confirmed + RETURN</b> و المندوب = <b>Bosta</b>. بعد تحديث S2 تصبح <b>In-Return</b>.</div>
+            <div class="mode-desc">S2 = <b>Confirmed + RETURN</b> و المندوب = <b>Bosta</b>. بعد التأكيد الموحد تصبح <b>In-Return</b>.</div>
           </button>
           <button class="mode-card" id="modeExchange" onclick="selectJobType('exchange')">
             <div class="mode-top"><span class="mode-ico">🔄</span><span class="mode-name">أوردرات الاستبدال</span></div>
@@ -635,7 +635,7 @@
             <div class="stat-value" id="statExported">لا</div>
           </div>
           <div class="stat-box stat-purple">
-            <div class="stat-label">تأكيد بوسطة/المخزن</div>
+            <div class="stat-label" id="statConfirmLabel">تأكيد الرفع + S2</div>
             <div class="stat-value" id="statManualConfirm">لا</div>
           </div>
           <div class="stat-box stat-amber">
@@ -647,7 +647,7 @@
         <div class="actions-row">
           <button class="btn btn-primary" id="fetchBtn" onclick="fetchCandidates()">🔎 الاستعلام عن أوردرات الاسترجاع</button>
           <button class="btn btn-green" id="exportBtn" onclick="exportCurrentOrders()" disabled>📥 تصدير Excel</button>
-          <button class="btn btn-purple" id="confirmBtn" onclick="confirmManualSteps()" disabled>✅ تأكيد رفع بوسطة/المخزن</button>
+          <button class="btn btn-purple" id="confirmBtn" onclick="confirmManualSteps()" disabled>✅ تأكيد رفع الأوردرات على داشبورد بوسطة وتحديث S2=In-Return</button>
           <button class="btn btn-warning" id="updateS2Btn" onclick="updateS2Status()" disabled>🔄 تحديث S2</button>
           <button class="btn btn-secondary" onclick="resetRun()">تنظيف</button>
         </div>
@@ -702,7 +702,7 @@
               <option value="export_exchange">Export Exchange</option>
               <option value="manual_confirm_return">Manual Confirm Return</option>
               <option value="manual_confirm_exchange">Manual Confirm Exchange</option>
-              <option value="confirm_return">S2 Update Return</option>
+              <option value="confirm_return">Combined Return Confirm + S2</option>
               <option value="confirm_exchange">S2 Update Exchange</option>
             </select>
           </div>
@@ -742,7 +742,8 @@
           <input class="settings-input" id="cfgAdminUrl" />
         </div>
         <div class="hint">
-          إرسال الفواتير للمخزن خطوة خارج الأداة. المستخدم بيأكدها يدويًا، وبعدها الأداة تحدّث S2 فقط.
+          في Return: زر التأكيد بعد التصدير ينفذ تأكيد الرفع + تحديث S2=In-Return في خطوة واحدة.
+          في Exchange: ما زال التأكيد اليدوي وتحديث S2 خطوتين منفصلتين.
         </div>
       </div>
       <div class="modal-ftr">
@@ -762,10 +763,11 @@
         <div class="hint">
           <b>V3.1.0</b><br>
           - إضافة checkbox لكل أوردر + تحديد الكل، والتصدير للمحدد فقط.<br>
-          - تأكيد بوسطة/المخزن وتحديث S2 يطبّقان على نفس الـ batch الذي تم تصديره فعلًا.<br>
-          - فحص التكرار انتقل لزر تصدير Excel فقط، وبناءً على export logs الناجحة فقط.<br>
-          - نافذة Popup بنفس ثيم الأداة تعرض رقم الأوردر، آخر وقت تصدير، وعدد مرات التصدير، مع تنبيه صوتي.<br>
-          - الحفاظ على قالب Excel الرسمي لبوسطة ومسار Return / Exchange الحالي.
+          - فحص التكرار عند تصدير Excel فقط، وبناءً على export logs الناجحة فقط.<br>
+          - Popup تعرض رقم الأوردر، آخر وقت تصدير، وعدد مرات التصدير، مع تنبيه صوتي.<br>
+          - في Return فقط: Cash Amount في الملف المصدر لا يقل عن -2000 حتى لو Shopify رجّع رقم أقل من ذلك.<br>
+          - في Return فقط: دمج تأكيد الرفع على داشبورد بوسطة مع تحديث S2=In-Return في خطوة واحدة.<br>
+          - في Exchange: تأكيد بوسطة/المخزن وتحديث S2 يظلان خطوتين منفصلتين.
         </div>
       </div>
       <div class="modal-ftr">
@@ -870,6 +872,7 @@
       exportDuplicates: {},
       allowRepeatExport: false,
       exported: false,
+      returnCombinedDone: false,
       manualConfirmed: false,
       logs: [],
       pageInfo: null,
@@ -879,7 +882,7 @@
       return: {
         label: 'الاسترجاع',
         fetchText: '🔎 الاستعلام عن أوردرات الاسترجاع',
-        confirmText: '✅ تأكيد رفع الأوردرات على داشبورد بوسطة',
+        confirmText: '✅ تأكيد رفع الأوردرات على داشبورد بوسطة وتحديث S2=In-Return',
         updateText: '🔄 تحديث S2 إلى In-Return',
         expected: 'Confirmed + RETURN',
         next: 'In-Return',
@@ -1020,11 +1023,26 @@
       pinClear();
       hideLoginError();
       const username = document.getElementById('loginUsername').value;
-      if (!username) return;
+      if (!username || !isConfigured()) return;
 
       try {
-        const data = await apiFetch('check_employee', { method: 'GET' });
-        void data;
+        const checkUrl = new URL(apiUrl('check_employee'));
+        checkUrl.searchParams.set('username', username);
+        const cfg = getConfig();
+        const resp = await fetch(checkUrl.toString(), {
+          headers: { Authorization: `Bearer ${cfg.workerSecret}` },
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) return;
+        if (!data.hasPin) {
+          updateLoginSub('أول مرة؟ اختر PIN جديد من 4 أرقام');
+          document.getElementById('pinLabel').textContent = 'اختر PIN جديد';
+          document.getElementById('loginBtn').textContent = 'متابعة →';
+        } else {
+          updateLoginSub('اختر اسمك وأدخل PIN');
+          document.getElementById('pinLabel').textContent = 'أدخل الـ PIN';
+          document.getElementById('loginBtn').textContent = 'دخول';
+        }
       } catch {}
     }
 
@@ -1192,6 +1210,7 @@
       state.exportDuplicates = {};
       state.allowRepeatExport = false;
       state.exported = false;
+      state.returnCombinedDone = false;
       state.manualConfirmed = false;
       state.pageInfo = null;
 
@@ -1201,6 +1220,7 @@
       document.getElementById('confirmBtn').textContent = JOB_META[state.jobType].confirmText;
       document.getElementById('updateS2Btn').textContent = JOB_META[state.jobType].updateText;
       document.getElementById('statNext').textContent = JOB_META[state.jobType].next;
+      document.getElementById('statConfirmLabel').textContent = state.jobType === 'return' ? 'تأكيد الرفع + S2' : 'تأكيد بوسطة/المخزن';
       document.getElementById('emptyOrdersHint').style.display = 'block';
       closeExportDuplicateModal();
       clearStatus();
@@ -1259,15 +1279,19 @@
       const totalCount = state.orders.length;
       const selectedCount = getSelectedOrders().length;
       const exportedCount = state.exportedOrders.length;
+      const isReturn = state.jobType === 'return';
 
       document.getElementById('statOrders').textContent = String(totalCount);
       document.getElementById('statSelected').textContent = String(selectedCount);
       document.getElementById('statExported').textContent = state.exported ? 'نعم' : 'لا';
-      document.getElementById('statManualConfirm').textContent = state.manualConfirmed ? 'نعم' : 'لا';
+      document.getElementById('statManualConfirm').textContent = isReturn
+        ? (state.returnCombinedDone ? 'نعم' : 'لا')
+        : (state.manualConfirmed ? 'نعم' : 'لا');
 
       document.getElementById('exportBtn').disabled = selectedCount === 0;
-      document.getElementById('confirmBtn').disabled = !state.exported || exportedCount === 0 || state.manualConfirmed;
-      document.getElementById('updateS2Btn').disabled = !state.manualConfirmed || exportedCount === 0;
+      document.getElementById('confirmBtn').disabled = !state.exported || exportedCount === 0 || (isReturn ? state.returnCombinedDone : state.manualConfirmed);
+      document.getElementById('updateS2Btn').disabled = isReturn || !state.manualConfirmed || exportedCount === 0;
+      document.getElementById('updateS2Btn').style.display = isReturn ? 'none' : 'inline-flex';
 
       syncSelectAllOrders();
     }
@@ -1448,12 +1472,17 @@
         downloadExcelExportFile(file);
 
         state.exported = true;
+        state.returnCombinedDone = false;
         state.manualConfirmed = false;
         state.exportedOrders = orders.slice();
         state.allowRepeatExport = !!allowRepeat;
         state.exportDuplicates = allowRepeat ? state.exportDuplicates : {};
 
-        showStatus(`✓ تم تصدير ${orders.length} أوردر. الخطوة التالية: ارفع الملف على داشبورد بوسطة وأرسل الفواتير للمخزن خارج الأداة، ثم اضغط زر التأكيد اليدوي.`, 'success');
+        const nextMessage = state.jobType === 'return'
+          ? 'الخطوة التالية: ارفع الملف على داشبورد بوسطة، ثم اضغط زر التأكيد الموحد ليتم تحديث S2=In-Return.'
+          : 'الخطوة التالية: ارفع الملف على داشبورد بوسطة وأرسل الفواتير للمخزن خارج الأداة، ثم اضغط زر التأكيد اليدوي.';
+
+        showStatus(`✓ تم تصدير ${orders.length} أوردر. ${nextMessage}`, 'success');
         showToast(`✓ تم تصدير ${orders.length} أوردر`, 'success');
         await loadLogs(false);
       } catch (e) {
@@ -1484,10 +1513,12 @@
         return;
       }
 
-      const confirmText = state.jobType === 'return'
-        ? `تأكيد إنك رفعت ${exportedOrders.length} أوردر على داشبورد بوسطة؟\n\nمهم: الخطوة دي تسجيل تأكيد فقط، ومش هتغيّر S2.`
-        : `تأكيد إنك رفعت ${exportedOrders.length} أوردر على داشبورد بوسطة وأرسلت الفواتير للمخزن؟\n\nمهم: الخطوة دي تسجيل تأكيد فقط، ومش هتغيّر S2.`;
+      if (state.jobType === 'return') {
+        await confirmReturnUploadAndUpdateS2(exportedOrders);
+        return;
+      }
 
+      const confirmText = `تأكيد إنك رفعت ${exportedOrders.length} أوردر على داشبورد بوسطة وأرسلت الفواتير للمخزن؟\n\nمهم: الخطوة دي تسجيل تأكيد فقط، ومش هتغيّر S2.`;
       if (!confirm(confirmText)) return;
 
       const btn = document.getElementById('confirmBtn');
@@ -1519,7 +1550,54 @@
       }
     }
 
+    async function confirmReturnUploadAndUpdateS2(exportedOrders) {
+      const confirmText = `تأكيد إنك رفعت ${exportedOrders.length} أوردر استرجاع على داشبورد بوسطة؟\n\nبعد التأكيد سيتم تحديث حالة الأوردرات مباشرة إلى S2 = In-Return.`;
+      if (!confirm(confirmText)) return;
+
+      const btn = document.getElementById('confirmBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ جاري التأكيد وتحديث S2...';
+      showStatus('جاري تأكيد الرفع وتحديث S2 إلى In-Return والتحقق المباشر من Shopify...', 'info');
+
+      try {
+        const data = await apiFetch('confirm_upload', {
+          method: 'POST',
+          body: {
+            jobType: 'return',
+            employee: currentEmployee.username,
+            orders: payloadOrders(exportedOrders),
+            allowRepeat: state.allowRepeatExport,
+          },
+        });
+
+        state.returnCombinedDone = true;
+        showStatus(`✓ تم تأكيد رفع ${data.count} أوردر على بوسطة وتحديث S2 إلى ${data.updatedTo}.`, 'success');
+        showToast(`✓ تم تحديث S2 لـ ${data.count} أوردر إلى ${data.updatedTo}`, 'success');
+
+        state.exported = false;
+        state.orders = [];
+        state.selectedOrderIds = new Set();
+        state.exportedOrders = [];
+        state.exportDuplicates = {};
+        state.allowRepeatExport = false;
+        renderOrders();
+        updateRunUI();
+        await loadLogs(false);
+      } catch (e) {
+        showStatus('فشل التأكيد الموحد أو تحديث S2: ' + e.message, 'error');
+        showToast('فشل التأكيد الموحد أو تحديث S2: ' + e.message, 'error');
+      } finally {
+        btn.textContent = JOB_META.return.confirmText;
+        updateRunUI();
+      }
+    }
+
     async function updateS2Status() {
+      if (state.jobType === 'return') {
+        showToast('في Return تحديث S2 مدموج داخل زر التأكيد الموحد', 'info');
+        return;
+      }
+
       if (!state.manualConfirmed) {
         showToast('لازم تأكد رفع بوسطة/المخزن الأول', 'error');
         return;
@@ -1700,7 +1778,12 @@
           .map(e => e.node)
           .filter(li => (li.currentQuantity || 0) > 0);
 
-        const cash  = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0) || null;
+        const parsedCash = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0);
+        const rawCash = Number.isFinite(parsedCash) && parsedCash !== 0 ? parsedCash : null;
+        const cashAmountForExport = jobType === 'return' && rawCash !== null
+          ? Math.max(rawCash, -2000)
+          : rawCash;
+
         const count = items.reduce((s, li) => s + (li.currentQuantity || 1), 0) || null;
         const allReturns = order.returns?.edges || [];
 
@@ -1745,7 +1828,7 @@
           phone:         addr.phone    || null,
           city:          addr.city     || null,
           streetName:    addr.address1 || null,
-          cashAmount:    cash !== 0 ? cash : null,
+          cashAmount:    cashAmountForExport,
           area:          null,
           landmark:      addr.address2 || null,
           workAddress:   null,
@@ -1853,7 +1936,7 @@
         export_exchange: 'Export Exchange',
         manual_confirm_return: 'Manual Confirm Return',
         manual_confirm_exchange: 'Manual Confirm Exchange',
-        confirm_return: 'S2 Update Return',
+        confirm_return: 'Combined Return Confirm + S2',
         confirm_exchange: 'S2 Update Exchange',
         login: 'Login',
         logout: 'Logout',
