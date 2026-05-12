@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bosta Return / Exchange Exporter V3.0.0</title>
+  <title>Bosta Return / Exchange Exporter V3.1.0</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
@@ -290,29 +290,6 @@
     .status-bar.error { background: var(--red-light); border-color: var(--red-border); color: var(--red); }
     .status-bar.warn { background: var(--amber-light); border-color: var(--amber-border); color: var(--amber); }
 
-    .duplicate-panel {
-      display: none;
-      border: 1px solid var(--amber-border);
-      background: var(--amber-light);
-      border-radius: var(--radius);
-      padding: 12px;
-      margin-top: 12px;
-    }
-    .duplicate-panel.show { display: block; }
-    .duplicate-title { font-weight: 800; color: var(--amber); margin-bottom: 8px; font-size: 13px; }
-    .dup-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-    .dup-chip {
-      direction: ltr;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--amber);
-      background: #fff;
-      border: 1px solid var(--amber-border);
-      border-radius: 20px;
-      padding: 3px 9px;
-    }
-
     .orders-list {
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -324,7 +301,7 @@
     .orders-list.show { display: block; }
     .orders-list-head {
       display: grid;
-      grid-template-columns: 90px 1fr 150px 120px 115px;
+      grid-template-columns: 76px 90px 1fr 150px 120px 115px;
       gap: 10px;
       background: var(--surface-2);
       border-bottom: 1px solid var(--border);
@@ -335,7 +312,7 @@
     }
     .order-row {
       display: grid;
-      grid-template-columns: 90px 1fr 150px 120px 115px;
+      grid-template-columns: 76px 90px 1fr 150px 120px 115px;
       gap: 10px;
       padding: 9px 12px;
       border-bottom: 1px solid var(--border);
@@ -344,6 +321,17 @@
     }
     .order-row:last-child { border-bottom: none; }
     .order-row:hover { background: var(--surface-2); }
+    .order-row.selected { background: var(--accent-light); }
+    .order-select-head, .order-select-cell { display: flex; align-items: center; justify-content: center; }
+    .order-select-label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+    .order-select-label span { font-size: 11px; font-weight: 800; color: var(--text-secondary); }
+    .order-checkbox {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
     .order-name { direction: ltr; font-family: var(--font-mono); font-weight: 800; color: var(--accent); }
     .badge {
       display: inline-flex;
@@ -382,20 +370,27 @@
       font-size: 12px;
       min-height: 36px;
     }
-    .log-finput { min-width: 240px; }
-    .log-list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
-    .log-entry { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; }
+    .log-fsel:focus, .log-finput:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+    .log-list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .log-entry {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
     .log-entry:last-child { border-bottom: none; }
     .log-entry:hover { background: var(--surface-2); }
-    .log-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--accent); flex-shrink: 0; }
+    .log-dot { width: 10px; height: 10px; border-radius: 999px; margin-top: 5px; flex: 0 0 auto; }
+    .log-dot.scan { background: var(--purple); }
     .log-dot.export { background: var(--accent); }
     .log-dot.confirm { background: var(--green); }
-    .log-dot.scan { background: var(--purple); }
-    .log-content { flex: 1; min-width: 0; }
-    .log-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
-    .log-notes { color: var(--text-primary); font-size: 12px; line-height: 1.6; }
-    .log-meta { color: var(--text-muted); font-size: 11px; margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; }
-    .log-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+    .log-content { min-width: 0; flex: 1; }
+    .log-top { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
+    .log-notes { font-size: 12px; line-height: 1.7; color: var(--text-primary); }
+    .log-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px; font-size: 11px; color: var(--text-muted); }
+    .log-empty { padding: 16px; color: var(--text-muted); text-align: center; background: var(--surface-2); }
+    .mono { font-family: var(--font-mono); direction: ltr; }
 
     .modal-overlay {
       position: fixed;
@@ -424,6 +419,71 @@
     .modal-close-x:hover { background: var(--red-light); }
     .modal-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; max-height: 75vh; overflow: auto; }
     .modal-ftr { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+    .modal.export-duplicates { max-width: 820px; }
+    .export-dup-note {
+      border: 1px solid var(--amber-border);
+      background: var(--amber-light);
+      color: var(--amber);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.8;
+      font-weight: 700;
+    }
+    .export-dup-summary {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .export-dup-chip {
+      border: 1px solid var(--amber-border);
+      background: #fff;
+      color: var(--amber);
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .export-dup-table {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: var(--surface);
+    }
+    .export-dup-table-head,
+    .export-dup-table-row {
+      display: grid;
+      grid-template-columns: 130px 1fr 130px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+    .export-dup-table-head {
+      background: var(--surface-2);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 800;
+      border-bottom: 1px solid var(--border);
+    }
+    .export-dup-table-row {
+      border-bottom: 1px solid var(--border);
+    }
+    .export-dup-table-row:last-child { border-bottom: none; }
+    .export-dup-order {
+      direction: ltr;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      color: var(--accent);
+    }
+    .export-dup-count {
+      direction: ltr;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      color: var(--amber);
+      text-align: center;
+    }
     .settings-field { display: flex; flex-direction: column; gap: 5px; }
     .settings-label { font-size: 10px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; }
     .settings-input {
@@ -452,18 +512,16 @@
     }
     .toast.info { background: var(--accent-light); color: var(--accent-dark); border-color: #bfdbfe; }
     .toast.success { background: var(--green-light); color: var(--green); border-color: var(--green-border); }
-    .toast.error { background: var(--red-light); color: var(--red); border-color: var(--red-border); }
     .toast.warn { background: var(--amber-light); color: var(--amber); border-color: var(--amber-border); }
+    .toast.error { background: var(--red-light); color: var(--red); border-color: var(--red-border); }
     @keyframes toastIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-    .mono { font-family: var(--font-mono); direction: ltr; }
-
-    @media (max-width: 760px) {
+    @media (max-width: 900px) {
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .mode-grid { grid-template-columns: 1fr; }
-      .summary-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-      .orders-list-head, .order-row { grid-template-columns: 85px 1fr; }
-      .orders-list-head div:nth-child(n+3), .order-row > div:nth-child(n+3) { display: none; }
-      .main-seg-btn { min-width: 120px; padding-inline: 20px; }
+      .orders-list-head, .order-row { grid-template-columns: 70px 90px 1fr; }
+      .orders-list-head > div:nth-child(n+4), .order-row > div:nth-child(n+4) { display: none; }
+      .export-dup-table-head, .export-dup-table-row { grid-template-columns: 110px 1fr 90px; }
     }
   </style>
 </head>
@@ -471,76 +529,76 @@
   <div class="login-overlay" id="loginOverlay">
     <div class="login-box">
       <div style="display:flex;justify-content:flex-start;margin-bottom:4px;">
-        <button id="loginSettingsBtn" onclick="openSettingsFromLogin()" style="display:flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--border-strong);background:var(--surface-2);border-radius:var(--radius-sm);font-family:inherit;font-size:11px;font-weight:700;color:var(--text-secondary);cursor:pointer;">
+        <button id="loginSettingsBtn" onclick="openSettingsFromLogin()"
+          style="display:flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--border-strong);background:var(--surface-2);border-radius:var(--radius-sm);font-size:11px;font-weight:700;color:var(--text-secondary);cursor:pointer;">
           ⚙️ الإعدادات
         </button>
       </div>
-      <div style="text-align:center;margin-bottom:10px;font-size:28px;">🔁</div>
+
+      <div style="text-align:center;margin-bottom:10px;font-size:28px;">📦</div>
       <div class="login-title">Bosta Return / Exchange Exporter</div>
-      <div class="login-sub" id="loginSub">تصدير أوردرات الاسترجاع والاستبدال لبوسطة</div>
+      <div class="login-sub" id="loginSub">اضبط إعدادات Worker ثم سجّل الدخول</div>
 
-      <div id="stepMain">
-        <div class="login-field">
-          <label class="login-label">اختر اسمك</label>
-          <select class="login-select" id="loginUsername" onchange="onUsernameChange()">
-            <option value="">— اختر —</option>
-          </select>
-        </div>
-
-        <div class="pin-label" id="pinLabel">أدخل الـ PIN</div>
-        <div class="pin-display" id="pinDisplay">
-          <div class="pin-dot" id="pd0">_</div>
-          <div class="pin-dot" id="pd1">_</div>
-          <div class="pin-dot" id="pd2">_</div>
-          <div class="pin-dot" id="pd3">_</div>
-        </div>
-
-        <div class="pin-keypad">
-          <button class="pin-key" onclick="pinPress('1')">1</button>
-          <button class="pin-key" onclick="pinPress('2')">2</button>
-          <button class="pin-key" onclick="pinPress('3')">3</button>
-          <button class="pin-key" onclick="pinPress('4')">4</button>
-          <button class="pin-key" onclick="pinPress('5')">5</button>
-          <button class="pin-key" onclick="pinPress('6')">6</button>
-          <button class="pin-key" onclick="pinPress('7')">7</button>
-          <button class="pin-key" onclick="pinPress('8')">8</button>
-          <button class="pin-key" onclick="pinPress('9')">9</button>
-          <button class="pin-key del" onclick="pinBackspace()">حذف</button>
-          <button class="pin-key" onclick="pinPress('0')">0</button>
-          <button class="pin-key del" onclick="pinClear()">مسح</button>
-        </div>
-
-        <div class="login-error" id="loginError"></div>
-        <button class="btn-login" id="loginBtn" onclick="submitPin()" disabled>دخول</button>
+      <div class="login-field">
+        <label class="login-label">اختر اسمك</label>
+        <select class="login-select" id="loginUsername" onchange="onUsernameChange()">
+          <option value="">— اختر —</option>
+        </select>
       </div>
+
+      <div class="pin-label" id="pinLabel">أدخل الـ PIN</div>
+      <div class="pin-display">
+        <div class="pin-dot" id="pd0"></div>
+        <div class="pin-dot" id="pd1"></div>
+        <div class="pin-dot" id="pd2"></div>
+        <div class="pin-dot" id="pd3"></div>
+      </div>
+
+      <div class="pin-keypad">
+        <button class="pin-key" onclick="pinPress('1')">1</button>
+        <button class="pin-key" onclick="pinPress('2')">2</button>
+        <button class="pin-key" onclick="pinPress('3')">3</button>
+        <button class="pin-key" onclick="pinPress('4')">4</button>
+        <button class="pin-key" onclick="pinPress('5')">5</button>
+        <button class="pin-key" onclick="pinPress('6')">6</button>
+        <button class="pin-key" onclick="pinPress('7')">7</button>
+        <button class="pin-key" onclick="pinPress('8')">8</button>
+        <button class="pin-key" onclick="pinPress('9')">9</button>
+        <button class="pin-key del" onclick="pinBackspace()">⌫</button>
+        <button class="pin-key" onclick="pinPress('0')">0</button>
+        <button class="pin-key del" onclick="pinClear()">مسح</button>
+      </div>
+
+      <div class="login-error" id="loginError"></div>
+      <button class="btn-login" id="loginBtn" onclick="submitPin()" disabled>دخول</button>
     </div>
   </div>
-
-  <div class="toast-container" id="toastContainer"></div>
 
   <div class="container">
     <header class="app-header">
       <div class="app-title">
-        <span class="app-icon">🔁</span>
+        <div class="app-icon">📦</div>
         <div class="app-title-text">
           <h1>Bosta Return / Exchange Exporter</h1>
-          <span>Auto-fetch by S2 + Courier metafields — V3.0.0</span>
+          <span>Selective Excel export + export-log duplicate guard — V3.1.0</span>
         </div>
       </div>
       <div class="app-header-btns">
         <button class="hbtn active-user" id="activeUserBtn" onclick="logout()" title="تسجيل خروج">👤 <span id="activeUserName">—</span></button>
         <button class="hbtn" id="settingsBtn" onclick="openSettings()">⚙️ الإعدادات</button>
-        <button class="hbtn ver-btn" onclick="openChangelog()">V3.0.0</button>
+        <button class="hbtn ver-btn" onclick="openChangelog()">V3.1.0</button>
       </div>
     </header>
 
     <div class="main-tabs-wrap">
       <div class="main-seg">
         <button class="main-seg-btn active" id="tabExport" onclick="switchMainTab('export')">
-          <span class="msb-icon">📤</span><span>التصدير</span>
+          <span class="msb-icon">📤</span>
+          <span>تصدير الأوردرات</span>
         </button>
         <button class="main-seg-btn" id="tabLogs" onclick="switchMainTab('logs')">
-          <span class="msb-icon">📋</span><span>سجل العمليات</span>
+          <span class="msb-icon">🧾</span>
+          <span>سجل العمليات</span>
         </button>
       </div>
     </div>
@@ -557,7 +615,6 @@
             <div class="mode-top"><span class="mode-ico">↩️</span><span class="mode-name">أوردرات الاسترجاع</span></div>
             <div class="mode-desc">S2 = <b>Confirmed + RETURN</b> و المندوب = <b>Bosta</b>. بعد تحديث S2 تصبح <b>In-Return</b>.</div>
           </button>
-
           <button class="mode-card" id="modeExchange" onclick="selectJobType('exchange')">
             <div class="mode-top"><span class="mode-ico">🔄</span><span class="mode-name">أوردرات الاستبدال</span></div>
             <div class="mode-desc">S2 = <b>Confirmed + EXCHANGE</b> و المندوب = <b>Bosta</b>. بعد تحديث S2 تصبح <b>Ready</b>.</div>
@@ -569,9 +626,9 @@
             <div class="stat-label">مطابق للشروط</div>
             <div class="stat-value" id="statOrders">0</div>
           </div>
-          <div class="stat-box stat-red">
-            <div class="stat-label">مكرر في السجل</div>
-            <div class="stat-value" id="statDuplicates">0</div>
+          <div class="stat-box stat-blue">
+            <div class="stat-label">محدد للتصدير</div>
+            <div class="stat-value" id="statSelected">0</div>
           </div>
           <div class="stat-box stat-green">
             <div class="stat-label">تم التصدير</div>
@@ -596,12 +653,6 @@
         </div>
 
         <div class="status-bar" id="statusBar"></div>
-
-        <div class="duplicate-panel" id="duplicatePanel">
-          <div class="duplicate-title">⚠️ فيه أوردرات موجودة قبل كده في سجل العمليات</div>
-          <div class="dup-list" id="duplicateList"></div>
-          <button class="btn btn-warning" id="allowRepeatBtn" onclick="allowRepeat()">السماح بعمل المكرر مرة تانية</button>
-        </div>
       </div>
 
       <div class="card">
@@ -617,11 +668,17 @@
 
         <div class="orders-list" id="ordersList">
           <div class="orders-list-head">
+            <div class="order-select-head">
+              <label class="order-select-label">
+                <input type="checkbox" id="selectAllOrders" onchange="toggleSelectAllOrders(this)" />
+                <span>الكل</span>
+              </label>
+            </div>
             <div>Order</div>
             <div>Customer / Address</div>
             <div>S2</div>
             <div>Courier</div>
-            <div>Log Status</div>
+            <div>Export Status</div>
           </div>
           <div id="ordersRows"></div>
         </div>
@@ -649,26 +706,26 @@
               <option value="confirm_exchange">S2 Update Exchange</option>
             </select>
           </div>
-
           <div class="log-field">
             <label class="log-label">بحث</label>
             <input class="log-finput" id="logSearch" oninput="renderLogs()" />
           </div>
-
-          <button class="btn btn-secondary" onclick="loadLogs()">🔄 تحديث</button>
+          <button class="btn btn-secondary" onclick="loadLogs(true)">↻ تحديث السجل</button>
         </div>
 
         <div class="log-list" id="logList">
-          <div class="log-empty">اضغط تحديث لعرض السجل</div>
+          <div class="log-empty">افتح التبويب أو اضغط تحديث</div>
         </div>
       </div>
     </section>
   </div>
 
+  <div class="toast-container" id="toastContainer"></div>
+
   <div class="modal-overlay" id="settingsOverlay" onclick="closeSettingsOnBackdrop(event)">
     <div class="modal">
       <div class="modal-hdr">
-        <span>⚙️ الإعدادات</span>
+        <span>⚙️ إعدادات الاتصال</span>
         <button class="modal-close-x" onclick="closeSettings()">×</button>
       </div>
       <div class="modal-body">
@@ -698,17 +755,17 @@
   <div class="modal-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="modal wide">
       <div class="modal-hdr">
-        <span>V3.0.0 — Changelog</span>
+        <span>V3.1.0 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">×</button>
       </div>
       <div class="modal-body">
         <div class="hint">
-          <b>V3.0.0</b><br>
-          - الاستعلام التلقائي عن الأوردرات من Shopify حسب S2 + Courier.<br>
-          - فصل Return و Exchange في ملفات منفصلة.<br>
-          - خطوات العمل أصبحت 4 مراحل: استعلام، تصدير Excel، تأكيد بوسطة/المخزن يدويًا، ثم تحديث S2.<br>
-          - سجل عمليات D1 + تحذير تكرار مع السماح بالتكرار عند الحاجة.<br>
-          - تحديث S2: Return → In-Return، Exchange → Ready.
+          <b>V3.1.0</b><br>
+          - إضافة checkbox لكل أوردر + تحديد الكل، والتصدير للمحدد فقط.<br>
+          - تأكيد بوسطة/المخزن وتحديث S2 يطبّقان على نفس الـ batch الذي تم تصديره فعلًا.<br>
+          - فحص التكرار انتقل لزر تصدير Excel فقط، وبناءً على export logs الناجحة فقط.<br>
+          - نافذة Popup بنفس ثيم الأداة تعرض رقم الأوردر، آخر وقت تصدير، وعدد مرات التصدير، مع تنبيه صوتي.<br>
+          - الحفاظ على قالب Excel الرسمي لبوسطة ومسار Return / Exchange الحالي.
         </div>
       </div>
       <div class="modal-ftr">
@@ -717,11 +774,36 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="exportDuplicateOverlay" onclick="closeExportDuplicateOnBackdrop(event)">
+    <div class="modal export-duplicates">
+      <div class="modal-hdr">
+        <span>⚠️ تنبيه تكرار قبل تصدير Excel</span>
+        <button class="modal-close-x" onclick="closeExportDuplicateModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="export-dup-note">
+          الأوردرات التالية تم تصديرها في ملف Excel بنجاح قبل كده.
+          راجع العدد وآخر وقت تصدير قبل ما تسمح بتصديرها مرة تانية.
+        </div>
+        <div class="export-dup-summary" id="exportDuplicateSummary"></div>
+        <div class="export-dup-table">
+          <div class="export-dup-table-head">
+            <div>Order</div>
+            <div>آخر عملية تصدير</div>
+            <div>عدد مرات التصدير</div>
+          </div>
+          <div id="exportDuplicateRows"></div>
+        </div>
+      </div>
+      <div class="modal-ftr">
+        <button class="btn btn-secondary" onclick="closeExportDuplicateModal()">إلغاء التصدير</button>
+        <button class="btn btn-warning" id="exportDuplicateContinueBtn">السماح بالتصدير والمتابعة</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // ══════════════════════════════════════════════════════════════
-    // CONFIG
-    // ══════════════════════════════════════════════════════════════
-    const VERSION = '3.0.0';
+    const VERSION = '3.1.0';
     const CFG_KEY = 'bosta_exchange_export_config_v3';
 
     function getConfig() {
@@ -780,14 +862,13 @@
       return data;
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // STATE
-    // ══════════════════════════════════════════════════════════════
     const state = {
       jobType: 'return',
       orders: [],
-      duplicates: {},
-      allowRepeat: false,
+      selectedOrderIds: new Set(),
+      exportedOrders: [],
+      exportDuplicates: {},
+      allowRepeatExport: false,
       exported: false,
       manualConfirmed: false,
       logs: [],
@@ -815,9 +896,6 @@
       },
     };
 
-    // ══════════════════════════════════════════════════════════════
-    // SETTINGS + UI HELPERS
-    // ══════════════════════════════════════════════════════════════
     function openSettings() {
       const c = getConfig();
       document.getElementById('cfgUrl').value           = c.workerUrl || '';
@@ -828,27 +906,27 @@
 
     function openSettingsFromLogin() { openSettings(); }
     function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
-    function closeSettingsOnBackdrop(e) { if (e.target === e.currentTarget) closeSettings(); }
+    function closeSettingsOnBackdrop(event) { if (event.target.id === 'settingsOverlay') closeSettings(); }
 
     function saveSettings() {
-      const url = normalizeBaseUrl(document.getElementById('cfgUrl').value);
-      const secret = document.getElementById('cfgSecret').value.trim();
+      const workerUrl = normalizeBaseUrl(document.getElementById('cfgUrl').value);
+      const workerSecret = document.getElementById('cfgSecret').value.trim();
       const adminUrl = normalizeBaseUrl(document.getElementById('cfgAdminUrl').value);
 
-      if (!url || !secret) {
-        showToast('الرجاء إدخال الـ URL والـ Secret', 'error');
+      if (!workerUrl || !workerSecret) {
+        showToast('Worker URL و Worker Secret مطلوبان', 'error');
         return;
       }
 
-      saveConfig({ workerUrl: url, workerSecret: secret });
+      saveConfig({ workerUrl, workerSecret });
       if (adminUrl) localStorage.setItem('admin_worker_url', adminUrl);
-      if (!adminUrl) localStorage.removeItem('admin_worker_url');
+      else localStorage.removeItem('admin_worker_url');
 
+      closeSettings();
       updateSettingsBtn();
       updateLoginSettingsBtn();
-      closeSettings();
-      showToast('تم حفظ الإعدادات ✓', 'success');
       loadEmployeesList();
+      showToast('تم حفظ الإعدادات', 'success');
     }
 
     function updateSettingsBtn() {
@@ -856,35 +934,28 @@
     }
 
     function updateLoginSettingsBtn() {
-      const btn = document.getElementById('loginSettingsBtn');
-      if (!btn) return;
-      if (isConfigured()) {
-        btn.style.borderColor = 'var(--green)';
-        btn.style.color = 'var(--green)';
-        btn.style.background = 'var(--green-light)';
-      } else {
-        btn.style.borderColor = 'var(--red)';
-        btn.style.color = 'var(--red)';
-        btn.style.background = 'var(--red-light)';
-      }
+      document.getElementById('loginSettingsBtn').style.borderColor = isConfigured() ? 'var(--green)' : 'var(--red)';
+      document.getElementById('loginSettingsBtn').style.color = isConfigured() ? 'var(--green)' : 'var(--red)';
+      document.getElementById('loginSettingsBtn').style.background = isConfigured() ? 'var(--green-light)' : 'var(--red-light)';
     }
 
     function openChangelog() { document.getElementById('changelogOverlay').classList.add('open'); }
     function closeChangelog() { document.getElementById('changelogOverlay').classList.remove('open'); }
-    function closeChangelogOnBackdrop(e) { if (e.target === e.currentTarget) closeChangelog(); }
+    function closeChangelogOnBackdrop(event) { if (event.target.id === 'changelogOverlay') closeChangelog(); }
 
-    function showToast(msg, type = 'info', dur = 3500) {
-      const t = document.createElement('div');
-      t.className = `toast ${type}`;
-      t.textContent = msg;
-      document.getElementById('toastContainer').appendChild(t);
-      setTimeout(() => t.remove(), dur);
+    function showToast(message, type = 'info', timeout = 3600) {
+      const wrap = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      wrap.appendChild(toast);
+      setTimeout(() => toast.remove(), timeout);
     }
 
-    function showStatus(msg, type = 'info') {
+    function showStatus(message, type = 'info') {
       const el = document.getElementById('statusBar');
-      el.innerHTML = msg;
-      el.className = `status-bar ${type} show`;
+      el.className = `status-bar show ${type}`;
+      el.textContent = message;
     }
 
     function clearStatus() {
@@ -893,18 +964,15 @@
       el.textContent = '';
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // AUTH
-    // ══════════════════════════════════════════════════════════════
     let currentEmployee = null;
     let pinBuffer = '';
-    let firstPin = '';
     let confirmPinBuffer = '';
+    let firstPin = '';
     let isNewUser = false;
     let _audioCtx = null;
 
     function getAudioCtx() {
-      if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
       if (_audioCtx.state === 'suspended') _audioCtx.resume();
       return _audioCtx;
     }
@@ -1000,15 +1068,15 @@
     function updatePinDots(value) {
       for (let i = 0; i < 4; i++) {
         const dot = document.getElementById('pd' + i);
-        dot.textContent = value[i] ? '•' : '_';
+        dot.textContent = value[i] ? '•' : '';
         dot.classList.toggle('filled', !!value[i]);
         dot.classList.remove('error');
       }
     }
 
-    function showLoginError(msg) {
+    function showLoginError(message) {
       const el = document.getElementById('loginError');
-      el.textContent = msg;
+      el.textContent = message;
       el.classList.add('visible');
       for (let i = 0; i < 4; i++) document.getElementById('pd' + i).classList.add('error');
       beep(220, .12, 'square', .02);
@@ -1016,33 +1084,36 @@
 
     function hideLoginError() {
       const el = document.getElementById('loginError');
+      el.textContent = '';
       el.classList.remove('visible');
       for (let i = 0; i < 4; i++) document.getElementById('pd' + i).classList.remove('error');
     }
 
     async function submitPin() {
       const username = document.getElementById('loginUsername').value;
-      if (!username) return showLoginError('اختر اسمك');
+      if (!username) { showLoginError('اختر اسمك الأول'); return; }
 
-      if (!isNewUser) {
-        try {
-          const check = await fetch(apiUrl('check_employee') + `&username=${encodeURIComponent(username)}`, {
-            headers: { Authorization: `Bearer ${getConfig().workerSecret}` },
-          }).then(r => r.json());
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = true;
 
-          if (!check.ok) throw new Error(check.error || 'تعذر التحقق');
-          if (!check.exists) return showLoginError('اسم المستخدم غير موجود');
-          if (!check.isActive) return showLoginError('الحساب موقوف');
+      try {
+        if (!isNewUser) {
+          const checkUrl = new URL(apiUrl('check_employee'));
+          checkUrl.searchParams.set('username', username);
+          const cfg = getConfig();
+          const checkResp = await fetch(checkUrl, { headers: { Authorization: `Bearer ${cfg.workerSecret}` } });
+          const check = await checkResp.json();
+          if (!check.ok) throw new Error(check.error || 'فشل فحص المستخدم');
 
           if (!check.hasPin) {
             isNewUser = true;
             firstPin = pinBuffer;
-            confirmPinBuffer = '';
-            updatePinDots('');
+            pinBuffer = '';
             document.getElementById('pinLabel').textContent = 'أعد إدخال الـ PIN للتأكيد';
             document.getElementById('loginBtn').textContent = 'تسجيل PIN';
             document.getElementById('loginBtn').disabled = true;
-            showToast('هذا أول دخول — أعد إدخال PIN للتأكيد', 'info');
+            updatePinDots('');
+            showToast('أعد إدخال نفس الـ PIN', 'info');
             return;
           }
 
@@ -1052,31 +1123,22 @@
           });
           currentEmployee = { username, displayName: data.displayName || username };
           afterLogin();
-        } catch (e) {
-          showLoginError(e.message || 'فشل الدخول');
-          pinBuffer = '';
-          setTimeout(() => updatePinDots(''), 350);
+          return;
         }
-        return;
-      }
 
-      if (firstPin !== confirmPinBuffer) {
-        showLoginError('الـ PIN غير متطابق');
-        confirmPinBuffer = '';
-        setTimeout(() => updatePinDots(''), 350);
-        return;
-      }
+        if (confirmPinBuffer !== firstPin) {
+          showLoginError('الـ PIN غير متطابق');
+          confirmPinBuffer = '';
+          updatePinDots('');
+          document.getElementById('loginBtn').disabled = true;
+          return;
+        }
 
-      try {
         await apiFetch('register_pin', {
           method: 'POST',
-          body: { username, pin: firstPin },
+          body: { username, pin: confirmPinBuffer },
         });
-        const data = await apiFetch('verify_employee', {
-          method: 'POST',
-          body: { username, pin: firstPin },
-        });
-        currentEmployee = { username, displayName: data.displayName || username };
+        currentEmployee = { username, displayName: username.replace(/_/g, ' ') };
         afterLogin();
       } catch (e) {
         showLoginError(e.message || 'فشل تسجيل PIN');
@@ -1087,27 +1149,29 @@
       beep(1040, .05, 'sine', .03);
       document.getElementById('loginOverlay').classList.add('hidden');
       document.getElementById('activeUserName').textContent = currentEmployee.displayName || currentEmployee.username;
-      showToast(`أهلاً ${currentEmployee.displayName || currentEmployee.username}`, 'success');
+      resetRun();
       loadLogs(false);
+      showToast(`أهلاً ${currentEmployee.displayName || currentEmployee.username}`, 'success');
     }
 
     async function logout() {
-      if (!currentEmployee) return;
       try {
-        await fetch(apiUrl('log_logout') + `&username=${encodeURIComponent(currentEmployee.username)}`, {
-          headers: { Authorization: `Bearer ${getConfig().workerSecret}` },
-        });
+        if (currentEmployee) {
+          const logoutUrl = new URL(apiUrl('log_logout'));
+          logoutUrl.searchParams.set('username', currentEmployee.username);
+          const cfg = getConfig();
+          await fetch(logoutUrl, { headers: { Authorization: `Bearer ${cfg.workerSecret}` } });
+        }
       } catch {}
+
       currentEmployee = null;
       pinClear();
-      document.getElementById('loginOverlay').classList.remove('hidden');
+      resetRun();
       document.getElementById('activeUserName').textContent = '—';
+      document.getElementById('loginOverlay').classList.remove('hidden');
       showToast('تم تسجيل الخروج', 'info');
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // MAIN UI
-    // ══════════════════════════════════════════════════════════════
     function switchMainTab(tab) {
       document.getElementById('tabExport').classList.toggle('active', tab === 'export');
       document.getElementById('tabLogs').classList.toggle('active', tab === 'logs');
@@ -1116,16 +1180,17 @@
       if (tab === 'logs') loadLogs(false);
     }
 
-    function selectJobType(type) {
-      if (state.jobType === type) return;
-      state.jobType = type;
+    function selectJobType(jobType) {
+      state.jobType = jobType;
       resetRun();
     }
 
     function resetRun() {
       state.orders = [];
-      state.duplicates = {};
-      state.allowRepeat = false;
+      state.selectedOrderIds = new Set();
+      state.exportedOrders = [];
+      state.exportDuplicates = {};
+      state.allowRepeatExport = false;
       state.exported = false;
       state.manualConfirmed = false;
       state.pageInfo = null;
@@ -1137,60 +1202,134 @@
       document.getElementById('updateS2Btn').textContent = JOB_META[state.jobType].updateText;
       document.getElementById('statNext').textContent = JOB_META[state.jobType].next;
       document.getElementById('emptyOrdersHint').style.display = 'block';
+      closeExportDuplicateModal();
       clearStatus();
       updateRunUI();
       renderOrders();
     }
 
-    function getDuplicateCount() {
-      return Object.keys(state.duplicates || {}).length;
+    function getSelectedOrders() {
+      return state.orders.filter(order => state.selectedOrderIds.has(order.id));
     }
 
-    function hasBlockingDuplicates() {
-      return getDuplicateCount() > 0 && !state.allowRepeat;
+    function payloadOrders(orders) {
+      const source = Array.isArray(orders) ? orders : getSelectedOrders();
+      return source.map((order) => ({
+        id: order.id,
+        name: order.name,
+        manualStatus: order.manualStatus?.value || JOB_META[state.jobType].expected,
+        courier: order.courier?.value || 'Bosta',
+      }));
+    }
+
+    function syncSelectAllOrders() {
+      const master = document.getElementById('selectAllOrders');
+      if (!master) return;
+
+      const total = state.orders.length;
+      const selected = getSelectedOrders().length;
+      master.checked = total > 0 && selected === total;
+      master.indeterminate = selected > 0 && selected < total;
+      master.disabled = total === 0;
+    }
+
+    function toggleSelectAllOrders(master) {
+      state.selectedOrderIds = master.checked
+        ? new Set(state.orders.map(order => order.id))
+        : new Set();
+
+      if (!master.checked) state.exportDuplicates = {};
+      renderOrders();
+      updateRunUI();
+    }
+
+    function toggleOrderSelection(cb) {
+      const orderId = cb.dataset.id;
+      if (!orderId) return;
+
+      if (cb.checked) state.selectedOrderIds.add(orderId);
+      else state.selectedOrderIds.delete(orderId);
+
+      cb.closest('.order-row')?.classList.toggle('selected', cb.checked);
+      syncSelectAllOrders();
+      updateRunUI();
     }
 
     function updateRunUI() {
-      const count = state.orders.length;
-      const dupCount = getDuplicateCount();
+      const totalCount = state.orders.length;
+      const selectedCount = getSelectedOrders().length;
+      const exportedCount = state.exportedOrders.length;
 
-      document.getElementById('statOrders').textContent = String(count);
-      document.getElementById('statDuplicates').textContent = String(dupCount);
+      document.getElementById('statOrders').textContent = String(totalCount);
+      document.getElementById('statSelected').textContent = String(selectedCount);
       document.getElementById('statExported').textContent = state.exported ? 'نعم' : 'لا';
       document.getElementById('statManualConfirm').textContent = state.manualConfirmed ? 'نعم' : 'لا';
 
-      document.getElementById('exportBtn').disabled = count === 0 || hasBlockingDuplicates();
-      document.getElementById('confirmBtn').disabled = !state.exported || count === 0 || state.manualConfirmed;
-      document.getElementById('updateS2Btn').disabled = !state.manualConfirmed || count === 0;
+      document.getElementById('exportBtn').disabled = selectedCount === 0;
+      document.getElementById('confirmBtn').disabled = !state.exported || exportedCount === 0 || state.manualConfirmed;
+      document.getElementById('updateS2Btn').disabled = !state.manualConfirmed || exportedCount === 0;
 
-      const panel = document.getElementById('duplicatePanel');
-      panel.classList.toggle('show', dupCount > 0);
-      document.getElementById('allowRepeatBtn').disabled = state.allowRepeat;
-
-      const dupList = document.getElementById('duplicateList');
-      dupList.innerHTML = '';
-      Object.entries(state.duplicates || {}).slice(0, 30).forEach(([name, row]) => {
-        const chip = document.createElement('span');
-        chip.className = 'dup-chip';
-        chip.title = `${typeLabel(row.type)} — ${row.employee || ''}`;
-        chip.textContent = name;
-        dupList.appendChild(chip);
-      });
-
-      if (dupCount > 30) {
-        const more = document.createElement('span');
-        more.className = 'dup-chip';
-        more.textContent = `+${dupCount - 30}`;
-        dupList.appendChild(more);
-      }
+      syncSelectAllOrders();
     }
 
-    function allowRepeat() {
-      state.allowRepeat = true;
-      showToast('تم السماح بالتكرار لهذه العملية', 'warn');
-      showStatus('تم السماح بعمل الأوردرات المكررة مرة تانية. راجع القائمة قبل التصدير/التأكيد.', 'warn');
-      updateRunUI();
-      renderOrders();
+    function playDuplicateAlertSound() {
+      beep(220, .12, 'square', .02);
+      setTimeout(() => beep(220, .12, 'square', .02), 165);
+    }
+
+    function closeExportDuplicateModal() {
+      document.getElementById('exportDuplicateOverlay')?.classList.remove('open');
+    }
+
+    function closeExportDuplicateOnBackdrop(event) {
+      if (event.target.id === 'exportDuplicateOverlay') closeExportDuplicateModal();
+    }
+
+    function renderExportDuplicateModal(duplicates, selectedOrders) {
+      const rows = document.getElementById('exportDuplicateRows');
+      const summary = document.getElementById('exportDuplicateSummary');
+      const list = Object.entries(duplicates || {})
+        .map(([name, row]) => ({
+          name,
+          exportCount: Number(row?.exportCount || 0),
+          lastExportAt: row?.lastExportAt || null,
+        }))
+        .sort((a, b) => String(b.lastExportAt || '').localeCompare(String(a.lastExportAt || '')));
+
+      summary.innerHTML = `
+        <span class="export-dup-chip">المحدد للتصدير: ${selectedOrders.length}</span>
+        <span class="export-dup-chip">المكرر: ${list.length}</span>
+      `;
+
+      rows.innerHTML = '';
+      list.forEach((item) => {
+        const div = document.createElement('div');
+        div.className = 'export-dup-table-row';
+        div.innerHTML = `
+          <div class="export-dup-order">${escapeHtml(item.name)}</div>
+          <div>${escapeHtml(formatCairo(item.lastExportAt))}</div>
+          <div class="export-dup-count">${escapeHtml(item.exportCount)}</div>
+        `;
+        rows.appendChild(div);
+      });
+    }
+
+    function openExportDuplicateModal(duplicates, selectedOrders) {
+      renderExportDuplicateModal(duplicates, selectedOrders);
+      playDuplicateAlertSound();
+
+      const oldBtn = document.getElementById('exportDuplicateContinueBtn');
+      const newBtn = oldBtn.cloneNode(true);
+      oldBtn.replaceWith(newBtn);
+
+      newBtn.addEventListener('click', async () => {
+        newBtn.disabled = true;
+        newBtn.textContent = '⏳ جاري المتابعة...';
+        closeExportDuplicateModal();
+        await performExcelExport(selectedOrders.slice(), true);
+      });
+
+      document.getElementById('exportDuplicateOverlay').classList.add('open');
     }
 
     async function fetchCandidates() {
@@ -1214,20 +1353,20 @@
         });
 
         state.orders = data.orders || [];
-        state.duplicates = data.duplicates || {};
+        state.selectedOrderIds = new Set();
+        state.exportedOrders = [];
+        state.exportDuplicates = {};
+        state.allowRepeatExport = false;
         state.pageInfo = data.pageInfo || null;
 
         document.getElementById('emptyOrdersHint').style.display = state.orders.length ? 'none' : 'block';
         renderOrders();
         updateRunUI();
 
-        const dupCount = getDuplicateCount();
         if (!state.orders.length) {
           showStatus(`لم يتم العثور على أوردرات مطابقة: S2 = ${JOB_META[state.jobType].expected} + Courier = Bosta`, 'error');
-        } else if (dupCount > 0) {
-          showStatus(`تم الاستعلام عن ${state.orders.length} أوردر، لكن فيه ${dupCount} أوردر موجودين في السجل قبل كده. لازم تسمح بالتكرار لو هتكمل عليهم.`, 'warn');
         } else {
-          showStatus(`✓ تم الاستعلام عن ${state.orders.length} أوردر مطابق وجاهز للتصدير.`, 'success');
+          showStatus(`✓ تم الاستعلام عن ${state.orders.length} أوردر. حدّد الأوردرات المطلوبة أو استخدم "الكل"، ثم اضغط تصدير Excel.`, 'success');
         }
 
         if (state.pageInfo?.stoppedByLimit) {
@@ -1243,52 +1382,90 @@
       }
     }
 
-    function payloadOrders() {
-      return state.orders.map((order) => ({
-        id: order.id,
-        name: order.name,
-        manualStatus: order.manualStatus?.value || JOB_META[state.jobType].expected,
-        courier: order.courier?.value || 'Bosta',
-      }));
+    async function exportCurrentOrders() {
+      if (!currentEmployee) { showToast('سجّل الدخول أولاً', 'error'); return; }
+      const selectedOrders = getSelectedOrders();
+      if (!selectedOrders.length) { showToast('حدد أوردر واحد على الأقل للتصدير', 'error'); return; }
+
+      const btn = document.getElementById('exportBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ جاري فحص التكرار...';
+      showStatus('جاري فحص selected orders مقابل export logs السابقة...', 'info');
+
+      try {
+        const data = await apiFetch('check_export_duplicates', {
+          method: 'POST',
+          body: {
+            jobType: state.jobType,
+            orders: payloadOrders(selectedOrders),
+          },
+        });
+
+        state.exportDuplicates = data.duplicates || {};
+        renderOrders();
+
+        if (Number(data.count || 0) > 0) {
+          showStatus(`تم اكتشاف ${data.count} أوردر سبق تصديره Excel. راجع النافذة قبل المتابعة.`, 'warn');
+          openExportDuplicateModal(state.exportDuplicates, selectedOrders);
+          return;
+        }
+
+        state.exportDuplicates = {};
+        renderOrders();
+      } catch (e) {
+        showStatus('فشل فحص التكرار قبل التصدير: ' + e.message, 'error');
+        showToast('فشل فحص التكرار: ' + e.message, 'error');
+        return;
+      } finally {
+        btn.textContent = '📥 تصدير Excel';
+        updateRunUI();
+      }
+
+      await performExcelExport(selectedOrders, false);
     }
 
-    async function exportCurrentOrders() {
-      if (!state.orders.length) { showToast('لا توجد أوردرات للتصدير', 'error'); return; }
-      if (hasBlockingDuplicates()) {
-        showToast('فيه مكرر في السجل — اضغط السماح بالتكرار الأول', 'error');
-        return;
-      }
+    async function performExcelExport(orders, allowRepeat) {
+      if (!orders.length) { showToast('لا توجد أوردرات للتصدير', 'error'); return; }
 
       const btn = document.getElementById('exportBtn');
       btn.disabled = true;
       btn.textContent = '⏳ جاري تجهيز Excel...';
-      showStatus('جاري إنشاء ملف Excel...', 'info');
+      showStatus('جاري إنشاء ملف Excel وتسجيل عملية التصدير...', 'info');
 
       try {
-        await exportToExcel(state.orders, state.jobType);
+        const file = await buildExcelExportFile(orders, state.jobType);
 
-        try {
-          await apiFetch('record_export', {
-            method: 'POST',
-            body: {
-              jobType: state.jobType,
-              employee: currentEmployee.username,
-              orders: payloadOrders(),
-              allowRepeat: state.allowRepeat,
-            },
-          });
-        } catch (logErr) {
-          showToast('تم إنشاء Excel لكن تسجيل export فشل: ' + logErr.message, 'warn', 6000);
-        }
+        await apiFetch('record_export', {
+          method: 'POST',
+          body: {
+            jobType: state.jobType,
+            employee: currentEmployee.username,
+            orders: payloadOrders(orders),
+            allowRepeat,
+          },
+        });
+
+        downloadExcelExportFile(file);
 
         state.exported = true;
         state.manualConfirmed = false;
-        showStatus(`✓ تم تصدير ${state.orders.length} أوردر. الخطوة التالية: ارفع الملف على داشبورد بوسطة وأرسل الفواتير للمخزن خارج الأداة، ثم اضغط زر التأكيد اليدوي.`, 'success');
-        showToast(`✓ تم تصدير ${state.orders.length} أوردر`, 'success');
+        state.exportedOrders = orders.slice();
+        state.allowRepeatExport = !!allowRepeat;
+        state.exportDuplicates = allowRepeat ? state.exportDuplicates : {};
+
+        showStatus(`✓ تم تصدير ${orders.length} أوردر. الخطوة التالية: ارفع الملف على داشبورد بوسطة وأرسل الفواتير للمخزن خارج الأداة، ثم اضغط زر التأكيد اليدوي.`, 'success');
+        showToast(`✓ تم تصدير ${orders.length} أوردر`, 'success');
         await loadLogs(false);
       } catch (e) {
-        showStatus('فشل التصدير: ' + e.message, 'error');
-        showToast('فشل التصدير: ' + e.message, 'error');
+        if (e.data?.code === 'DUPLICATES_FOUND') {
+          state.exportDuplicates = e.data.duplicates || {};
+          renderOrders();
+          showStatus('ظهر تداخل في السجل أثناء تجهيز التصدير. راجع نافذة التكرار قبل المتابعة.', 'warn');
+          openExportDuplicateModal(state.exportDuplicates, orders);
+        } else {
+          showStatus('فشل التصدير: ' + e.message, 'error');
+          showToast('فشل التصدير: ' + e.message, 'error');
+        }
       } finally {
         btn.textContent = '📥 تصدير Excel';
         updateRunUI();
@@ -1301,14 +1478,15 @@
         return;
       }
 
-      if (!state.orders.length) {
-        showToast('لا توجد أوردرات للتأكيد', 'error');
+      const exportedOrders = state.exportedOrders || [];
+      if (!exportedOrders.length) {
+        showToast('لا توجد أوردرات مصدّرة للتأكيد', 'error');
         return;
       }
 
       const confirmText = state.jobType === 'return'
-        ? `تأكيد إنك رفعت ${state.orders.length} أوردر على داشبورد بوسطة؟\n\nمهم: الخطوة دي تسجيل تأكيد فقط، ومش هتغيّر S2.`
-        : `تأكيد إنك رفعت ${state.orders.length} أوردر على داشبورد بوسطة وأرسلت الفواتير للمخزن؟\n\nمهم: الخطوة دي تسجيل تأكيد فقط، ومش هتغيّر S2.`;
+        ? `تأكيد إنك رفعت ${exportedOrders.length} أوردر على داشبورد بوسطة؟\n\nمهم: الخطوة دي تسجيل تأكيد فقط، ومش هتغيّر S2.`
+        : `تأكيد إنك رفعت ${exportedOrders.length} أوردر على داشبورد بوسطة وأرسلت الفواتير للمخزن؟\n\nمهم: الخطوة دي تسجيل تأكيد فقط، ومش هتغيّر S2.`;
 
       if (!confirm(confirmText)) return;
 
@@ -1323,25 +1501,18 @@
           body: {
             jobType: state.jobType,
             employee: currentEmployee.username,
-            orders: payloadOrders(),
-            allowRepeat: state.allowRepeat,
+            orders: payloadOrders(exportedOrders),
+            allowRepeat: state.allowRepeatExport,
           },
         });
 
         state.manualConfirmed = true;
-        showStatus(`✓ تم تسجيل التأكيد اليدوي لـ ${state.orders.length} أوردر. الخطوة الأخيرة: اضغط "${JOB_META[state.jobType].updateText}" لتحديث حالة S2.`, 'success');
+        showStatus(`✓ تم تسجيل التأكيد اليدوي لـ ${exportedOrders.length} أوردر. الخطوة الأخيرة: اضغط "${JOB_META[state.jobType].updateText}" لتحديث حالة S2.`, 'success');
         showToast('✓ تم تسجيل التأكيد اليدوي', 'success');
         await loadLogs(false);
       } catch (e) {
-        if (e.data?.code === 'DUPLICATES_FOUND') {
-          state.duplicates = e.data.duplicates || {};
-          updateRunUI();
-          renderOrders();
-          showStatus('فيه أوردرات تم تأكيدها يدويًا قبل كده. اضغط السماح بالتكرار لو عايز تكمل.', 'warn');
-        } else {
-          showStatus('فشل تسجيل التأكيد اليدوي: ' + e.message, 'error');
-          showToast('فشل تسجيل التأكيد اليدوي: ' + e.message, 'error');
-        }
+        showStatus('فشل تسجيل التأكيد اليدوي: ' + e.message, 'error');
+        showToast('فشل تسجيل التأكيد اليدوي: ' + e.message, 'error');
       } finally {
         btn.textContent = JOB_META[state.jobType].confirmText;
         updateRunUI();
@@ -1354,12 +1525,13 @@
         return;
       }
 
-      if (!state.orders.length) {
-        showToast('لا توجد أوردرات للتحديث', 'error');
+      const exportedOrders = state.exportedOrders || [];
+      if (!exportedOrders.length) {
+        showToast('لا توجد أوردرات مصدّرة للتحديث', 'error');
         return;
       }
 
-      const confirmText = `تأكيد تحديث S2 لعدد ${state.orders.length} أوردر إلى ${JOB_META[state.jobType].next}؟`;
+      const confirmText = `تأكيد تحديث S2 لعدد ${exportedOrders.length} أوردر إلى ${JOB_META[state.jobType].next}؟`;
       if (!confirm(confirmText)) return;
 
       const btn = document.getElementById('updateS2Btn');
@@ -1373,8 +1545,8 @@
           body: {
             jobType: state.jobType,
             employee: currentEmployee.username,
-            orders: payloadOrders(),
-            allowRepeat: state.allowRepeat,
+            orders: payloadOrders(exportedOrders),
+            allowRepeat: state.allowRepeatExport,
           },
         });
 
@@ -1384,21 +1556,16 @@
         state.exported = false;
         state.manualConfirmed = false;
         state.orders = [];
-        state.duplicates = {};
-        state.allowRepeat = false;
+        state.selectedOrderIds = new Set();
+        state.exportedOrders = [];
+        state.exportDuplicates = {};
+        state.allowRepeatExport = false;
         renderOrders();
         updateRunUI();
         await loadLogs(false);
       } catch (e) {
-        if (e.data?.code === 'DUPLICATES_FOUND') {
-          state.duplicates = e.data.duplicates || {};
-          updateRunUI();
-          renderOrders();
-          showStatus('فيه أوردرات تم تحديثها قبل كده. اضغط السماح بالتكرار لو عايز تكمل.', 'warn');
-        } else {
-          showStatus('فشل تحديث S2: ' + e.message, 'error');
-          showToast('فشل تحديث S2: ' + e.message, 'error');
-        }
+        showStatus('فشل تحديث S2: ' + e.message, 'error');
+        showToast('فشل تحديث S2: ' + e.message, 'error');
       } finally {
         btn.textContent = JOB_META[state.jobType].updateText;
         updateRunUI();
@@ -1412,14 +1579,33 @@
       const list = document.getElementById('ordersList');
       list.classList.toggle('show', state.orders.length > 0);
 
+      const selectedCount = getSelectedOrders().length;
       document.getElementById('orderListHint').textContent =
-        state.orders.length ? `${state.orders.length} أوردر` : 'اضغط الاستعلام الأول';
+        state.orders.length ? `${state.orders.length} أوردر — المحدد ${selectedCount}` : 'اضغط الاستعلام الأول';
+
+      const exportedIds = new Set((state.exportedOrders || []).map(order => order.id));
 
       state.orders.forEach((order) => {
         const addr = order.shippingAddress || {};
-        const dup = state.duplicates?.[order.name];
+        const selected = state.selectedOrderIds.has(order.id);
+        const duplicate = state.exportDuplicates?.[order.name];
+        const exportedInCurrentBatch = exportedIds.has(order.id);
+
         const row = document.createElement('div');
-        row.className = 'order-row';
+        row.className = `order-row${selected ? ' selected' : ''}`;
+
+        const selectCell = document.createElement('div');
+        selectCell.className = 'order-select-cell';
+        selectCell.innerHTML = `
+          <input
+            class="order-checkbox"
+            type="checkbox"
+            data-id="${escapeHtml(order.id)}"
+            aria-label="تحديد ${escapeHtml(order.name)}"
+            ${selected ? 'checked' : ''}
+            onchange="toggleOrderSelection(this)"
+          />
+        `;
 
         const name = document.createElement('div');
         name.innerHTML = `<span class="order-name">${escapeHtml(order.name)}</span>`;
@@ -1436,47 +1622,47 @@
         const courier = document.createElement('div');
         courier.innerHTML = `<span class="badge badge-ok">${escapeHtml(order.courier?.value || 'Bosta')}</span>`;
 
-        const log = document.createElement('div');
-        log.innerHTML = dup
-          ? `<span class="badge badge-warn">مكرر</span>`
-          : `<span class="badge badge-ok">جديد</span>`;
+        const exportStatus = document.createElement('div');
+        exportStatus.innerHTML = exportedInCurrentBatch
+          ? `<span class="badge badge-purple">Batch مصدّر</span>`
+          : duplicate
+            ? `<span class="badge badge-warn">تصدير سابق</span>`
+            : `<span class="badge badge-ok">جاهز</span>`;
 
-        row.append(name, customer, status, courier, log);
+        row.append(selectCell, name, customer, status, courier, exportStatus);
         rows.appendChild(row);
       });
+
+      syncSelectAllOrders();
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // EXCEL EXPORT — Bosta official template preserved from v2.2.0
-    // ══════════════════════════════════════════════════════════════
-    async function exportToExcel(orders, jobType) {
+    async function buildExcelExportFile(orders, jobType) {
       const wb = new ExcelJS.Workbook();
       wb.views = [{ rightToLeft: false }];
       const ws = wb.addWorksheet('Add orders here');
 
-      // IMPORTANT: Keep Bosta template columns A:U exactly as v2.2.0.
       ws.columns = [
-        { key:'fullName',      width:25   }, // A — Full Name
-        { key:'phone',         width:14   }, // B — Phone
-        { key:'city',          width:14   }, // C — City
-        { key:'streetName',    width:22   }, // D — Street Name
-        { key:'cashAmount',    width:13.5 }, // E — Cash Amount
-        { key:'area',          width:10   }, // F — Area
-        { key:'landmark',      width:15   }, // G — Landmark
-        { key:'workAddress',   width:14   }, // H — Work address?
-        { key:'secondPhone',   width:14   }, // I — Second Phone
-        { key:'flexship',      width:20   }, // J — Apply Flexship Fees?
-        { key:'openPackage',   width:20   }, // K — Allow Opening Package?
-        { key:'packageType',   width:20   }, // L — Package Type
-        { key:'itemCount',     width:11   }, // M — No. of Items
-        { key:'description',   width:20   }, // N — Package Description
-        { key:'deliveryNotes', width:16   }, // O — Delivery Notes
-        { key:'orderRef',      width:14   }, // P — Order Reference
-        { key:'returnItems',   width:14   }, // Q — Return #Items
-        { key:'returnDesc',    width:22   }, // R — Return Package Description
-        { key:'goodsValue',    width:16   }, // S — Goods Value Amount
-        { key:'bostaCredits',  width:18   }, // T — Pay With Bosta Credits?
-        { key:'brandName',     width:14   }, // U — Brand Name
+        { key:'fullName',      width:25   },
+        { key:'phone',         width:14   },
+        { key:'city',          width:14   },
+        { key:'streetName',    width:22   },
+        { key:'cashAmount',    width:13.5 },
+        { key:'area',          width:10   },
+        { key:'landmark',      width:15   },
+        { key:'workAddress',   width:14   },
+        { key:'secondPhone',   width:14   },
+        { key:'flexship',      width:20   },
+        { key:'openPackage',   width:20   },
+        { key:'packageType',   width:20   },
+        { key:'itemCount',     width:11   },
+        { key:'description',   width:20   },
+        { key:'deliveryNotes', width:16   },
+        { key:'orderRef',      width:14   },
+        { key:'returnItems',   width:14   },
+        { key:'returnDesc',    width:22   },
+        { key:'goodsValue',    width:16   },
+        { key:'bostaCredits',  width:18   },
+        { key:'brandName',     width:14   },
       ];
 
       const RF = { color:{ argb:'FFFF0000' }, bold:true, name:'Calibri', size:10 };
@@ -1518,7 +1704,6 @@
         const count = items.reduce((s, li) => s + (li.currentQuantity || 1), 0) || null;
         const allReturns = order.returns?.edges || [];
 
-        // R — Return Package Description: always products returned by customer.
         const returnLineItemsList = allReturns
           .flatMap(r => r.node.returnLineItems?.edges || [])
           .map(e => {
@@ -1528,14 +1713,11 @@
           .filter(Boolean);
         const returnDesc = returnLineItemsList.join(' | ') || null;
 
-        // Q — Return #Items: empty if only 1 item, exactly like v2.2.0.
         const returnQtyTotal = allReturns
           .flatMap(r => r.node.returnLineItems?.edges || [])
           .reduce((s, e) => s + (e.node.quantity || 1), 0);
         const returnItemsCount = returnQtyTotal > 1 ? returnQtyTotal : null;
 
-        // S — Goods Value Amount
-        // Exchange: price of exchange items. Return: price of returned items.
         const hasExchange = allReturns.some(r => (r.node.exchangeLineItems?.edges || []).length > 0);
         let goodsValue = 0;
         if (hasExchange) {
@@ -1587,18 +1769,25 @@
       const pad   = n => String(n).padStart(2,'0');
       const date  = `${today.getUTCFullYear()}-${pad(today.getUTCMonth()+1)}-${pad(today.getUTCDate())}`;
       const buf   = await wb.xlsx.writeBuffer();
-      const a     = document.createElement('a');
-      a.href      = URL.createObjectURL(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-      a.download  = `${JOB_META[jobType].filePrefix}_${date}.xlsx`;
+
+      return {
+        buf,
+        filename: `${JOB_META[jobType].filePrefix}_${date}.xlsx`,
+      };
+    }
+
+    function downloadExcelExportFile(file) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([file.buf], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }));
+      a.download = file.filename;
       document.body.appendChild(a);
       a.click();
       URL.revokeObjectURL(a.href);
       a.remove();
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // LOGS
-    // ══════════════════════════════════════════════════════════════
     async function loadLogs(showMsg = true) {
       if (!isConfigured()) return;
       try {
@@ -1672,9 +1861,6 @@
       return labels[type] || type || '—';
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // UTILITIES
-    // ══════════════════════════════════════════════════════════════
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, ch => ({
         '&':'&amp;',
@@ -1712,9 +1898,6 @@
       return `${y}-${m}-${day} ${pad(h)}:${mins} ${ampm}`;
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // INIT
-    // ══════════════════════════════════════════════════════════════
     updateSettingsBtn();
     updateLoginSettingsBtn();
     resetRun();
