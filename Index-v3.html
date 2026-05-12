@@ -1301,8 +1301,16 @@
       setTimeout(() => beep(220, .12, 'square', .02), 165);
     }
 
+    function resetExportDuplicateContinueBtn() {
+      const btn = document.getElementById('exportDuplicateContinueBtn');
+      if (!btn) return;
+      btn.disabled = false;
+      btn.textContent = 'السماح بالتصدير والمتابعة';
+    }
+
     function closeExportDuplicateModal() {
       document.getElementById('exportDuplicateOverlay')?.classList.remove('open');
+      resetExportDuplicateContinueBtn();
     }
 
     function closeExportDuplicateOnBackdrop(event) {
@@ -1339,6 +1347,7 @@
     }
 
     function openExportDuplicateModal(duplicates, selectedOrders) {
+      resetExportDuplicateContinueBtn();
       renderExportDuplicateModal(duplicates, selectedOrders);
       playDuplicateAlertSound();
 
