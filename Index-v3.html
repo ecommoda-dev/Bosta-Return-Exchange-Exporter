@@ -1794,6 +1794,10 @@
           : rawCash;
 
         const count = items.reduce((s, li) => s + (li.currentQuantity || 1), 0) || null;
+        const standardPackageDescription = items
+          .map(li => `${li.sku || li.name} x${li.currentQuantity}`)
+          .join(' | ') || null;
+
         const allReturns = order.returns?.edges || [];
 
         const returnLineItemsList = allReturns
@@ -1809,6 +1813,35 @@
           .flatMap(r => r.node.returnLineItems?.edges || [])
           .reduce((s, e) => s + (e.node.quantity || 1), 0);
         const returnItemsCount = returnQtyTotal > 1 ? returnQtyTotal : null;
+
+        // Exchange export must describe ONLY the items that will go to the customer,
+        // not every active order line item.
+        const exchangePackageRows = allReturns
+          .flatMap(r => r.node.exchangeLineItems?.edges || [])
+          .flatMap(e => {
+            const qty = e.node.quantity || 1;
+            return (e.node.lineItems || [])
+              .map(li => ({
+                label: li?.sku || li?.name || null,
+                qty,
+              }))
+              .filter(row => !!row.label);
+          });
+
+        const exchangePackageDescription = exchangePackageRows
+          .map(row => `${row.label} x${row.qty}`)
+          .join(' | ') || null;
+
+        const exchangePackageCount = exchangePackageRows
+          .reduce((s, row) => s + (row.qty || 1), 0) || null;
+
+        const packageDescriptionForExport = jobType === 'exchange'
+          ? exchangePackageDescription
+          : standardPackageDescription;
+
+        const packageItemCountForExport = jobType === 'exchange'
+          ? exchangePackageCount
+          : count;
 
         const hasExchange = allReturns.some(r => (r.node.exchangeLineItems?.edges || []).length > 0);
         let goodsValue = 0;
@@ -1845,8 +1878,8 @@
           flexship:      'Yes',
           openPackage:   'Yes',
           packageType:   null,
-          itemCount:     count !== 1 ? count : null,
-          description:   items.map(li => `${li.sku || li.name} x${li.currentQuantity}`).join(' | ') || null,
+          itemCount:     packageItemCountForExport !== 1 ? packageItemCountForExport : null,
+          description:   packageDescriptionForExport,
           deliveryNotes: order.note    || null,
           orderRef:      order.name    || null,
           returnItems:   returnItemsCount,
