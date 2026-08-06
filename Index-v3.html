@@ -1,2023 +1,1097 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bosta Return / Exchange Exporter V3.1.0</title>
+// ═══════════════════════════════════════════════════════════════
+// Bosta Return/Exchange Exporter — Worker v4.0.0
+// EcomModa Internal Tools
+// ═══════════════════════════════════════════════════════════════
+//
+// v4.0.0 (UX overhaul, HTML-side — paired with this Worker):
+// - confirm_upload now accepts an optional `checklist` object from the
+//   new checkbox-gated confirmation modal (bostaUploaded / invoicesSent)
+//   and folds it into both log entries as an audit trail. The checklist
+//   is NEVER used to gate the write server-side — the HTML modal is
+//   what gates the button; this is a display/audit convenience only.
+// - record_manual_confirmation is no longer called by the HTML (the
+//   two-step exchange confirm was merged into the single confirm_upload
+//   step). The endpoint itself is left in place, unused, in case it's
+//   needed again — nothing else in the stack calls it.
+//
+// Required bindings / vars:
+// - DB              D1 binding
+// - WORKER_SECRET   secret
+// - SHOP_DOMAIN     6c7e1a-53.myshopify.com
+// - CLIENT_ID       Shopify OAuth client id
+// - CLIENT_SECRET   Shopify OAuth client secret
+//
+// Shopify metafields used:
+// - custom.status_2_r_e      (S2)
+// - custom.printing_time_s2  (وقت وتاريخ تحديث S2)
+// - custom.courier           (مندوب)
+//
+// v3.3.0 CHANGELOG (review fixes — 06-08-2026):
+// - Every S2 write now ALSO logs to tool='metafields_change' (was only
+//   logged under this tool's own name before — cross-tool cycle-time /
+//   R-E-cycle-count KPIs had a permanent hole).
+// - printing_time_s2 is now truncated to whole seconds before writing,
+//   so verifyManualStatus's ms-exact comparison can't false-fail on
+//   Shopify silently dropping sub-second precision.
+// - CORS switched from wildcard '*' to strict ALLOWED_ORIGINS — this
+//   Worker performs metafieldsSet writes on live orders, which puts it
+//   in the "write tool" bucket per cors-patterns.md, not "read-only".
+// - GraphQL alias renamed manualStatus → s2Status everywhere (including
+//   the wire payload from the HTML) — the old name collided with S1's
+//   custom.manual_status naming convention used elsewhere in the stack.
+// - get_logs reverted to the canonical shared-functions.md version
+//   (excludes login/logout in SQL, 100/page) + added get_logs_count and
+//   get_logs_export, per the mandatory 3-endpoint log tab pattern.
+// - Section Tags added throughout; §LOG-ENDPOINTS moved to the end of
+//   the handler (was interleaved inside §AUTH before).
+//
+// KNOWN INTENTIONAL EXCEPTION (confirmed with Ahmed, 06-08-2026):
+// Per ecommoda-order-lifecycle/state-machines.md, S2 = 'In-Return' is
+// documented as "Bosta only" (set automatically by courier sync). This
+// Worker's Return flow instead writes 'In-Return' manually, the moment
+// staff confirm the Bosta-dashboard upload, as ONE combined step. This
+// is a deliberate simplification for this specific tool — there is no
+// live Bosta→Shopify auto-sync feeding S2 yet, so the manual confirm
+// is the only trigger available. Revisit if/when that sync exists.
+//
+// ═══════════════════════════════════════════════════════════════
 
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+// ══════════════════════════════════════════════════════
+// §CONSTANTS
+// ══════════════════════════════════════════════════════
+const TOOL_NAME = 'bosta_exchange_export';
+const SHOPIFY_API_VERSION = '2026-01';
 
-  <style>
-    :root {
-      --bg:             #f3f4f6;
-      --surface:        #ffffff;
-      --surface-2:      #f9fafb;
-      --border:         #e5e7eb;
-      --border-strong:  #d1d5db;
-      --text-primary:   #111827;
-      --text-secondary: #6b7280;
-      --text-muted:     #6b7280;
-      --accent:         #2563eb;
-      --accent-light:   #eff6ff;
-      --accent-dark:    #1d4ed8;
-      --green:          #16a34a;
-      --green-light:    #f0fdf4;
-      --green-border:   #86efac;
-      --red:            #dc2626;
-      --red-light:      #fef2f2;
-      --red-border:     #fca5a5;
-      --amber:          #d97706;
-      --amber-light:    #fffbeb;
-      --amber-border:   #fcd34d;
-      --purple:         #7c3aed;
-      --purple-light:   #f5f3ff;
-      --purple-border:  #c4b5fd;
-      --radius:         12px;
-      --radius-sm:      8px;
-      --shadow:         0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
-      --font-body:      'Noto Sans Arabic', -apple-system, sans-serif;
-      --font-mono:      'IBM Plex Mono', monospace;
-    }
+const STATUS_BY_JOB = {
+  return:   'Confirmed + RETURN',
+  exchange: 'Confirmed + EXCHANGE',
+};
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: var(--font-body);
-      background: var(--bg);
-      color: var(--text-primary);
-      font-size: 14px;
-      min-height: 100vh;
-    }
-    button, input, select { font-family: inherit; }
-    .container { max-width: 1040px; margin: 0 auto; padding: 16px; }
+const NEXT_STATUS_BY_JOB = {
+  return:   'In-Return',
+  exchange: 'Ready',
+};
 
-    .app-header {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 10px 16px;
-      margin-bottom: 12px;
-      box-shadow: var(--shadow);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .app-title { display: flex; align-items: center; gap: 10px; }
-    .app-icon { font-size: 23px; }
-    .app-title-text h1 { font-size: 15px; font-weight: 800; line-height: 1.25; }
-    .app-title-text span { font-size: 11px; color: var(--text-muted); }
-    .app-header-btns { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+const EXPORT_TYPES = ['export_return', 'export_exchange'];
 
-    .hbtn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 7px 12px;
-      border: 1.5px solid var(--border-strong);
-      background: var(--surface);
-      border-radius: var(--radius-sm);
-      color: var(--text-secondary);
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all .15s;
-      white-space: nowrap;
-    }
-    .hbtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
-    .hbtn.settings-configured { border-color: var(--green); color: var(--green); background: var(--green-light); }
-    .hbtn.ver-btn { border-color: #bfdbfe; color: #1d4ed8; background: #eff6ff; font-family: var(--font-mono); }
-    .hbtn.active-user { border-color: var(--green); color: var(--green); background: var(--green-light); }
-    .hbtn.active-user:hover { border-color: var(--red); color: var(--red); background: var(--red-light); }
+const DISCOVERY_PAGE_SIZE = 100;
+const DISCOVERY_MAX_PAGES = 10;
+const DETAILS_BATCH_SIZE = 50;
 
-    .login-overlay {
-      position: fixed;
-      inset: 0;
-      background: var(--bg);
-      z-index: 300;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .login-overlay.hidden { display: none; }
-    .login-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px 24px;
-      width: 100%;
-      max-width: 370px;
-      box-shadow: 0 8px 32px rgba(0,0,0,.1);
-    }
-    .login-title { font-size: 17px; font-weight: 800; margin-bottom: 4px; text-align: center; }
-    .login-sub { font-size: 12px; color: var(--text-muted); text-align: center; margin-bottom: 20px; }
-    .login-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
-    .login-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; }
-    .login-select {
-      border: 1.5px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      padding: 9px 11px;
-      font-size: 13px;
-      color: var(--text-primary);
-      outline: none;
-      width: 100%;
-      background: var(--surface);
-      transition: border-color .15s;
-    }
-    .login-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
-    .pin-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
-    .pin-display { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
-    .pin-dot {
-      width: 40px; height: 40px;
-      border: 1.5px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      background: var(--surface-2);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 20px; font-weight: 800; color: var(--accent);
-      transition: all .15s;
-    }
-    .pin-dot.filled { background: var(--accent-light); border-color: var(--accent); }
-    .pin-dot.error { background: var(--red-light); border-color: var(--red); color: var(--red); }
-    .pin-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 12px; }
-    .pin-key {
-      padding: 11px;
-      border: 1px solid var(--border-strong);
-      background: var(--surface);
-      border-radius: var(--radius-sm);
-      font-family: var(--font-mono);
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--text-primary);
-      cursor: pointer;
-      transition: all .12s;
-      text-align: center;
-    }
-    .pin-key:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
-    .pin-key.del { color: var(--red); font-size: 13px; font-weight: 800; background: var(--red-light); border-color: var(--red-border); }
-    .pin-key.del:hover { background: var(--red); border-color: var(--red); color: #fff; }
-    .login-error {
-      background: var(--red-light); border: 1px solid var(--red-border);
-      border-radius: var(--radius-sm); padding: 8px 12px;
-      font-size: 12px; color: var(--red); font-weight: 700;
-      text-align: center; display: none; margin-bottom: 10px;
-    }
-    .login-error.visible { display: block; }
-    .btn-login {
-      width: 100%; padding: 11px;
-      background: var(--accent); color: #fff; border: none;
-      border-radius: var(--radius-sm); font-size: 14px; font-weight: 800;
-      cursor: pointer; transition: background .15s;
-    }
-    .btn-login:hover { background: var(--accent-dark); }
-    .btn-login:disabled { opacity: .5; cursor: not-allowed; }
+// ══════════════════════════════════════════════════════
+// §CORS — Option B (strict) — this Worker writes order metafields
+// ══════════════════════════════════════════════════════
+const ALLOWED_ORIGINS = [
+  'https://ecommoda-dev.github.io',
+  'https://ecommoda24.github.io',
+];
 
-    .main-tabs-wrap {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 16px;
-      margin-bottom: 12px;
-      box-shadow: var(--shadow);
-      display: flex;
-      justify-content: flex-start;
-    }
-    .main-seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 10px; padding: 4px; gap: 4px; }
-    .main-seg-btn {
-      display: flex; flex-direction: column; align-items: center; gap: 2px;
-      padding: 9px 34px;
-      border-radius: 7px;
-      font-size: 12px;
-      font-weight: 800;
-      color: var(--text-secondary);
-      cursor: pointer;
-      border: none;
-      background: transparent;
-      transition: all .15s;
-      min-width: 150px;
-    }
-    .main-seg-btn .msb-icon { font-size: 17px; }
-    .main-seg-btn.active { background: var(--accent); color: #fff; box-shadow: 0 2px 7px rgba(37,99,235,.3); }
-    .main-seg-btn:not(.active):hover { background: var(--accent-light); color: var(--accent); }
+function getCORS(request) {
+  const origin = request.headers.get('Origin') || '';
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Vary': 'Origin',
+  };
+}
 
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      margin-bottom: 12px;
-      box-shadow: var(--shadow);
-    }
-    .card-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-    .card-title h2 { font-size: 15px; font-weight: 800; }
-    .card-title span { font-size: 11px; color: var(--text-muted); }
+// ══════════════════════════════════════════════════════
+// §HELPERS
+// ══════════════════════════════════════════════════════
+function json(data, status = 200, request = null) {
+  const headers = { 'Content-Type': 'application/json' };
+  Object.assign(headers, request ? getCORS(request) : { 'Access-Control-Allow-Origin': ALLOWED_ORIGINS[0] });
+  return new Response(JSON.stringify(data), { status, headers });
+}
 
-    .mode-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
-    .mode-card {
-      border: 1.5px solid var(--border-strong);
-      border-radius: var(--radius);
-      background: var(--surface);
-      padding: 16px;
-      cursor: pointer;
-      text-align: right;
-      transition: all .15s;
-    }
-    .mode-card:hover { border-color: var(--accent); background: var(--accent-light); }
-    .mode-card.active { border-color: var(--accent); background: var(--accent-light); box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
-    .mode-top { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
-    .mode-ico { font-size: 20px; }
-    .mode-name { font-size: 15px; font-weight: 800; }
-    .mode-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
+function assertPost(request) {
+  if (request.method !== 'POST') {
+    const err = new Error('POST required');
+    err.status = 405;
+    throw err;
+  }
+}
 
-    .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; margin-top: 14px; }
-    .stat-box {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 10px;
-    }
-    .stat-label { font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
-    .stat-value { font-family: var(--font-mono); font-size: 18px; font-weight: 800; margin-top: 3px; direction: ltr; text-align: right; }
-    .stat-green .stat-value { color: var(--green); }
-    .stat-red .stat-value { color: var(--red); }
-    .stat-blue .stat-value { color: var(--accent); }
-    .stat-amber .stat-value { color: var(--amber); }
-    .stat-purple .stat-value { color: var(--purple); }
+function cleanText(v) {
+  return String(v ?? '').trim();
+}
 
-    .actions-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
-    .btn {
-      padding: 10px 16px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 800;
-      cursor: pointer;
-      transition: all .15s;
-      border: 1.5px solid transparent;
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      min-height: 40px;
-    }
-    .btn:disabled { opacity: .5; cursor: not-allowed; }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover:not(:disabled) { background: var(--accent-dark); }
-    .btn-green { background: var(--green); color: #fff; }
-    .btn-green:hover:not(:disabled) { filter: brightness(.95); }
-    .btn-purple { background: var(--purple); color: #fff; }
-    .btn-purple:hover:not(:disabled) { filter: brightness(.95); }
-    .btn-secondary { background: var(--surface); color: var(--text-secondary); border-color: var(--border-strong); }
-    .btn-secondary:hover:not(:disabled) { color: var(--text-primary); border-color: var(--text-secondary); }
-    .btn-warning { background: var(--amber-light); color: var(--amber); border-color: var(--amber-border); }
-    .btn-warning:hover:not(:disabled) { background: var(--amber); color: #fff; border-color: var(--amber); }
-    .btn-red { background: var(--red-light); color: var(--red); border-color: var(--red-border); }
-    .btn-red:hover:not(:disabled) { background: var(--red); color: #fff; border-color: var(--red); }
+// Truncates to whole seconds so a value written now and re-read later
+// compare equal even if Shopify drops sub-second precision on date_time.
+function nowToSecond() {
+  return new Date(Math.floor(Date.now() / 1000) * 1000).toISOString();
+}
 
-    .status-bar {
-      display: none;
-      margin-top: 12px;
-      border: 1px solid;
-      border-radius: var(--radius-sm);
-      padding: 10px 14px;
-      font-size: 13px;
-      line-height: 1.6;
-    }
-    .status-bar.show { display: block; }
-    .status-bar.info { background: var(--accent-light); border-color: #bfdbfe; color: var(--accent-dark); }
-    .status-bar.success { background: var(--green-light); border-color: var(--green-border); color: var(--green); }
-    .status-bar.error { background: var(--red-light); border-color: var(--red-border); color: var(--red); }
-    .status-bar.warn { background: var(--amber-light); border-color: var(--amber-border); color: var(--amber); }
+function normalizeOrderPayload(orders) {
+  if (!Array.isArray(orders)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const o of orders) {
+    const id = cleanText(o?.id);
+    const name = cleanText(o?.name);
+    if (!id || !name || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      name,
+      s2Status: cleanText(o?.s2Status),
+      courier: cleanText(o?.courier),
+    });
+  }
+  return out;
+}
 
-    .orders-list {
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      margin-top: 12px;
-      background: var(--surface);
-      display: none;
-    }
-    .orders-list.show { display: block; }
-    .orders-list-head {
-      display: grid;
-      grid-template-columns: 76px 90px 1fr 150px 120px 115px;
-      gap: 10px;
-      background: var(--surface-2);
-      border-bottom: 1px solid var(--border);
-      padding: 8px 12px;
-      font-size: 11px;
-      font-weight: 800;
-      color: var(--text-secondary);
-    }
-    .order-row {
-      display: grid;
-      grid-template-columns: 76px 90px 1fr 150px 120px 115px;
-      gap: 10px;
-      padding: 9px 12px;
-      border-bottom: 1px solid var(--border);
-      align-items: center;
-      font-size: 12px;
-    }
-    .order-row:last-child { border-bottom: none; }
-    .order-row:hover { background: var(--surface-2); }
-    .order-row.selected { background: var(--accent-light); }
-    .order-select-head, .order-select-cell { display: flex; align-items: center; justify-content: center; }
-    .order-select-label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
-    .order-select-label span { font-size: 11px; font-weight: 800; color: var(--text-secondary); }
-    .order-checkbox {
-      width: 15px;
-      height: 15px;
-      accent-color: var(--accent);
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-    .order-name { direction: ltr; font-family: var(--font-mono); font-weight: 800; color: var(--accent); }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 2px 7px;
-      border-radius: 5px;
-      font-size: 11px;
-      font-weight: 800;
-      border: 1px solid;
-      white-space: nowrap;
-    }
-    .badge-ok { background: var(--green-light); color: var(--green); border-color: var(--green-border); }
-    .badge-warn { background: var(--amber-light); color: var(--amber); border-color: var(--amber-border); }
-    .badge-type { background: var(--accent-light); color: var(--accent-dark); border-color: #bfdbfe; }
-    .badge-purple { background: var(--purple-light); color: var(--purple); border-color: var(--purple-border); }
-    .hint {
-      border: 1px dashed var(--border-strong);
-      border-radius: var(--radius-sm);
-      padding: 12px;
-      background: var(--surface-2);
-      color: var(--text-secondary);
-      font-size: 12px;
-      line-height: 1.7;
-    }
+function getJobConfig(jobType) {
+  const jt = cleanText(jobType);
+  if (!STATUS_BY_JOB[jt]) {
+    const err = new Error('نوع العملية غير صحيح — استخدم return أو exchange');
+    err.status = 400;
+    throw err;
+  }
+  return {
+    jobType: jt,
+    expectedStatus: STATUS_BY_JOB[jt],
+    nextStatus: NEXT_STATUS_BY_JOB[jt],
+    exportType: jt === 'return' ? 'export_return' : 'export_exchange',
+    manualConfirmType: jt === 'return' ? 'manual_confirm_return' : 'manual_confirm_exchange',
+    confirmType: jt === 'return' ? 'confirm_return' : 'confirm_exchange',
+    label: jt === 'return' ? 'استرجاع' : 'استبدال',
+  };
+}
 
-    .log-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px; }
-    .log-field { display: flex; flex-direction: column; gap: 4px; }
-    .log-label { font-size: 10px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; }
-    .log-fsel, .log-finput {
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      padding: 7px 10px;
-      background: var(--surface);
-      color: var(--text-primary);
-      outline: none;
-      font-size: 12px;
-      min-height: 36px;
-    }
-    .log-fsel:focus, .log-finput:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
-    .log-list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-    .log-entry {
-      display: flex;
-      gap: 12px;
-      padding: 12px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-    }
-    .log-entry:last-child { border-bottom: none; }
-    .log-entry:hover { background: var(--surface-2); }
-    .log-dot { width: 10px; height: 10px; border-radius: 999px; margin-top: 5px; flex: 0 0 auto; }
-    .log-dot.scan { background: var(--purple); }
-    .log-dot.export { background: var(--accent); }
-    .log-dot.confirm { background: var(--green); }
-    .log-content { min-width: 0; flex: 1; }
-    .log-top { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
-    .log-notes { font-size: 12px; line-height: 1.7; color: var(--text-primary); }
-    .log-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px; font-size: 11px; color: var(--text-muted); }
-    .log-empty { padding: 16px; color: var(--text-muted); text-align: center; background: var(--surface-2); }
-    .mono { font-family: var(--font-mono); direction: ltr; }
+function escapeShopifySearchValue(value) {
+  return JSON.stringify(String(value));
+}
 
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.38);
-      z-index: 400;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .modal-overlay.open { display: flex; }
-    .modal {
-      background: var(--surface);
-      border-radius: var(--radius);
-      width: 100%;
-      max-width: 520px;
-      box-shadow: 0 20px 60px rgba(0,0,0,.18);
-      overflow: hidden;
-      animation: modalIn .2s ease;
-    }
-    .modal.wide { max-width: 720px; }
-    @keyframes modalIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-    .modal-hdr { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 800; font-size: 15px; }
-    .modal-close-x { border: none; background: transparent; color: var(--red); cursor: pointer; border-radius: var(--radius-sm); font-size: 17px; padding: 3px 8px; }
-    .modal-close-x:hover { background: var(--red-light); }
-    .modal-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; max-height: 75vh; overflow: auto; }
-    .modal-ftr { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
-    .modal.export-duplicates { max-width: 820px; }
-    .export-dup-note {
-      border: 1px solid var(--amber-border);
-      background: var(--amber-light);
-      color: var(--amber);
-      border-radius: var(--radius-sm);
-      padding: 12px 14px;
-      font-size: 13px;
-      line-height: 1.8;
-      font-weight: 700;
-    }
-    .export-dup-summary {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .export-dup-chip {
-      border: 1px solid var(--amber-border);
-      background: #fff;
-      color: var(--amber);
-      border-radius: 20px;
-      padding: 4px 10px;
-      font-size: 11px;
-      font-weight: 800;
-    }
-    .export-dup-table {
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      overflow: hidden;
-      background: var(--surface);
-    }
-    .export-dup-table-head,
-    .export-dup-table-row {
-      display: grid;
-      grid-template-columns: 130px 1fr 130px;
-      gap: 10px;
-      align-items: center;
-      padding: 10px 12px;
-      font-size: 12px;
-    }
-    .export-dup-table-head {
-      background: var(--surface-2);
-      color: var(--text-secondary);
-      font-size: 11px;
-      font-weight: 800;
-      border-bottom: 1px solid var(--border);
-    }
-    .export-dup-table-row {
-      border-bottom: 1px solid var(--border);
-    }
-    .export-dup-table-row:last-child { border-bottom: none; }
-    .export-dup-order {
-      direction: ltr;
-      font-family: var(--font-mono);
-      font-weight: 800;
-      color: var(--accent);
-    }
-    .export-dup-count {
-      direction: ltr;
-      font-family: var(--font-mono);
-      font-weight: 800;
-      color: var(--amber);
-      text-align: center;
-    }
-    .settings-field { display: flex; flex-direction: column; gap: 5px; }
-    .settings-label { font-size: 10px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; }
-    .settings-input {
-      border: 1.5px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      padding: 9px 11px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      direction: ltr;
-      outline: none;
-      width: 100%;
-      background: var(--surface);
-    }
-    .settings-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+function buildCandidateSearchQuery(expectedStatus) {
+  return [
+    `metafields.custom.status_2_r_e:${escapeShopifySearchValue(expectedStatus)}`,
+    `metafields.custom.courier:Bosta`,
+  ].join(' AND ');
+}
 
-    .toast-container { position: fixed; bottom: 18px; left: 18px; z-index: 600; display: flex; flex-direction: column; gap: 8px; }
-    .toast {
-      padding: 11px 14px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 800;
-      box-shadow: 0 8px 28px rgba(0,0,0,.14);
-      border: 1px solid;
-      min-width: 260px;
-      animation: toastIn .18s ease;
-    }
-    .toast.info { background: var(--accent-light); color: var(--accent-dark); border-color: #bfdbfe; }
-    .toast.success { background: var(--green-light); color: var(--green); border-color: var(--green-border); }
-    .toast.warn { background: var(--amber-light); color: var(--amber); border-color: var(--amber-border); }
-    .toast.error { background: var(--red-light); color: var(--red); border-color: var(--red-border); }
-    @keyframes toastIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+function chunks(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
-    @media (max-width: 900px) {
-      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .mode-grid { grid-template-columns: 1fr; }
-      .orders-list-head, .order-row { grid-template-columns: 70px 90px 1fr; }
-      .orders-list-head > div:nth-child(n+4), .order-row > div:nth-child(n+4) { display: none; }
-      .export-dup-table-head, .export-dup-table-row { grid-template-columns: 110px 1fr 90px; }
-    }
-  </style>
-</head>
-<body>
-  <div class="login-overlay" id="loginOverlay">
-    <div class="login-box">
-      <div style="display:flex;justify-content:flex-start;margin-bottom:4px;">
-        <button id="loginSettingsBtn" onclick="openSettingsFromLogin()"
-          style="display:flex;align-items:center;gap:4px;padding:5px 10px;border:1px solid var(--border-strong);background:var(--surface-2);border-radius:var(--radius-sm);font-size:11px;font-weight:700;color:var(--text-secondary);cursor:pointer;">
-          ⚙️ الإعدادات
-        </button>
-      </div>
+function isShopifyCostError(err) {
+  return /cost|exceeds the single query max cost limit|maximum cost/i.test(err?.message || String(err));
+}
 
-      <div style="text-align:center;margin-bottom:10px;font-size:28px;">📦</div>
-      <div class="login-title">Bosta Return / Exchange Exporter</div>
-      <div class="login-sub" id="loginSub">اضبط إعدادات Worker ثم سجّل الدخول</div>
+// ══════════════════════════════════════════════════════
+// §SHARED — copy verbatim from ecommoda-worker-builder — never modify
+// ══════════════════════════════════════════════════════
+async function verifyEmployee(db, username, pin) {
+  const row = await db.prepare(
+    'SELECT display_name, is_active FROM employees WHERE username = ? AND pin = ?',
+  ).bind(username, pin).first();
 
-      <div class="login-field">
-        <label class="login-label">اختر اسمك</label>
-        <select class="login-select" id="loginUsername" onchange="onUsernameChange()">
-          <option value="">— اختر —</option>
-        </select>
-      </div>
+  if (!row) return null;
 
-      <div class="pin-label" id="pinLabel">أدخل الـ PIN</div>
-      <div class="pin-display">
-        <div class="pin-dot" id="pd0"></div>
-        <div class="pin-dot" id="pd1"></div>
-        <div class="pin-dot" id="pd2"></div>
-        <div class="pin-dot" id="pd3"></div>
-      </div>
+  if (!row.is_active) {
+    throw new Error('الحساب موقوف — تواصل مع المسؤول');
+  }
 
-      <div class="pin-keypad">
-        <button class="pin-key" onclick="pinPress('1')">1</button>
-        <button class="pin-key" onclick="pinPress('2')">2</button>
-        <button class="pin-key" onclick="pinPress('3')">3</button>
-        <button class="pin-key" onclick="pinPress('4')">4</button>
-        <button class="pin-key" onclick="pinPress('5')">5</button>
-        <button class="pin-key" onclick="pinPress('6')">6</button>
-        <button class="pin-key" onclick="pinPress('7')">7</button>
-        <button class="pin-key" onclick="pinPress('8')">8</button>
-        <button class="pin-key" onclick="pinPress('9')">9</button>
-        <button class="pin-key del" onclick="pinBackspace()">⌫</button>
-        <button class="pin-key" onclick="pinPress('0')">0</button>
-        <button class="pin-key del" onclick="pinClear()">مسح</button>
-      </div>
+  db.prepare('UPDATE employees SET last_login = ? WHERE username = ?')
+    .bind(new Date().toISOString(), username)
+    .run()
+    .catch(() => {});
 
-      <div class="login-error" id="loginError"></div>
-      <button class="btn-login" id="loginBtn" onclick="submitPin()" disabled>دخول</button>
-    </div>
-  </div>
+  return row.display_name;
+}
 
-  <div class="container">
-    <header class="app-header">
-      <div class="app-title">
-        <div class="app-icon">📦</div>
-        <div class="app-title-text">
-          <h1>Bosta Return / Exchange Exporter</h1>
-          <span>Selective Excel export + export-log duplicate guard — V3.1.0</span>
-        </div>
-      </div>
-      <div class="app-header-btns">
-        <button class="hbtn active-user" id="activeUserBtn" onclick="logout()" title="تسجيل خروج">👤 <span id="activeUserName">—</span></button>
-        <button class="hbtn" id="settingsBtn" onclick="openSettings()">⚙️ الإعدادات</button>
-        <button class="hbtn ver-btn" onclick="openChangelog()">V3.1.0</button>
-      </div>
-    </header>
+async function checkEmployee(db, username) {
+  const row = await db.prepare(
+    'SELECT is_active, pin FROM employees WHERE username = ?',
+  ).bind(username).first();
 
-    <div class="main-tabs-wrap">
-      <div class="main-seg">
-        <button class="main-seg-btn active" id="tabExport" onclick="switchMainTab('export')">
-          <span class="msb-icon">📤</span>
-          <span>تصدير الأوردرات</span>
-        </button>
-        <button class="main-seg-btn" id="tabLogs" onclick="switchMainTab('logs')">
-          <span class="msb-icon">🧾</span>
-          <span>سجل العمليات</span>
-        </button>
-      </div>
-    </div>
+  if (!row) return { exists: false, hasPin: false, isActive: false };
+  return {
+    exists:   true,
+    hasPin:   !!row.pin,
+    isActive: !!row.is_active,
+  };
+}
 
-    <section class="tab-panel active" id="exportPanel">
-      <div class="card">
-        <div class="card-title">
-          <h2>اختر نوع العملية</h2>
-          <span>كل مرة ملف منفصل: Return أو Exchange</span>
-        </div>
+async function registerPin(db, username, pin) {
+  const row = await db.prepare(
+    'SELECT pin, is_active FROM employees WHERE username = ?',
+  ).bind(username).first();
 
-        <div class="mode-grid">
-          <button class="mode-card active" id="modeReturn" onclick="selectJobType('return')">
-            <div class="mode-top"><span class="mode-ico">↩️</span><span class="mode-name">أوردرات الاسترجاع</span></div>
-            <div class="mode-desc">S2 = <b>Confirmed + RETURN</b> و المندوب = <b>Bosta</b>. بعد التأكيد الموحد تصبح <b>In-Return</b>.</div>
-          </button>
-          <button class="mode-card" id="modeExchange" onclick="selectJobType('exchange')">
-            <div class="mode-top"><span class="mode-ico">🔄</span><span class="mode-name">أوردرات الاستبدال</span></div>
-            <div class="mode-desc">S2 = <b>Confirmed + EXCHANGE</b> و المندوب = <b>Bosta</b>. بعد تحديث S2 تصبح <b>Ready</b>.</div>
-          </button>
-        </div>
+  if (!row)            throw new Error('اسم المستخدم غير موجود');
+  if (!row.is_active)  throw new Error('الحساب موقوف — تواصل مع المسؤول');
+  if (row.pin)         throw new Error('هذا المستخدم مسجّل بالفعل — تواصل مع المسؤول لإعادة الضبط');
 
-        <div class="summary-grid">
-          <div class="stat-box stat-blue">
-            <div class="stat-label">مطابق للشروط</div>
-            <div class="stat-value" id="statOrders">0</div>
-          </div>
-          <div class="stat-box stat-blue">
-            <div class="stat-label">محدد للتصدير</div>
-            <div class="stat-value" id="statSelected">0</div>
-          </div>
-          <div class="stat-box stat-green">
-            <div class="stat-label">تم التصدير</div>
-            <div class="stat-value" id="statExported">لا</div>
-          </div>
-          <div class="stat-box stat-purple">
-            <div class="stat-label" id="statConfirmLabel">تأكيد الرفع + S2</div>
-            <div class="stat-value" id="statManualConfirm">لا</div>
-          </div>
-          <div class="stat-box stat-amber">
-            <div class="stat-label">S2 بعد التحديث</div>
-            <div class="stat-value" id="statNext">In-Return</div>
-          </div>
-        </div>
+  await db.prepare('UPDATE employees SET pin = ? WHERE username = ?')
+    .bind(pin, username)
+    .run();
 
-        <div class="actions-row">
-          <button class="btn btn-primary" id="fetchBtn" onclick="fetchCandidates()">🔎 الاستعلام عن أوردرات الاسترجاع</button>
-          <button class="btn btn-green" id="exportBtn" onclick="exportCurrentOrders()" disabled>📥 تصدير Excel</button>
-          <button class="btn btn-purple" id="confirmBtn" onclick="confirmManualSteps()" disabled>✅ تأكيد رفع الأوردرات على داشبورد بوسطة وتحديث S2=In-Return</button>
-          <button class="btn btn-warning" id="updateS2Btn" onclick="updateS2Status()" disabled>🔄 تحديث S2</button>
-          <button class="btn btn-secondary" onclick="resetRun()">تنظيف</button>
-        </div>
+  return true;
+}
 
-        <div class="status-bar" id="statusBar"></div>
-      </div>
+async function writeLog(db, entry) {
+  await db.prepare(`
+    INSERT INTO logs
+      (timestamp, tool, type, employee, order_id, order_name,
+       sku, product_title, delta, value_before, value_after, notes, extra)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    entry.timestamp    ?? new Date().toISOString(),
+    entry.tool,
+    entry.type,
+    entry.employee     ?? null,
+    entry.orderId      ?? null,
+    entry.orderName    ?? null,
+    entry.sku          ?? null,
+    entry.productTitle ?? null,
+    entry.delta        ?? null,
+    entry.valueBefore  ?? null,
+    entry.valueAfter   ?? null,
+    entry.notes        ?? null,
+    entry.extra ? JSON.stringify(entry.extra) : null,
+  ).run();
+}
 
-      <div class="card">
-        <div class="card-title">
-          <h2>الأوردرات الجاهزة للملف</h2>
-          <span id="orderListHint">اضغط الاستعلام الأول</span>
-        </div>
+// getLogs — canonical: login/logout excluded in SQL, max 100/page.
+async function getLogs(db, {
+  tool     = null,
+  employee = null,
+  type     = null,
+  search   = null,
+  limit    = 100,
+  offset   = 0,
+} = {}) {
+  let sql = "SELECT * FROM logs WHERE type NOT IN ('login','logout')";
+  const b = [];
 
-        <div class="hint" id="emptyOrdersHint">
-          الأداة هتسحب من Shopify مباشرة باستخدام:
-          <b>metafields.custom.status_2_r_e</b> + <b>metafields.custom.courier</b>، وبعدها تعمل direct-read verification قبل عرض الأوردرات.
-        </div>
+  if (tool)     { sql += ' AND tool = ?';     b.push(tool); }
+  if (employee) { sql += ' AND employee = ?'; b.push(employee); }
+  if (type)     { sql += ' AND type = ?';     b.push(type); }
+  if (search) {
+    sql += ' AND (order_name LIKE ? OR notes LIKE ?)';
+    b.push(`%${search}%`, `%${search}%`);
+  }
 
-        <div class="orders-list" id="ordersList">
-          <div class="orders-list-head">
-            <div class="order-select-head">
-              <label class="order-select-label">
-                <input type="checkbox" id="selectAllOrders" onchange="toggleSelectAllOrders(this)" />
-                <span>الكل</span>
-              </label>
-            </div>
-            <div>Order</div>
-            <div>Customer / Address</div>
-            <div>S2</div>
-            <div>Courier</div>
-            <div>Export Status</div>
-          </div>
-          <div id="ordersRows"></div>
-        </div>
-      </div>
-    </section>
+  sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
+  b.push(Math.min(limit, 100), offset);
 
-    <section class="tab-panel" id="logsPanel">
-      <div class="card">
-        <div class="card-title">
-          <h2>سجل العمليات</h2>
-          <span>Scan / Export / Manual Confirm / S2 Update — بدون login/logout</span>
-        </div>
+  return (await db.prepare(sql).bind(...b).all()).results;
+}
 
-        <div class="log-toolbar">
-          <div class="log-field">
-            <label class="log-label">نوع العملية</label>
-            <select class="log-fsel" id="logTypeFilter" onchange="renderLogs()">
-              <option value="">الكل</option>
-              <option value="scan">Scan</option>
-              <option value="export_return">Export Return</option>
-              <option value="export_exchange">Export Exchange</option>
-              <option value="manual_confirm_return">Manual Confirm Return</option>
-              <option value="manual_confirm_exchange">Manual Confirm Exchange</option>
-              <option value="confirm_return">Combined Return Confirm + S2</option>
-              <option value="confirm_exchange">S2 Update Exchange</option>
-            </select>
-          </div>
-          <div class="log-field">
-            <label class="log-label">بحث</label>
-            <input class="log-finput" id="logSearch" oninput="renderLogs()" />
-          </div>
-          <button class="btn btn-secondary" onclick="loadLogs(true)">↻ تحديث السجل</button>
-        </div>
+// getLogsCount — call in parallel with getLogs() for pagination UI.
+async function getLogsCount(db, {
+  tool     = null,
+  employee = null,
+  search   = null,
+} = {}) {
+  let sql = "SELECT COUNT(*) as total FROM logs WHERE type NOT IN ('login','logout')";
+  const b = [];
 
-        <div class="log-list" id="logList">
-          <div class="log-empty">افتح التبويب أو اضغط تحديث</div>
-        </div>
-      </div>
-    </section>
-  </div>
+  if (tool)     { sql += ' AND tool = ?';     b.push(tool); }
+  if (employee) { sql += ' AND employee = ?'; b.push(employee); }
+  if (search) {
+    sql += ' AND (order_name LIKE ? OR notes LIKE ?)';
+    b.push(`%${search}%`, `%${search}%`);
+  }
 
-  <div class="toast-container" id="toastContainer"></div>
+  const row = await db.prepare(sql).bind(...b).first();
+  return row?.total ?? 0;
+}
 
-  <div class="modal-overlay" id="settingsOverlay" onclick="closeSettingsOnBackdrop(event)">
-    <div class="modal">
-      <div class="modal-hdr">
-        <span>⚙️ إعدادات الاتصال</span>
-        <button class="modal-close-x" onclick="closeSettings()">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="settings-field">
-          <label class="settings-label">Worker URL</label>
-          <input class="settings-input" id="cfgUrl" />
-        </div>
-        <div class="settings-field">
-          <label class="settings-label">Worker Secret</label>
-          <input class="settings-input" id="cfgSecret" type="password" />
-        </div>
-        <div class="settings-field">
-          <label class="settings-label">Admin Worker URL — اختياري لجلب الموظفين</label>
-          <input class="settings-input" id="cfgAdminUrl" />
-        </div>
-        <div class="hint">
-          في Return: زر التأكيد بعد التصدير ينفذ تأكيد الرفع + تحديث S2=In-Return في خطوة واحدة.
-          في Exchange: ما زال التأكيد اليدوي وتحديث S2 خطوتين منفصلتين.
-        </div>
-      </div>
-      <div class="modal-ftr">
-        <button class="btn btn-secondary" onclick="closeSettings()">إلغاء</button>
-        <button class="btn btn-primary" onclick="saveSettings()">حفظ</button>
-      </div>
-    </div>
-  </div>
+// getLogsExport — XLSX export only, up to 2000 rows. Never use getLogs() for this.
+async function getLogsExport(db, {
+  tool     = null,
+  employee = null,
+  search   = null,
+} = {}) {
+  let sql = "SELECT * FROM logs WHERE type NOT IN ('login','logout')";
+  const b = [];
 
-  <div class="modal-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
-    <div class="modal wide">
-      <div class="modal-hdr">
-        <span>V3.1.0 — Changelog</span>
-        <button class="modal-close-x" onclick="closeChangelog()">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="hint">
-          <b>V3.1.0</b><br>
-          - إضافة checkbox لكل أوردر + تحديد الكل، والتصدير للمحدد فقط.<br>
-          - فحص التكرار عند تصدير Excel فقط، وبناءً على export logs الناجحة فقط.<br>
-          - Popup تعرض رقم الأوردر، آخر وقت تصدير، وعدد مرات التصدير، مع تنبيه صوتي.<br>
-          - في Return فقط: Cash Amount في الملف المصدر لا يقل عن -2000 حتى لو Shopify رجّع رقم أقل من ذلك.<br>
-          - في Return فقط: دمج تأكيد الرفع على داشبورد بوسطة مع تحديث S2=In-Return في خطوة واحدة.<br>
-          - في Exchange: تأكيد بوسطة/المخزن وتحديث S2 يظلان خطوتين منفصلتين.
-        </div>
-      </div>
-      <div class="modal-ftr">
-        <button class="btn btn-primary" onclick="closeChangelog()">تمام</button>
-      </div>
-    </div>
-  </div>
+  if (tool)     { sql += ' AND tool = ?';     b.push(tool); }
+  if (employee) { sql += ' AND employee = ?'; b.push(employee); }
+  if (search) {
+    sql += ' AND (order_name LIKE ? OR notes LIKE ?)';
+    b.push(`%${search}%`, `%${search}%`);
+  }
 
-  <div class="modal-overlay" id="exportDuplicateOverlay" onclick="closeExportDuplicateOnBackdrop(event)">
-    <div class="modal export-duplicates">
-      <div class="modal-hdr">
-        <span>⚠️ تنبيه تكرار قبل تصدير Excel</span>
-        <button class="modal-close-x" onclick="closeExportDuplicateModal()">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="export-dup-note">
-          الأوردرات التالية تم تصديرها في ملف Excel بنجاح قبل كده.
-          راجع العدد وآخر وقت تصدير قبل ما تسمح بتصديرها مرة تانية.
-        </div>
-        <div class="export-dup-summary" id="exportDuplicateSummary"></div>
-        <div class="export-dup-table">
-          <div class="export-dup-table-head">
-            <div>Order</div>
-            <div>آخر عملية تصدير</div>
-            <div>عدد مرات التصدير</div>
-          </div>
-          <div id="exportDuplicateRows"></div>
-        </div>
-      </div>
-      <div class="modal-ftr">
-        <button class="btn btn-secondary" onclick="closeExportDuplicateModal()">إلغاء التصدير</button>
-        <button class="btn btn-warning" id="exportDuplicateContinueBtn">السماح بالتصدير والمتابعة</button>
-      </div>
-    </div>
-  </div>
+  sql += ' ORDER BY timestamp DESC LIMIT 2000';
 
-  <script>
-    const VERSION = '3.1.0';
-    const CFG_KEY = 'bosta_exchange_export_config_v3';
+  return (await db.prepare(sql).bind(...b).all()).results;
+}
 
-    function getConfig() {
-      try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }
-      catch { return {}; }
-    }
+// Non-canonical helper (this tool's own addition, not part of §SHARED) —
+// batches multiple writeLog-shaped entries into one D1 batch() call.
+async function writeLogsBatch(db, entries) {
+  if (!Array.isArray(entries) || !entries.length) return;
+  for (const group of chunks(entries, 40)) {
+    await db.batch(group.map((entry) => db.prepare(`
+      INSERT INTO logs
+        (timestamp, tool, type, employee, order_id, order_name,
+         sku, product_title, delta, value_before, value_after, notes, extra)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      entry.timestamp    ?? new Date().toISOString(),
+      entry.tool,
+      entry.type,
+      entry.employee     ?? null,
+      entry.orderId      ?? null,
+      entry.orderName    ?? null,
+      entry.sku          ?? null,
+      entry.productTitle ?? null,
+      entry.delta        ?? null,
+      entry.valueBefore  ?? null,
+      entry.valueAfter   ?? null,
+      entry.notes        ?? null,
+      entry.extra ? JSON.stringify(entry.extra) : null,
+    )));
+  }
+}
 
-    function saveConfig(cfg) {
-      localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
-    }
+async function findExportDuplicateStats(db, orderNames) {
+  const names = [...new Set((orderNames || []).map(cleanText).filter(Boolean))];
+  if (!names.length) return {};
 
-    function normalizeBaseUrl(url) {
-      return String(url || '').trim().replace(/\/+$/, '');
-    }
+  const out = {};
+  const exportTypePlaceholders = EXPORT_TYPES.map(() => '?').join(',');
 
-    function isConfigured() {
-      const c = getConfig();
-      return !!(normalizeBaseUrl(c.workerUrl).startsWith('http') && String(c.workerSecret || '').length > 0);
-    }
+  for (const group of chunks(names, 80)) {
+    const namePlaceholders = group.map(() => '?').join(',');
+    const sql = `
+      SELECT
+        order_name,
+        COUNT(*) AS export_count,
+        MAX(timestamp) AS last_export_at
+      FROM logs
+      WHERE tool = ?
+        AND order_name IN (${namePlaceholders})
+        AND type IN (${exportTypePlaceholders})
+      GROUP BY order_name
+      ORDER BY last_export_at DESC
+    `;
 
-    function apiUrl(action) {
-      const cfg = getConfig();
-      const base = normalizeBaseUrl(cfg.workerUrl);
-      if (!base) throw new Error('Worker URL غير متسجل');
-      const u = new URL(base);
-      u.searchParams.set('action', action);
-      return u.toString();
-    }
-
-    async function apiFetch(action, options = {}) {
-      const cfg = getConfig();
-      if (!isConfigured()) {
-        openSettings();
-        throw new Error('الإعدادات ناقصة');
-      }
-
-      const method = options.method || (options.body ? 'POST' : 'GET');
-      const headers = {
-        'Authorization': `Bearer ${cfg.workerSecret}`,
+    const rows = (await db.prepare(sql).bind(TOOL_NAME, ...group, ...EXPORT_TYPES).all()).results || [];
+    for (const row of rows) {
+      if (!row.order_name) continue;
+      out[row.order_name] = {
+        orderName: row.order_name,
+        exportCount: Number(row.export_count || 0),
+        lastExportAt: row.last_export_at || null,
       };
-
-      const fetchOptions = { method, headers };
-      if (options.body) {
-        headers['Content-Type'] = 'application/json';
-        fetchOptions.body = JSON.stringify(options.body);
-      }
-
-      const res = await fetch(apiUrl(action), fetchOptions);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        const err = new Error(data.error || `HTTP ${res.status}`);
-        err.status = res.status;
-        err.data = data;
-        throw err;
-      }
-      return data;
     }
+  }
 
-    const state = {
-      jobType: 'return',
-      orders: [],
-      selectedOrderIds: new Set(),
-      exportedOrders: [],
-      exportDuplicates: {},
-      allowRepeatExport: false,
-      exported: false,
-      returnCombinedDone: false,
-      manualConfirmed: false,
-      logs: [],
-      pageInfo: null,
-    };
+  return out;
+}
 
-    const JOB_META = {
-      return: {
-        label: 'الاسترجاع',
-        fetchText: '🔎 الاستعلام عن أوردرات الاسترجاع',
-        confirmText: '✅ تأكيد رفع الأوردرات على داشبورد بوسطة وتحديث S2=In-Return',
-        updateText: '🔄 تحديث S2 إلى In-Return',
-        expected: 'Confirmed + RETURN',
-        next: 'In-Return',
-        filePrefix: 'Bosta_Return_Orders',
+// ══════════════════════════════════════════════════════
+// §SHOPIFY
+// ══════════════════════════════════════════════════════
+async function getAccessToken(env) {
+  const resp = await fetch(`https://${env.SHOP_DOMAIN}/admin/oauth/access_token`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      client_id:     env.CLIENT_ID,
+      client_secret: env.CLIENT_SECRET,
+      grant_type:    'client_credentials',
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`OAuth failed: ${resp.status}`);
+
+  const data = await resp.json();
+  if (!data.access_token) throw new Error('No access_token in OAuth response');
+  return data.access_token;
+}
+
+async function shopifyGQL(env, token, query, variables = {}) {
+  const resp = await fetch(
+    `https://${env.SHOP_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': token,
       },
-      exchange: {
-        label: 'الاستبدال',
-        fetchText: '🔎 الاستعلام عن أوردرات الاستبدال',
-        confirmText: '✅ تأكيد رفع بوسطة + إرسال الفواتير للمخزن',
-        updateText: '🔄 تحديث S2 إلى Ready',
-        expected: 'Confirmed + EXCHANGE',
-        next: 'Ready',
-        filePrefix: 'Bosta_Exchange_Orders',
-      },
-    };
+      body: JSON.stringify({ query, variables }),
+    },
+  );
 
-    function openSettings() {
-      const c = getConfig();
-      document.getElementById('cfgUrl').value           = c.workerUrl || '';
-      document.getElementById('cfgSecret').value        = c.workerSecret || '';
-      document.getElementById('cfgAdminUrl').value      = localStorage.getItem('admin_worker_url') || '';
-      document.getElementById('settingsOverlay').classList.add('open');
-    }
+  const data = await resp.json().catch(() => ({}));
 
-    function openSettingsFromLogin() { openSettings(); }
-    function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
-    function closeSettingsOnBackdrop(event) { if (event.target.id === 'settingsOverlay') closeSettings(); }
+  if (!resp.ok) {
+    throw new Error(`Shopify GraphQL HTTP ${resp.status}: ${JSON.stringify(data).slice(0, 300)}`);
+  }
+  if (data.errors?.length) {
+    throw new Error(`GraphQL error: ${data.errors.map(e => e.message).join(' | ')}`);
+  }
 
-    function saveSettings() {
-      const workerUrl = normalizeBaseUrl(document.getElementById('cfgUrl').value);
-      const workerSecret = document.getElementById('cfgSecret').value.trim();
-      const adminUrl = normalizeBaseUrl(document.getElementById('cfgAdminUrl').value);
+  return data;
+}
 
-      if (!workerUrl || !workerSecret) {
-        showToast('Worker URL و Worker Secret مطلوبان', 'error');
-        return;
-      }
-
-      saveConfig({ workerUrl, workerSecret });
-      if (adminUrl) localStorage.setItem('admin_worker_url', adminUrl);
-      else localStorage.removeItem('admin_worker_url');
-
-      closeSettings();
-      updateSettingsBtn();
-      updateLoginSettingsBtn();
-      loadEmployeesList();
-      showToast('تم حفظ الإعدادات', 'success');
-    }
-
-    function updateSettingsBtn() {
-      document.getElementById('settingsBtn').classList.toggle('settings-configured', isConfigured());
-    }
-
-    function updateLoginSettingsBtn() {
-      document.getElementById('loginSettingsBtn').style.borderColor = isConfigured() ? 'var(--green)' : 'var(--red)';
-      document.getElementById('loginSettingsBtn').style.color = isConfigured() ? 'var(--green)' : 'var(--red)';
-      document.getElementById('loginSettingsBtn').style.background = isConfigured() ? 'var(--green-light)' : 'var(--red-light)';
-    }
-
-    function openChangelog() { document.getElementById('changelogOverlay').classList.add('open'); }
-    function closeChangelog() { document.getElementById('changelogOverlay').classList.remove('open'); }
-    function closeChangelogOnBackdrop(event) { if (event.target.id === 'changelogOverlay') closeChangelog(); }
-
-    function showToast(message, type = 'info', timeout = 3600) {
-      const wrap = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      toast.className = `toast ${type}`;
-      toast.textContent = message;
-      wrap.appendChild(toast);
-      setTimeout(() => toast.remove(), timeout);
-    }
-
-    function showStatus(message, type = 'info') {
-      const el = document.getElementById('statusBar');
-      el.className = `status-bar show ${type}`;
-      el.textContent = message;
-    }
-
-    function clearStatus() {
-      const el = document.getElementById('statusBar');
-      el.className = 'status-bar';
-      el.textContent = '';
-    }
-
-    let currentEmployee = null;
-    let pinBuffer = '';
-    let confirmPinBuffer = '';
-    let firstPin = '';
-    let isNewUser = false;
-    let _audioCtx = null;
-
-    function getAudioCtx() {
-      _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      if (_audioCtx.state === 'suspended') _audioCtx.resume();
-      return _audioCtx;
-    }
-
-    function beep(freq = 880, dur = 0.06, type = 'sine', vol = 0.03) {
-      try {
-        const ctx = getAudioCtx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.frequency.value = freq;
-        osc.type = type;
-        gain.gain.value = vol;
-        osc.connect(gain).connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + dur);
-      } catch {}
-    }
-
-    async function loadEmployeesList() {
-      const sel = document.getElementById('loginUsername');
-      sel.innerHTML = '<option value="">— اختر —</option>';
-
-      if (!isConfigured()) {
-        updateLoginSub('اضبط إعدادات Worker أولاً');
-        return;
-      }
-
-      try {
-        const data = await apiFetch('get_employees');
-        (data.employees || []).forEach((emp) => {
-          const opt = document.createElement('option');
-          opt.value = emp.username;
-          opt.textContent = emp.display_name || emp.username;
-          sel.appendChild(opt);
-        });
-        updateLoginSub('اختر اسمك وأدخل PIN');
-      } catch (e) {
-        updateLoginSub('تعذر جلب الموظفين — راجع الإعدادات');
-      }
-    }
-
-    function updateLoginSub(text) { document.getElementById('loginSub').textContent = text; }
-
-    async function onUsernameChange() {
-      pinClear();
-      hideLoginError();
-      const username = document.getElementById('loginUsername').value;
-      if (!username || !isConfigured()) return;
-
-      try {
-        const checkUrl = new URL(apiUrl('check_employee'));
-        checkUrl.searchParams.set('username', username);
-        const cfg = getConfig();
-        const resp = await fetch(checkUrl.toString(), {
-          headers: { Authorization: `Bearer ${cfg.workerSecret}` },
-        });
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok || !data.ok) return;
-        if (!data.hasPin) {
-          updateLoginSub('أول مرة؟ اختر PIN جديد من 4 أرقام');
-          document.getElementById('pinLabel').textContent = 'اختر PIN جديد';
-          document.getElementById('loginBtn').textContent = 'متابعة →';
-        } else {
-          updateLoginSub('اختر اسمك وأدخل PIN');
-          document.getElementById('pinLabel').textContent = 'أدخل الـ PIN';
-          document.getElementById('loginBtn').textContent = 'دخول';
-        }
-      } catch {}
-    }
-
-    function pinPress(n) {
-      const username = document.getElementById('loginUsername').value;
-      if (!username) { showLoginError('اختر اسمك الأول'); return; }
-      hideLoginError();
-      beep(880, .035, 'sine', .02);
-
-      if (isNewUser && firstPin) {
-        if (confirmPinBuffer.length >= 4) return;
-        confirmPinBuffer += n;
-        updatePinDots(confirmPinBuffer);
-        document.getElementById('loginBtn').disabled = confirmPinBuffer.length !== 4;
-      } else {
-        if (pinBuffer.length >= 4) return;
-        pinBuffer += n;
-        updatePinDots(pinBuffer);
-        document.getElementById('loginBtn').disabled = pinBuffer.length !== 4;
-      }
-    }
-
-    function pinBackspace() {
-      if (isNewUser && firstPin) confirmPinBuffer = confirmPinBuffer.slice(0, -1);
-      else pinBuffer = pinBuffer.slice(0, -1);
-      updatePinDots(isNewUser && firstPin ? confirmPinBuffer : pinBuffer);
-      document.getElementById('loginBtn').disabled = (isNewUser && firstPin ? confirmPinBuffer : pinBuffer).length !== 4;
-    }
-
-    function pinClear() {
-      pinBuffer = '';
-      confirmPinBuffer = '';
-      firstPin = '';
-      isNewUser = false;
-      document.getElementById('pinLabel').textContent = 'أدخل الـ PIN';
-      document.getElementById('loginBtn').textContent = 'دخول';
-      document.getElementById('loginBtn').disabled = true;
-      updatePinDots('');
-    }
-
-    function updatePinDots(value) {
-      for (let i = 0; i < 4; i++) {
-        const dot = document.getElementById('pd' + i);
-        dot.textContent = value[i] ? '•' : '';
-        dot.classList.toggle('filled', !!value[i]);
-        dot.classList.remove('error');
-      }
-    }
-
-    function showLoginError(message) {
-      const el = document.getElementById('loginError');
-      el.textContent = message;
-      el.classList.add('visible');
-      for (let i = 0; i < 4; i++) document.getElementById('pd' + i).classList.add('error');
-      beep(220, .12, 'square', .02);
-    }
-
-    function hideLoginError() {
-      const el = document.getElementById('loginError');
-      el.textContent = '';
-      el.classList.remove('visible');
-      for (let i = 0; i < 4; i++) document.getElementById('pd' + i).classList.remove('error');
-    }
-
-    async function submitPin() {
-      const username = document.getElementById('loginUsername').value;
-      if (!username) { showLoginError('اختر اسمك الأول'); return; }
-
-      const btn = document.getElementById('loginBtn');
-      btn.disabled = true;
-
-      try {
-        if (!isNewUser) {
-          const checkUrl = new URL(apiUrl('check_employee'));
-          checkUrl.searchParams.set('username', username);
-          const cfg = getConfig();
-          const checkResp = await fetch(checkUrl, { headers: { Authorization: `Bearer ${cfg.workerSecret}` } });
-          const check = await checkResp.json();
-          if (!check.ok) throw new Error(check.error || 'فشل فحص المستخدم');
-
-          if (!check.hasPin) {
-            isNewUser = true;
-            firstPin = pinBuffer;
-            pinBuffer = '';
-            document.getElementById('pinLabel').textContent = 'أعد إدخال الـ PIN للتأكيد';
-            document.getElementById('loginBtn').textContent = 'تسجيل PIN';
-            document.getElementById('loginBtn').disabled = true;
-            updatePinDots('');
-            showToast('أعد إدخال نفس الـ PIN', 'info');
-            return;
+// ─── §SHOPIFY::discoveryAndDetails ───
+function buildDetailsQuery(jobType) {
+  const returnFields = jobType === 'return' ? `
+    returns(first: 5) {
+      edges {
+        node {
+          returnLineItems(first: 25) {
+            edges {
+              node {
+                quantity
+                ... on ReturnLineItem {
+                  fulfillmentLineItem {
+                    lineItem {
+                      sku
+                      name
+                      originalUnitPriceSet { shopMoney { amount } }
+                    }
+                  }
+                }
+              }
+            }
           }
-
-          const data = await apiFetch('verify_employee', {
-            method: 'POST',
-            body: { username, pin: pinBuffer },
-          });
-          currentEmployee = { username, displayName: data.displayName || username };
-          afterLogin();
-          return;
         }
+      }
+    }
+  ` : '';
 
-        if (confirmPinBuffer !== firstPin) {
-          showLoginError('الـ PIN غير متطابق');
-          confirmPinBuffer = '';
-          updatePinDots('');
-          document.getElementById('loginBtn').disabled = true;
-          return;
+  const exchangeFields = jobType === 'exchange' ? `
+    returns(first: 5) {
+      edges {
+        node {
+          returnLineItems(first: 25) {
+            edges {
+              node {
+                quantity
+                ... on ReturnLineItem {
+                  fulfillmentLineItem {
+                    lineItem {
+                      sku
+                      name
+                      originalUnitPriceSet { shopMoney { amount } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          exchangeLineItems(first: 25) {
+            edges {
+              node {
+                quantity
+                lineItems {
+                  sku
+                  name
+                  originalUnitPriceSet { shopMoney { amount } }
+                }
+              }
+            }
+          }
         }
+      }
+    }
+  ` : '';
 
-        await apiFetch('register_pin', {
-          method: 'POST',
-          body: { username, pin: confirmPinBuffer },
+  return `
+    query FetchBostaReturnExchangeDetails($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Order {
+          id
+          name
+          phone
+          email
+          createdAt
+          displayFinancialStatus
+          displayFulfillmentStatus
+          totalOutstandingSet { shopMoney { amount currencyCode } }
+          shippingAddress {
+            name
+            phone
+            address1
+            address2
+            city
+            province
+            zip
+          }
+          customer {
+            firstName
+            lastName
+            email
+            phone
+          }
+          s2Status: metafield(namespace: "custom", key: "status_2_r_e") { value }
+          courier: metafield(namespace: "custom", key: "courier") { value }
+          ${returnFields}
+          ${exchangeFields}
+        }
+      }
+    }
+  `;
+}
+
+async function fetchDiscoveryOrders(env, token, job) {
+  const candidates = [];
+  let cursor = null;
+  let hasNextPage = true;
+  let page = 0;
+  const search = buildCandidateSearchQuery(job.expectedStatus);
+
+  const query = `
+    query FetchBostaReturnExchangeCandidateIds($search: String!, $cursor: String) {
+      orders(first: ${DISCOVERY_PAGE_SIZE}, after: $cursor, query: $search, sortKey: CREATED_AT, reverse: true) {
+        pageInfo { hasNextPage endCursor }
+        edges {
+          node {
+            id
+            name
+            s2Status: metafield(namespace: "custom", key: "status_2_r_e") { value }
+            courier: metafield(namespace: "custom", key: "courier") { value }
+          }
+        }
+      }
+    }
+  `;
+
+  while (hasNextPage && page < DISCOVERY_MAX_PAGES) {
+    page += 1;
+
+    const data = await shopifyGQL(env, token, query, { search, cursor });
+    const conn = data?.data?.orders;
+    if (!conn?.edges) throw new Error('Shopify response missing orders connection');
+
+    for (const edge of conn.edges) {
+      const order = edge.node;
+      const directStatus = cleanText(order?.s2Status?.value);
+      const courier = cleanText(order?.courier?.value);
+
+      if (directStatus === job.expectedStatus && courier.toLowerCase() === 'bosta') {
+        candidates.push({
+          id: order.id,
+          name: order.name,
+          s2Status: { value: directStatus },
+          courier: { value: courier },
         });
-        currentEmployee = { username, displayName: username.replace(/_/g, ' ') };
-        afterLogin();
-      } catch (e) {
-        showLoginError(e.message || 'فشل تسجيل PIN');
       }
     }
 
-    function afterLogin() {
-      beep(1040, .05, 'sine', .03);
-      document.getElementById('loginOverlay').classList.add('hidden');
-      document.getElementById('activeUserName').textContent = currentEmployee.displayName || currentEmployee.username;
-      resetRun();
-      loadLogs(false);
-      showToast(`أهلاً ${currentEmployee.displayName || currentEmployee.username}`, 'success');
-    }
+    hasNextPage = !!conn.pageInfo?.hasNextPage;
+    cursor = conn.pageInfo?.endCursor || null;
+  }
 
-    async function logout() {
-      try {
-        if (currentEmployee) {
-          const logoutUrl = new URL(apiUrl('log_logout'));
-          logoutUrl.searchParams.set('username', currentEmployee.username);
-          const cfg = getConfig();
-          await fetch(logoutUrl, { headers: { Authorization: `Bearer ${cfg.workerSecret}` } });
+  return {
+    candidates,
+    pageInfo: {
+      pagesFetched: page,
+      stoppedByLimit: hasNextPage && page >= DISCOVERY_MAX_PAGES,
+      searchQuery: search,
+      pageSize: DISCOVERY_PAGE_SIZE,
+      maxPages: DISCOVERY_MAX_PAGES,
+    },
+  };
+}
+
+async function fetchDetailsGroup(env, token, ids, jobType) {
+  const query = buildDetailsQuery(jobType);
+  const data = await shopifyGQL(env, token, query, { ids });
+  return (data?.data?.nodes || []).filter(Boolean);
+}
+
+async function fetchDetailsGroupWithFallback(env, token, ids, jobType) {
+  if (!ids.length) return [];
+
+  try {
+    return await fetchDetailsGroup(env, token, ids, jobType);
+  } catch (err) {
+    if (!isShopifyCostError(err) || ids.length === 1) throw err;
+
+    const mid = Math.ceil(ids.length / 2);
+    const left = await fetchDetailsGroupWithFallback(env, token, ids.slice(0, mid), jobType);
+    const right = await fetchDetailsGroupWithFallback(env, token, ids.slice(mid), jobType);
+    return [...left, ...right];
+  }
+}
+
+async function fetchCandidateOrders(env, token, job) {
+  const discovery = await fetchDiscoveryOrders(env, token, job);
+  const ids = discovery.candidates.map(o => o.id);
+  const orders = [];
+  let fallbackPossible = false;
+
+  for (const group of chunks(ids, DETAILS_BATCH_SIZE)) {
+    const details = await fetchDetailsGroupWithFallback(env, token, group, job.jobType);
+    if (details.length !== group.length) fallbackPossible = true;
+
+    for (const order of details) {
+      const directStatus = cleanText(order?.s2Status?.value);
+      const courier = cleanText(order?.courier?.value);
+      if (directStatus === job.expectedStatus && courier.toLowerCase() === 'bosta') {
+        orders.push(order);
+      }
+    }
+  }
+
+  return {
+    orders,
+    pageInfo: {
+      ...discovery.pageInfo,
+      discoveryCount: discovery.candidates.length,
+      detailBatchSize: DETAILS_BATCH_SIZE,
+      detailsFetched: orders.length,
+      detailsFallbackPossible: fallbackPossible,
+    },
+  };
+}
+
+// ─── §SHOPIFY::writeAndVerifyS2 ───
+async function setManualStatus(env, token, orders, newValue, printingTimeS2) {
+  const updated = [];
+  const mutation = `
+    mutation SetManualStatusAndPrintingTimeS2($metafields: [MetafieldsSetInput!]!) {
+      metafieldsSet(metafields: $metafields) {
+        metafields {
+          id
+          namespace
+          key
+          value
+          owner {
+            ... on Order { id name }
+          }
         }
-      } catch {}
+        userErrors {
+          field
+          message
+          code
+        }
+      }
+    }
+  `;
 
-      currentEmployee = null;
-      pinClear();
-      resetRun();
-      document.getElementById('activeUserName').textContent = '—';
-      document.getElementById('loginOverlay').classList.remove('hidden');
-      showToast('تم تسجيل الخروج', 'info');
+  // كل أوردر بيكتب 2 metafields:
+  // 1) custom.status_2_r_e
+  // 2) custom.printing_time_s2
+  // لذلك نستخدم 12 أوردر في الباتش = 24 metafields.
+  for (const group of chunks(orders, 12)) {
+    const variables = {
+      metafields: group.flatMap((order) => ([
+        {
+          ownerId: order.id,
+          namespace: 'custom',
+          key: 'status_2_r_e',
+          type: 'single_line_text_field',
+          value: newValue,
+        },
+        {
+          ownerId: order.id,
+          namespace: 'custom',
+          key: 'printing_time_s2',
+          type: 'date_time',
+          value: printingTimeS2,
+        },
+      ])),
+    };
+
+    const data = await shopifyGQL(env, token, mutation, variables);
+    const result = data?.data?.metafieldsSet;
+    if (result?.userErrors?.length) {
+      const message = result.userErrors.map(e => `${e.field?.join('.') || 'field'}: ${e.message}`).join(' | ');
+      throw new Error(`Shopify metafieldsSet error: ${message}`);
     }
 
-    function switchMainTab(tab) {
-      document.getElementById('tabExport').classList.toggle('active', tab === 'export');
-      document.getElementById('tabLogs').classList.toggle('active', tab === 'logs');
-      document.getElementById('exportPanel').classList.toggle('active', tab === 'export');
-      document.getElementById('logsPanel').classList.toggle('active', tab === 'logs');
-      if (tab === 'logs') loadLogs(false);
+    updated.push(...(result?.metafields || []));
+  }
+
+  return updated;
+}
+
+async function verifyManualStatus(env, token, orders, expectedValue, expectedPrintingTimeS2) {
+  const query = `
+    query VerifyManualStatusAndPrintingTimeS2($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Order {
+          id
+          name
+          s2Status: metafield(namespace: "custom", key: "status_2_r_e") {
+            value
+          }
+          printingTimeS2: metafield(namespace: "custom", key: "printing_time_s2") {
+            value
+          }
+        }
+      }
     }
+  `;
 
-    function selectJobType(jobType) {
-      state.jobType = jobType;
-      resetRun();
-    }
+  const mismatches = [];
+  const expectedPrintingMs = Date.parse(expectedPrintingTimeS2);
 
-    function resetRun() {
-      state.orders = [];
-      state.selectedOrderIds = new Set();
-      state.exportedOrders = [];
-      state.exportDuplicates = {};
-      state.allowRepeatExport = false;
-      state.exported = false;
-      state.returnCombinedDone = false;
-      state.manualConfirmed = false;
-      state.pageInfo = null;
+  for (const group of chunks(orders, 100)) {
+    const data = await shopifyGQL(env, token, query, { ids: group.map(o => o.id) });
+    const nodes = data?.data?.nodes || [];
 
-      document.getElementById('modeReturn').classList.toggle('active', state.jobType === 'return');
-      document.getElementById('modeExchange').classList.toggle('active', state.jobType === 'exchange');
-      document.getElementById('fetchBtn').textContent = JOB_META[state.jobType].fetchText;
-      document.getElementById('confirmBtn').textContent = JOB_META[state.jobType].confirmText;
-      document.getElementById('updateS2Btn').textContent = JOB_META[state.jobType].updateText;
-      document.getElementById('statNext').textContent = JOB_META[state.jobType].next;
-      document.getElementById('statConfirmLabel').textContent = state.jobType === 'return' ? 'تأكيد الرفع + S2' : 'تأكيد بوسطة/المخزن';
-      document.getElementById('emptyOrdersHint').style.display = 'block';
-      closeExportDuplicateModal();
-      clearStatus();
-      updateRunUI();
-      renderOrders();
-    }
+    for (const node of nodes) {
+      if (!node?.id) continue;
 
-    function getSelectedOrders() {
-      return state.orders.filter(order => state.selectedOrderIds.has(order.id));
-    }
+      const value = cleanText(node?.s2Status?.value);
+      const printingTimeS2 = cleanText(node?.printingTimeS2?.value);
+      const actualPrintingMs = Date.parse(printingTimeS2);
+      const printingTimeMatches =
+        Number.isFinite(expectedPrintingMs) &&
+        Number.isFinite(actualPrintingMs) &&
+        actualPrintingMs === expectedPrintingMs;
 
-    function payloadOrders(orders) {
-      const source = Array.isArray(orders) ? orders : getSelectedOrders();
-      return source.map((order) => ({
-        id: order.id,
-        name: order.name,
-        manualStatus: order.manualStatus?.value || JOB_META[state.jobType].expected,
-        courier: order.courier?.value || 'Bosta',
-      }));
-    }
-
-    function syncSelectAllOrders() {
-      const master = document.getElementById('selectAllOrders');
-      if (!master) return;
-
-      const total = state.orders.length;
-      const selected = getSelectedOrders().length;
-      master.checked = total > 0 && selected === total;
-      master.indeterminate = selected > 0 && selected < total;
-      master.disabled = total === 0;
-    }
-
-    function toggleSelectAllOrders(master) {
-      state.selectedOrderIds = master.checked
-        ? new Set(state.orders.map(order => order.id))
-        : new Set();
-
-      if (!master.checked) state.exportDuplicates = {};
-      renderOrders();
-      updateRunUI();
-    }
-
-    function toggleOrderSelection(cb) {
-      const orderId = cb.dataset.id;
-      if (!orderId) return;
-
-      if (cb.checked) state.selectedOrderIds.add(orderId);
-      else state.selectedOrderIds.delete(orderId);
-
-      cb.closest('.order-row')?.classList.toggle('selected', cb.checked);
-      syncSelectAllOrders();
-      updateRunUI();
-    }
-
-    function updateRunUI() {
-      const totalCount = state.orders.length;
-      const selectedCount = getSelectedOrders().length;
-      const exportedCount = state.exportedOrders.length;
-      const isReturn = state.jobType === 'return';
-
-      document.getElementById('statOrders').textContent = String(totalCount);
-      document.getElementById('statSelected').textContent = String(selectedCount);
-      document.getElementById('statExported').textContent = state.exported ? 'نعم' : 'لا';
-      document.getElementById('statManualConfirm').textContent = isReturn
-        ? (state.returnCombinedDone ? 'نعم' : 'لا')
-        : (state.manualConfirmed ? 'نعم' : 'لا');
-
-      document.getElementById('exportBtn').disabled = selectedCount === 0;
-      document.getElementById('confirmBtn').disabled = !state.exported || exportedCount === 0 || (isReturn ? state.returnCombinedDone : state.manualConfirmed);
-      document.getElementById('updateS2Btn').disabled = isReturn || !state.manualConfirmed || exportedCount === 0;
-      document.getElementById('updateS2Btn').style.display = isReturn ? 'none' : 'inline-flex';
-
-      syncSelectAllOrders();
-    }
-
-    function playDuplicateAlertSound() {
-      beep(220, .12, 'square', .02);
-      setTimeout(() => beep(220, .12, 'square', .02), 165);
-    }
-
-    function resetExportDuplicateContinueBtn() {
-      const btn = document.getElementById('exportDuplicateContinueBtn');
-      if (!btn) return;
-      btn.disabled = false;
-      btn.textContent = 'السماح بالتصدير والمتابعة';
-    }
-
-    function closeExportDuplicateModal() {
-      document.getElementById('exportDuplicateOverlay')?.classList.remove('open');
-      resetExportDuplicateContinueBtn();
-    }
-
-    function closeExportDuplicateOnBackdrop(event) {
-      if (event.target.id === 'exportDuplicateOverlay') closeExportDuplicateModal();
-    }
-
-    function renderExportDuplicateModal(duplicates, selectedOrders) {
-      const rows = document.getElementById('exportDuplicateRows');
-      const summary = document.getElementById('exportDuplicateSummary');
-      const list = Object.entries(duplicates || {})
-        .map(([name, row]) => ({
-          name,
-          exportCount: Number(row?.exportCount || 0),
-          lastExportAt: row?.lastExportAt || null,
-        }))
-        .sort((a, b) => String(b.lastExportAt || '').localeCompare(String(a.lastExportAt || '')));
-
-      summary.innerHTML = `
-        <span class="export-dup-chip">المحدد للتصدير: ${selectedOrders.length}</span>
-        <span class="export-dup-chip">المكرر: ${list.length}</span>
-      `;
-
-      rows.innerHTML = '';
-      list.forEach((item) => {
-        const div = document.createElement('div');
-        div.className = 'export-dup-table-row';
-        div.innerHTML = `
-          <div class="export-dup-order">${escapeHtml(item.name)}</div>
-          <div>${escapeHtml(formatCairo(item.lastExportAt))}</div>
-          <div class="export-dup-count">${escapeHtml(item.exportCount)}</div>
-        `;
-        rows.appendChild(div);
-      });
-    }
-
-    function openExportDuplicateModal(duplicates, selectedOrders) {
-      resetExportDuplicateContinueBtn();
-      renderExportDuplicateModal(duplicates, selectedOrders);
-      playDuplicateAlertSound();
-
-      const oldBtn = document.getElementById('exportDuplicateContinueBtn');
-      const newBtn = oldBtn.cloneNode(true);
-      oldBtn.replaceWith(newBtn);
-
-      newBtn.addEventListener('click', async () => {
-        newBtn.disabled = true;
-        newBtn.textContent = '⏳ جاري المتابعة...';
-        closeExportDuplicateModal();
-        await performExcelExport(selectedOrders.slice(), true);
-      });
-
-      document.getElementById('exportDuplicateOverlay').classList.add('open');
-    }
-
-    async function fetchCandidates() {
-      if (!currentEmployee) { showToast('سجّل الدخول أولاً', 'error'); return; }
-      if (!isConfigured()) { openSettings(); return; }
-
-      resetRun();
-
-      const btn = document.getElementById('fetchBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ جاري الاستعلام...';
-      showStatus(`جاري الاستعلام عن أوردرات ${JOB_META[state.jobType].label} من Shopify...`, 'info');
-
-      try {
-        const data = await apiFetch('fetch_candidates', {
-          method: 'POST',
-          body: {
-            jobType: state.jobType,
-            employee: currentEmployee.username,
-          },
+      if (value !== expectedValue || !printingTimeMatches) {
+        mismatches.push({
+          id: node.id,
+          name: node.name,
+          value,
+          printingTimeS2,
         });
-
-        state.orders = data.orders || [];
-        state.selectedOrderIds = new Set();
-        state.exportedOrders = [];
-        state.exportDuplicates = {};
-        state.allowRepeatExport = false;
-        state.pageInfo = data.pageInfo || null;
-
-        document.getElementById('emptyOrdersHint').style.display = state.orders.length ? 'none' : 'block';
-        renderOrders();
-        updateRunUI();
-
-        if (!state.orders.length) {
-          showStatus(`لم يتم العثور على أوردرات مطابقة: S2 = ${JOB_META[state.jobType].expected} + Courier = Bosta`, 'error');
-        } else {
-          showStatus(`✓ تم الاستعلام عن ${state.orders.length} أوردر. حدّد الأوردرات المطلوبة أو استخدم "الكل"، ثم اضغط تصدير Excel.`, 'success');
-        }
-
-        if (state.pageInfo?.stoppedByLimit) {
-          showStatus(`تم الاستعلام عن ${state.orders.length} أوردر، لكن Worker وقف عند حد الحماية (${state.pageInfo.maxPages} صفحات). لو متوقع أكتر من كده راجع النتائج على دفعات.`, 'warn');
-        }
-      } catch (e) {
-        showStatus('خطأ أثناء الاستعلام: ' + e.message, 'error');
-        showToast('فشل الاستعلام: ' + e.message, 'error');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = JOB_META[state.jobType].fetchText;
-        updateRunUI();
       }
     }
+  }
 
-    async function exportCurrentOrders() {
-      if (!currentEmployee) { showToast('سجّل الدخول أولاً', 'error'); return; }
-      const selectedOrders = getSelectedOrders();
-      if (!selectedOrders.length) { showToast('حدد أوردر واحد على الأقل للتصدير', 'error'); return; }
+  return mismatches;
+}
 
-      const btn = document.getElementById('exportBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ جاري فحص التكرار...';
-      showStatus('جاري فحص selected orders مقابل export logs السابقة...', 'info');
-
-      try {
-        const data = await apiFetch('check_export_duplicates', {
-          method: 'POST',
-          body: {
-            jobType: state.jobType,
-            orders: payloadOrders(selectedOrders),
-          },
-        });
-
-        state.exportDuplicates = data.duplicates || {};
-        renderOrders();
-
-        if (Number(data.count || 0) > 0) {
-          showStatus(`تم اكتشاف ${data.count} أوردر سبق تصديره Excel. راجع النافذة قبل المتابعة.`, 'warn');
-          openExportDuplicateModal(state.exportDuplicates, selectedOrders);
-          return;
-        }
-
-        state.exportDuplicates = {};
-        renderOrders();
-      } catch (e) {
-        showStatus('فشل فحص التكرار قبل التصدير: ' + e.message, 'error');
-        showToast('فشل فحص التكرار: ' + e.message, 'error');
-        return;
-      } finally {
-        btn.textContent = '📥 تصدير Excel';
-        updateRunUI();
-      }
-
-      await performExcelExport(selectedOrders, false);
+// ══════════════════════════════════════════════════════
+// §HANDLER
+// ══════════════════════════════════════════════════════
+export default {
+  async fetch(request, env) {
+    // 1. CORS Preflight — always first
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: getCORS(request) });
     }
 
-    async function performExcelExport(orders, allowRepeat) {
-      if (!orders.length) { showToast('لا توجد أوردرات للتصدير', 'error'); return; }
-
-      const btn = document.getElementById('exportBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ جاري تجهيز Excel...';
-      showStatus('جاري إنشاء ملف Excel وتسجيل عملية التصدير...', 'info');
-
-      try {
-        const file = await buildExcelExportFile(orders, state.jobType);
-
-        await apiFetch('record_export', {
-          method: 'POST',
-          body: {
-            jobType: state.jobType,
-            employee: currentEmployee.username,
-            orders: payloadOrders(orders),
-            allowRepeat,
-          },
-        });
-
-        downloadExcelExportFile(file);
-
-        state.exported = true;
-        state.returnCombinedDone = false;
-        state.manualConfirmed = false;
-        state.exportedOrders = orders.slice();
-        state.allowRepeatExport = !!allowRepeat;
-        state.exportDuplicates = allowRepeat ? state.exportDuplicates : {};
-
-        const nextMessage = state.jobType === 'return'
-          ? 'الخطوة التالية: ارفع الملف على داشبورد بوسطة، ثم اضغط زر التأكيد الموحد ليتم تحديث S2=In-Return.'
-          : 'الخطوة التالية: ارفع الملف على داشبورد بوسطة وأرسل الفواتير للمخزن خارج الأداة، ثم اضغط زر التأكيد اليدوي.';
-
-        showStatus(`✓ تم تصدير ${orders.length} أوردر. ${nextMessage}`, 'success');
-        showToast(`✓ تم تصدير ${orders.length} أوردر`, 'success');
-        await loadLogs(false);
-      } catch (e) {
-        if (e.data?.code === 'DUPLICATES_FOUND') {
-          state.exportDuplicates = e.data.duplicates || {};
-          renderOrders();
-          showStatus('ظهر تداخل في السجل أثناء تجهيز التصدير. راجع نافذة التكرار قبل المتابعة.', 'warn');
-          openExportDuplicateModal(state.exportDuplicates, orders);
-        } else {
-          showStatus('فشل التصدير: ' + e.message, 'error');
-          showToast('فشل التصدير: ' + e.message, 'error');
-        }
-      } finally {
-        btn.textContent = '📥 تصدير Excel';
-        updateRunUI();
-      }
+    // 2. WORKER_SECRET check — always second
+    const auth = request.headers.get('Authorization');
+    if (!auth || auth !== `Bearer ${env.WORKER_SECRET}`) {
+      return json({ ok: false, error: 'Unauthorized' }, 401, request);
     }
 
-    async function confirmManualSteps() {
-      if (!state.exported) {
-        showToast('صدّر ملف Excel الأول', 'error');
-        return;
+    const url = new URL(request.url);
+    const action = url.searchParams.get('action') || '';
+
+    try {
+      // ─── §AUTH ────────────────────────────────────────────
+      if (action === 'check_employee') {
+        const username = url.searchParams.get('username');
+        if (!username) return json({ ok: false, error: 'username مطلوب' }, 400, request);
+        const result = await checkEmployee(env.DB, username);
+        return json({ ok: true, ...result }, 200, request);
       }
 
-      const exportedOrders = state.exportedOrders || [];
-      if (!exportedOrders.length) {
-        showToast('لا توجد أوردرات مصدّرة للتأكيد', 'error');
-        return;
+      if (action === 'register_pin') {
+        assertPost(request);
+        const { username, pin } = await request.json().catch(() => ({}));
+        if (!username || !pin) return json({ ok: false, error: 'username و pin مطلوبان' }, 400, request);
+        await registerPin(env.DB, username, pin);
+        return json({ ok: true }, 200, request);
       }
 
-      if (state.jobType === 'return') {
-        await confirmReturnUploadAndUpdateS2(exportedOrders);
-        return;
-      }
+      if (action === 'verify_employee') {
+        assertPost(request);
+        const { username, pin } = await request.json().catch(() => ({}));
+        if (!username || !pin) return json({ ok: false, error: 'username و pin مطلوبان' }, 400, request);
 
-      const confirmText = `تأكيد إنك رفعت ${exportedOrders.length} أوردر على داشبورد بوسطة وأرسلت الفواتير للمخزن؟\n\nمهم: الخطوة دي تسجيل تأكيد فقط، ومش هتغيّر S2.`;
-      if (!confirm(confirmText)) return;
+        const displayName = await verifyEmployee(env.DB, username, pin);
+        if (!displayName) return json({ ok: false, error: 'PIN خطأ أو المستخدم غير موجود' }, 401, request);
 
-      const btn = document.getElementById('confirmBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ جاري تسجيل التأكيد...';
-      showStatus('جاري تسجيل التأكيد اليدوي في سجل العمليات...', 'info');
-
-      try {
-        await apiFetch('record_manual_confirmation', {
-          method: 'POST',
-          body: {
-            jobType: state.jobType,
-            employee: currentEmployee.username,
-            orders: payloadOrders(exportedOrders),
-            allowRepeat: state.allowRepeatExport,
-          },
+        await writeLog(env.DB, {
+          tool: TOOL_NAME,
+          type: 'login',
+          employee: username,
+          notes: `دخول: ${displayName}`,
         });
 
-        state.manualConfirmed = true;
-        showStatus(`✓ تم تسجيل التأكيد اليدوي لـ ${exportedOrders.length} أوردر. الخطوة الأخيرة: اضغط "${JOB_META[state.jobType].updateText}" لتحديث حالة S2.`, 'success');
-        showToast('✓ تم تسجيل التأكيد اليدوي', 'success');
-        await loadLogs(false);
-      } catch (e) {
-        showStatus('فشل تسجيل التأكيد اليدوي: ' + e.message, 'error');
-        showToast('فشل تسجيل التأكيد اليدوي: ' + e.message, 'error');
-      } finally {
-        btn.textContent = JOB_META[state.jobType].confirmText;
-        updateRunUI();
-      }
-    }
-
-    async function confirmReturnUploadAndUpdateS2(exportedOrders) {
-      const confirmText = `تأكيد إنك رفعت ${exportedOrders.length} أوردر استرجاع على داشبورد بوسطة؟\n\nبعد التأكيد سيتم تحديث حالة الأوردرات مباشرة إلى S2 = In-Return.`;
-      if (!confirm(confirmText)) return;
-
-      const btn = document.getElementById('confirmBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ جاري التأكيد وتحديث S2...';
-      showStatus('جاري تأكيد الرفع وتحديث S2 إلى In-Return والتحقق المباشر من Shopify...', 'info');
-
-      try {
-        const data = await apiFetch('confirm_upload', {
-          method: 'POST',
-          body: {
-            jobType: 'return',
-            employee: currentEmployee.username,
-            orders: payloadOrders(exportedOrders),
-            allowRepeat: state.allowRepeatExport,
-          },
-        });
-
-        state.returnCombinedDone = true;
-        showStatus(`✓ تم تأكيد رفع ${data.count} أوردر على بوسطة وتحديث S2 إلى ${data.updatedTo}.`, 'success');
-        showToast(`✓ تم تحديث S2 لـ ${data.count} أوردر إلى ${data.updatedTo}`, 'success');
-
-        state.exported = false;
-        state.orders = [];
-        state.selectedOrderIds = new Set();
-        state.exportedOrders = [];
-        state.exportDuplicates = {};
-        state.allowRepeatExport = false;
-        renderOrders();
-        updateRunUI();
-        await loadLogs(false);
-      } catch (e) {
-        showStatus('فشل التأكيد الموحد أو تحديث S2: ' + e.message, 'error');
-        showToast('فشل التأكيد الموحد أو تحديث S2: ' + e.message, 'error');
-      } finally {
-        btn.textContent = JOB_META.return.confirmText;
-        updateRunUI();
-      }
-    }
-
-    async function updateS2Status() {
-      if (state.jobType === 'return') {
-        showToast('في Return تحديث S2 مدموج داخل زر التأكيد الموحد', 'info');
-        return;
+        return json({ ok: true, displayName }, 200, request);
       }
 
-      if (!state.manualConfirmed) {
-        showToast('لازم تأكد رفع بوسطة/المخزن الأول', 'error');
-        return;
-      }
-
-      const exportedOrders = state.exportedOrders || [];
-      if (!exportedOrders.length) {
-        showToast('لا توجد أوردرات مصدّرة للتحديث', 'error');
-        return;
-      }
-
-      const confirmText = `تأكيد تحديث S2 لعدد ${exportedOrders.length} أوردر إلى ${JOB_META[state.jobType].next}؟`;
-      if (!confirm(confirmText)) return;
-
-      const btn = document.getElementById('updateS2Btn');
-      btn.disabled = true;
-      btn.textContent = '⏳ جاري تحديث S2...';
-      showStatus('جاري تحديث S2 في Shopify والتحقق المباشر...', 'info');
-
-      try {
-        const data = await apiFetch('confirm_upload', {
-          method: 'POST',
-          body: {
-            jobType: state.jobType,
-            employee: currentEmployee.username,
-            orders: payloadOrders(exportedOrders),
-            allowRepeat: state.allowRepeatExport,
-          },
-        });
-
-        showStatus(`✓ تم تحديث ${data.count} أوردر إلى ${data.updatedTo}.`, 'success');
-        showToast(`✓ تم تحديث S2 لـ ${data.count} أوردر`, 'success');
-
-        state.exported = false;
-        state.manualConfirmed = false;
-        state.orders = [];
-        state.selectedOrderIds = new Set();
-        state.exportedOrders = [];
-        state.exportDuplicates = {};
-        state.allowRepeatExport = false;
-        renderOrders();
-        updateRunUI();
-        await loadLogs(false);
-      } catch (e) {
-        showStatus('فشل تحديث S2: ' + e.message, 'error');
-        showToast('فشل تحديث S2: ' + e.message, 'error');
-      } finally {
-        btn.textContent = JOB_META[state.jobType].updateText;
-        updateRunUI();
-      }
-    }
-
-    function renderOrders() {
-      const rows = document.getElementById('ordersRows');
-      rows.innerHTML = '';
-
-      const list = document.getElementById('ordersList');
-      list.classList.toggle('show', state.orders.length > 0);
-
-      const selectedCount = getSelectedOrders().length;
-      document.getElementById('orderListHint').textContent =
-        state.orders.length ? `${state.orders.length} أوردر — المحدد ${selectedCount}` : 'اضغط الاستعلام الأول';
-
-      const exportedIds = new Set((state.exportedOrders || []).map(order => order.id));
-
-      state.orders.forEach((order) => {
-        const addr = order.shippingAddress || {};
-        const selected = state.selectedOrderIds.has(order.id);
-        const duplicate = state.exportDuplicates?.[order.name];
-        const exportedInCurrentBatch = exportedIds.has(order.id);
-
-        const row = document.createElement('div');
-        row.className = `order-row${selected ? ' selected' : ''}`;
-
-        const selectCell = document.createElement('div');
-        selectCell.className = 'order-select-cell';
-        selectCell.innerHTML = `
-          <input
-            class="order-checkbox"
-            type="checkbox"
-            data-id="${escapeHtml(order.id)}"
-            aria-label="تحديد ${escapeHtml(order.name)}"
-            ${selected ? 'checked' : ''}
-            onchange="toggleOrderSelection(this)"
-          />
-        `;
-
-        const name = document.createElement('div');
-        name.innerHTML = `<span class="order-name">${escapeHtml(order.name)}</span>`;
-
-        const customer = document.createElement('div');
-        customer.innerHTML = `
-          <div>${escapeHtml([addr.firstName, addr.lastName].filter(Boolean).join(' ') || '—')}</div>
-          <div style="color:var(--text-muted);font-size:11px;">${escapeHtml([addr.city, addr.address1].filter(Boolean).join(' — ') || '—')}</div>
-        `;
-
-        const status = document.createElement('div');
-        status.innerHTML = `<span class="badge badge-type">${escapeHtml(order.manualStatus?.value || JOB_META[state.jobType].expected)}</span>`;
-
-        const courier = document.createElement('div');
-        courier.innerHTML = `<span class="badge badge-ok">${escapeHtml(order.courier?.value || 'Bosta')}</span>`;
-
-        const exportStatus = document.createElement('div');
-        exportStatus.innerHTML = exportedInCurrentBatch
-          ? `<span class="badge badge-purple">Batch مصدّر</span>`
-          : duplicate
-            ? `<span class="badge badge-warn">تصدير سابق</span>`
-            : `<span class="badge badge-ok">جاهز</span>`;
-
-        row.append(selectCell, name, customer, status, courier, exportStatus);
-        rows.appendChild(row);
-      });
-
-      syncSelectAllOrders();
-    }
-
-    async function buildExcelExportFile(orders, jobType) {
-      const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet('Sheet1');
-
-      ws.columns = [
-        { key:'fullName' },
-        { key:'phone' },
-        { key:'city' },
-        { key:'streetName' },
-        { key:'cashAmount' },
-        { key:'area' },
-        { key:'landmark' },
-        { key:'workAddress' },
-        { key:'secondPhone' },
-        { key:'flexship' },
-        { key:'openPackage' },
-        { key:'packageType' },
-        { key:'itemCount' },
-        { key:'description' },
-        { key:'deliveryNotes' },
-        { key:'orderRef' },
-        { key:'returnItems' },
-        { key:'returnDesc' },
-        { key:'goodsValue' },
-        { key:'bostaCredits' },
-        { key:'brandName' },
-      ];
-
-      ws.addRow([
-        'Full Name',
-        'Phone',
-        'City',
-        'Street Name',
-        'Cash Amount',
-        'Area',
-        'Landmark',
-        'Work address?',
-        'Second Phone',
-        'Apply Flexship\nFees?',
-        'Allow\nOpening Package?',
-        'Package Type',
-        'No. of Items',
-        'Package Description',
-        'Delivery Notes',
-        'Order Reference',
-        'Return #Items',
-        'Return Package\nDescription',
-        'Goods Value\nAmount',
-        'Pay With Bosta\nCredits?',
-        'Brand Name',
-      ]);
-
-      orders.forEach(order => {
-        const addr  = order.shippingAddress || {};
-        const items = (order.lineItems?.edges || [])
-          .map(e => e.node)
-          .filter(li => (li.currentQuantity || 0) > 0);
-
-        const parsedCash = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0);
-        const rawCash = Number.isFinite(parsedCash) && parsedCash !== 0 ? parsedCash : null;
-        const cashAmountForExport = jobType === 'return' && rawCash !== null
-          ? Math.max(rawCash, -2000)
-          : rawCash;
-
-        const count = items.reduce((s, li) => s + (li.currentQuantity || 1), 0) || null;
-        const standardPackageDescription = items
-          .map(li => `${li.sku || li.name} x${li.currentQuantity}`)
-          .join(' | ') || null;
-
-        const allReturns = order.returns?.edges || [];
-
-        const returnLineItemsList = allReturns
-          .flatMap(r => r.node.returnLineItems?.edges || [])
-          .map(e => {
-            const li = e.node.fulfillmentLineItem?.lineItem;
-            return li ? `${li.sku || li.name} x${e.node.quantity}` : null;
-          })
-          .filter(Boolean);
-        const returnDesc = returnLineItemsList.join(' | ') || null;
-
-        const returnQtyTotal = allReturns
-          .flatMap(r => r.node.returnLineItems?.edges || [])
-          .reduce((s, e) => s + (e.node.quantity || 1), 0);
-        const returnItemsCount = returnQtyTotal > 1 ? returnQtyTotal : null;
-
-        // Exchange export must describe ONLY the items that will go to the customer,
-        // not every active order line item.
-        const exchangePackageRows = allReturns
-          .flatMap(r => r.node.exchangeLineItems?.edges || [])
-          .flatMap(e => {
-            const qty = e.node.quantity || 1;
-            return (e.node.lineItems || [])
-              .map(li => ({
-                label: li?.sku || li?.name || null,
-                qty,
-              }))
-              .filter(row => !!row.label);
-          });
-
-        const exchangePackageDescription = exchangePackageRows
-          .map(row => `${row.label} x${row.qty}`)
-          .join(' | ') || null;
-
-        const exchangePackageCount = exchangePackageRows
-          .reduce((s, row) => s + (row.qty || 1), 0) || null;
-
-        const packageDescriptionForExport = jobType === 'exchange'
-          ? exchangePackageDescription
-          : standardPackageDescription;
-
-        const packageItemCountForExport = jobType === 'exchange'
-          ? exchangePackageCount
-          : count;
-
-        const hasExchange = allReturns.some(r => (r.node.exchangeLineItems?.edges || []).length > 0);
-        let goodsValue = 0;
-        if (hasExchange) {
-          allReturns.forEach(r => {
-            (r.node.exchangeLineItems?.edges || []).forEach(e => {
-              const qty = e.node.quantity || 1;
-              (e.node.lineItems || []).forEach(li => {
-                goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
-              });
-            });
-          });
-        } else {
-          allReturns.forEach(r => {
-            (r.node.returnLineItems?.edges || []).forEach(e => {
-              const li  = e.node.fulfillmentLineItem?.lineItem;
-              const qty = e.node.quantity || 1;
-              if (li) goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
-            });
+      if (action === 'log_logout') {
+        const username = url.searchParams.get('username');
+        if (username) {
+          await writeLog(env.DB, {
+            tool: TOOL_NAME,
+            type: 'logout',
+            employee: username,
+            notes: `خروج: ${username.replace(/_/g, ' ')}`,
           });
         }
-        const goodsValueFinal = goodsValue > 0 ? goodsValue : null;
+        return json({ ok: true }, 200, request);
+      }
 
-        ws.addRow({
-          fullName:      [addr.firstName, addr.lastName].filter(Boolean).join(' ') || null,
-          phone:         addr.phone    || null,
-          city:          addr.city     || null,
-          streetName:    addr.address1 || null,
-          cashAmount:    cashAmountForExport,
-          area:          null,
-          landmark:      addr.address2 || null,
-          workAddress:   null,
-          secondPhone:   order.customer?.phone || null,
-          flexship:      'Yes',
-          openPackage:   'Yes',
-          packageType:   null,
-          itemCount:     packageItemCountForExport !== 1 ? packageItemCountForExport : null,
-          description:   packageDescriptionForExport,
-          deliveryNotes: order.note    || null,
-          orderRef:      order.name    || null,
-          returnItems:   returnItemsCount,
-          returnDesc,
-          goodsValue:    goodsValueFinal,
-          bostaCredits:  null,
-          brandName:     'Ecommoda',
+      if (action === 'get_employees') {
+        const { results } = await env.DB.prepare(
+          'SELECT username, display_name FROM employees WHERE is_active = 1 ORDER BY display_name',
+        ).all();
+
+        return json({ ok: true, employees: results || [] }, 200, request);
+      }
+      // ──────────────────────────────────────────────────────
+
+      // ─── §EXPORT — candidate discovery + Excel export tracking ───
+      if (action === 'fetch_candidates' || action === '') {
+        assertPost(request);
+
+        const body = await request.json().catch(() => ({}));
+        const job = getJobConfig(body.jobType);
+        const employee = cleanText(body.employee);
+
+        const token = await getAccessToken(env);
+        const result = await fetchCandidateOrders(env, token, job);
+
+        await writeLog(env.DB, {
+          tool: TOOL_NAME,
+          type: 'scan',
+          employee: employee || null,
+          notes: `فحص ${job.label}: ${result.orders.length} أوردر مطابق`,
+          extra: {
+            jobType: job.jobType,
+            expectedStatus: job.expectedStatus,
+            courier: 'Bosta',
+            duplicateCheckMode: 'export_only_on_excel_click',
+            pageInfo: result.pageInfo,
+          },
         });
-      });
 
-      const buf = await wb.xlsx.writeBuffer();
-
-      return {
-        buf,
-        filename: 'Bosta_Export.xlsx',
-      };
-    }
-
-    function downloadExcelExportFile(file) {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([file.buf], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      }));
-      a.download = file.filename;
-      document.body.appendChild(a);
-      a.click();
-      URL.revokeObjectURL(a.href);
-      a.remove();
-    }
-
-    async function loadLogs(showMsg = true) {
-      if (!isConfigured()) return;
-      try {
-        const data = await apiFetch('get_logs', { method: 'GET' });
-        state.logs = (data.entries || []).filter(e => !['login', 'logout'].includes(e.type));
-        renderLogs();
-        if (showMsg) showToast('تم تحديث السجل', 'success');
-      } catch (e) {
-        if (showMsg) showToast('فشل تحديث السجل: ' + e.message, 'error');
-      }
-    }
-
-    function renderLogs() {
-      const type = document.getElementById('logTypeFilter').value;
-      const search = document.getElementById('logSearch').value.trim().toLowerCase();
-      const list = document.getElementById('logList');
-
-      let rows = state.logs || [];
-      if (type) rows = rows.filter(r => r.type === type);
-      if (search) {
-        rows = rows.filter(r => [r.order_name, r.notes, r.employee, r.value_before, r.value_after, r.type]
-          .some(v => String(v || '').toLowerCase().includes(search)));
+        return json({
+          ok: true,
+          jobType: job.jobType,
+          expectedStatus: job.expectedStatus,
+          nextStatus: job.nextStatus,
+          orders: result.orders,
+          duplicates: {},
+          duplicateCheckMode: 'export_only_on_excel_click',
+          pageInfo: result.pageInfo,
+        }, 200, request);
       }
 
-      if (!rows.length) {
-        list.innerHTML = '<div class="log-empty">لا توجد عمليات مطابقة</div>';
-        return;
+      if (action === 'record_manual_confirmation') {
+        assertPost(request);
+
+        const body = await request.json().catch(() => ({}));
+        const job = getJobConfig(body.jobType);
+        const employee = cleanText(body.employee);
+        const orders = normalizeOrderPayload(body.orders);
+
+        if (!employee) return json({ ok: false, error: 'employee مطلوب' }, 400, request);
+        if (!orders.length) return json({ ok: false, error: 'لا توجد أوردرات للتأكيد اليدوي' }, 400, request);
+
+        const now = new Date().toISOString();
+        await writeLogsBatch(env.DB, orders.map((order) => ({
+          timestamp: now,
+          tool: TOOL_NAME,
+          type: job.manualConfirmType,
+          employee,
+          orderId: order.id,
+          orderName: order.name,
+          valueBefore: order.s2Status || job.expectedStatus,
+          valueAfter: order.s2Status || job.expectedStatus,
+          notes: job.jobType === 'exchange'
+            ? 'تأكيد يدوي: تم رفع الأوردر على داشبورد بوسطة وإرسال الفاتورة للمخزن'
+            : 'تأكيد يدوي: تم رفع الأوردر على داشبورد بوسطة',
+          extra: {
+            jobType: job.jobType,
+            expectedStatus: job.expectedStatus,
+            courier: order.courier || 'Bosta',
+            manualConfirmation: true,
+          },
+        })));
+
+        return json({
+          ok: true,
+          count: orders.length,
+        }, 200, request);
       }
 
-      list.innerHTML = '';
-      rows.forEach((entry) => {
-        const div = document.createElement('div');
-        div.className = 'log-entry';
+      if (action === 'check_export_duplicates') {
+        assertPost(request);
 
-        const isUpdate = entry.type?.startsWith('confirm');
-        const isManual = entry.type?.startsWith('manual_confirm');
-        const dotClass = isUpdate ? 'confirm' : (isManual ? 'scan' : (entry.type === 'scan' ? 'scan' : 'export'));
+        const body = await request.json().catch(() => ({}));
+        getJobConfig(body.jobType);
+        const orders = normalizeOrderPayload(body.orders);
 
-        div.innerHTML = `
-          <div class="log-dot ${dotClass}"></div>
-          <div class="log-content">
-            <div class="log-top">
-              <span class="badge ${isUpdate ? 'badge-ok' : (isManual || entry.type === 'scan' ? 'badge-purple' : 'badge-type')}">${escapeHtml(typeLabel(entry.type))}</span>
-              ${entry.order_name ? `<span class="order-name">${escapeHtml(entry.order_name)}</span>` : ''}
-              ${entry.employee ? `<span class="badge badge-type">${escapeHtml(entry.employee)}</span>` : ''}
-            </div>
-            <div class="log-notes">${escapeHtml(entry.notes || '—')}</div>
-            <div class="log-meta">
-              <span>${escapeHtml(formatCairo(entry.timestamp))}</span>
-              ${entry.value_before || entry.value_after ? `<span class="mono">${escapeHtml(entry.value_before || '')} → ${escapeHtml(entry.value_after || '')}</span>` : ''}
-            </div>
-          </div>
-        `;
+        if (!orders.length) return json({ ok: false, error: 'لا توجد أوردرات لفحص التكرار' }, 400, request);
 
-        list.appendChild(div);
-      });
+        const duplicates = await findExportDuplicateStats(env.DB, orders.map(o => o.name));
+
+        return json({
+          ok: true,
+          count: Object.keys(duplicates).length,
+          duplicates,
+        }, 200, request);
+      }
+
+      if (action === 'record_export') {
+        assertPost(request);
+
+        const body = await request.json().catch(() => ({}));
+        const job = getJobConfig(body.jobType);
+        const employee = cleanText(body.employee);
+        const orders = normalizeOrderPayload(body.orders);
+        const allowRepeat = !!body.allowRepeat;
+
+        if (!employee) return json({ ok: false, error: 'employee مطلوب' }, 400, request);
+        if (!orders.length) return json({ ok: false, error: 'لا توجد أوردرات للتسجيل' }, 400, request);
+
+        const duplicateMap = await findExportDuplicateStats(env.DB, orders.map(o => o.name));
+        const blocked = Object.keys(duplicateMap);
+        if (blocked.length && !allowRepeat) {
+          return json({
+            ok: false,
+            code: 'DUPLICATES_FOUND',
+            error: 'يوجد أوردرات تم تصديرها Excel قبل كده — راجع نافذة التكرار واسمح بالتصدير لو عايز تكمل',
+            duplicates: duplicateMap,
+          }, 409, request);
+        }
+
+        const now = new Date().toISOString();
+        await writeLogsBatch(env.DB, orders.map((order) => ({
+          timestamp: now,
+          tool: TOOL_NAME,
+          type: job.exportType,
+          employee,
+          orderId: order.id,
+          orderName: order.name,
+          valueBefore: order.s2Status || job.expectedStatus,
+          valueAfter: order.s2Status || job.expectedStatus,
+          notes: `${allowRepeat && duplicateMap[order.name] ? 'تصدير مكرر مسموح' : 'تصدير'} ملف بوسطة — ${job.label}`,
+          extra: {
+            jobType: job.jobType,
+            expectedStatus: job.expectedStatus,
+            courier: order.courier || 'Bosta',
+            duplicateBeforeExport: !!duplicateMap[order.name],
+            exportHistoryBefore: duplicateMap[order.name] || null,
+          },
+        })));
+
+        return json({
+          ok: true,
+          count: orders.length,
+          duplicatesAllowed: allowRepeat,
+          duplicateCount: blocked.length,
+        }, 200, request);
+      }
+
+      if (action === 'confirm_upload') {
+        assertPost(request);
+
+        const body = await request.json().catch(() => ({}));
+        const job = getJobConfig(body.jobType);
+        const employee = cleanText(body.employee);
+        const orders = normalizeOrderPayload(body.orders);
+        // Optional checklist from the confirmation modal (v4.0.0+) — audit-trail only,
+        // never used to gate the write itself (the HTML already gates the button on it).
+        const checklist = body.checklist && typeof body.checklist === 'object' ? body.checklist : null;
+        const checklistNote = checklist
+          ? ` | Checklist: بوسطة=${checklist.bostaUploaded ? '✓' : '✗'}${job.jobType === 'exchange' ? `, فواتير=${checklist.invoicesSent ? '✓' : '✗'}` : ''}`
+          : '';
+
+        if (!employee) return json({ ok: false, error: 'employee مطلوب' }, 400, request);
+        if (!orders.length) return json({ ok: false, error: 'لا توجد أوردرات للتأكيد' }, 400, request);
+
+        const token = await getAccessToken(env);
+        // Truncated to whole seconds — see nowToSecond() note at top of file.
+        const now = nowToSecond();
+
+        await setManualStatus(env, token, orders, job.nextStatus, now);
+
+        const mismatches = await verifyManualStatus(env, token, orders, job.nextStatus, now);
+        if (mismatches.length) {
+          return json({
+            ok: false,
+            code: 'VERIFY_FAILED',
+            error: 'تم تنفيذ التحديث لكن التحقق المباشر رجّع قيم غير متوقعة لبعض الأوردرات',
+            mismatches,
+          }, 500, request);
+        }
+
+        // Tool-specific log (for this tool's own log tab).
+        await writeLogsBatch(env.DB, orders.map((order) => ({
+          timestamp: now,
+          tool: TOOL_NAME,
+          type: job.confirmType,
+          employee,
+          orderId: order.id,
+          orderName: order.name,
+          valueBefore: order.s2Status || job.expectedStatus,
+          valueAfter: job.nextStatus,
+          notes: (job.jobType === 'return'
+            ? 'تأكيد رفع بوسطة وتحديث S2 إلى In-Return — استرجاع'
+            : 'تأكيد رفع بوسطة + إرسال فواتير للمخزن، وتحديث S2 إلى Ready — استبدال') + checklistNote,
+          extra: {
+            jobType: job.jobType,
+            expectedStatus: job.expectedStatus,
+            nextStatus: job.nextStatus,
+            courier: order.courier || 'Bosta',
+            returnCombinedConfirmAndS2: job.jobType === 'return',
+            checklist,
+          },
+        })));
+
+        // Cross-tool status-history log — REQUIRED so cycle-time / R-E-cycle
+        // KPIs (built elsewhere, sourced only from tool='metafields_change')
+        // can see this S2 transition. See v3.3.0 changelog at top of file.
+        await writeLogsBatch(env.DB, orders.map((order) => ({
+          timestamp: now,
+          tool: 'metafields_change',
+          type: 'update',
+          employee,
+          orderId: order.id,
+          orderName: order.name,
+          valueBefore: order.s2Status || job.expectedStatus,
+          valueAfter: job.nextStatus,
+          notes: `status_2_r_e: ${order.s2Status || job.expectedStatus} → ${job.nextStatus} (via ${TOOL_NAME})`,
+          extra: {
+            metafieldKey: 'custom.status_2_r_e',
+            sourceTool: TOOL_NAME,
+            jobType: job.jobType,
+          },
+        })));
+
+        return json({
+          ok: true,
+          count: orders.length,
+          updatedTo: job.nextStatus,
+        }, 200, request);
+      }
+      // ──────────────────────────────────────────────────────
+
+      // ─── §LOG-ENDPOINTS ───────────────────────────────────
+      if (action === 'get_logs') {
+        const employee = url.searchParams.get('employee') || null;
+        const type     = url.searchParams.get('type')     || null;
+        const search   = url.searchParams.get('search')   || null;
+        const limit    = Math.min(parseInt(url.searchParams.get('limit')  || '100', 10), 100);
+        const offset   = Math.max(parseInt(url.searchParams.get('offset') || '0', 10),    0);
+        const entries  = await getLogs(env.DB, { tool: TOOL_NAME, employee, type, search, limit, offset });
+        return json({ ok: true, entries }, 200, request);
+      }
+
+      if (action === 'get_logs_count') {
+        const employee = url.searchParams.get('employee') || null;
+        const search   = url.searchParams.get('search')   || null;
+        const total    = await getLogsCount(env.DB, { tool: TOOL_NAME, employee, search });
+        return json({ ok: true, total }, 200, request);
+      }
+
+      if (action === 'get_logs_export') {
+        const employee = url.searchParams.get('employee') || null;
+        const search   = url.searchParams.get('search')   || null;
+        const entries  = await getLogsExport(env.DB, { tool: TOOL_NAME, employee, search });
+        return json({ ok: true, entries }, 200, request);
+      }
+      // ──────────────────────────────────────────────────────
+
+      return json({ ok: false, error: 'action غير معروف' }, 404, request);
+    } catch (err) {
+      const status = err.status || 500;
+      return json({ ok: false, error: err.message || String(err) }, status, request);
     }
-
-    function typeLabel(type) {
-      const labels = {
-        scan: 'Scan',
-        export_return: 'Export Return',
-        export_exchange: 'Export Exchange',
-        manual_confirm_return: 'Manual Confirm Return',
-        manual_confirm_exchange: 'Manual Confirm Exchange',
-        confirm_return: 'Combined Return Confirm + S2',
-        confirm_exchange: 'S2 Update Exchange',
-        login: 'Login',
-        logout: 'Logout',
-      };
-      return labels[type] || type || '—';
-    }
-
-    function escapeHtml(value) {
-      return String(value ?? '').replace(/[&<>"']/g, ch => ({
-        '&':'&amp;',
-        '<':'&lt;',
-        '>':'&gt;',
-        '"':'&quot;',
-        "'":'&#039;',
-      }[ch]));
-    }
-
-    function cairoNow() {
-      return new Date(Date.now() + 3 * 60 * 60 * 1000);
-    }
-
-    function cairoDateStamp() {
-      const d = cairoNow();
-      const pad = n => String(n).padStart(2, '0');
-      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`;
-    }
-
-    function formatCairo(iso) {
-      if (!iso) return '—';
-      const base = new Date(iso);
-      if (Number.isNaN(base.getTime())) return iso;
-
-      const d = new Date(base.getTime() + 3 * 60 * 60 * 1000);
-      const pad = n => String(n).padStart(2, '0');
-      const y = d.getUTCFullYear();
-      const m = pad(d.getUTCMonth() + 1);
-      const day = pad(d.getUTCDate());
-      let h = d.getUTCHours();
-      const mins = pad(d.getUTCMinutes());
-      const ampm = h < 12 ? 'صباحاً' : 'مساءً';
-      h = h % 12 || 12;
-      return `${y}-${m}-${day} ${pad(h)}:${mins} ${ampm}`;
-    }
-
-    updateSettingsBtn();
-    updateLoginSettingsBtn();
-    resetRun();
-    loadEmployeesList();
-  </script>
-</body>
-</html>
+  },
+};
