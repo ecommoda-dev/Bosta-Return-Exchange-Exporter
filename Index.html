@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bosta Return / Exchange Exporter V3.3.0</title>
+  <title>Bosta Return / Exchange Exporter V3.3.1</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
@@ -656,13 +656,13 @@
         <div class="app-icon">📦</div>
         <div class="app-title-text">
           <h1>Bosta Return / Exchange Exporter</h1>
-          <span>Selective Excel export + export-log duplicate guard — V3.3.0</span>
+          <span>Selective Excel export + export-log duplicate guard — V3.3.1</span>
         </div>
       </div>
       <div class="app-header-btns">
         <button class="hbtn active-user" id="activeUserBtn" onclick="logout()" title="تسجيل خروج">👤 <span id="activeUserName">—</span></button>
         <button class="hbtn" onclick="openAbout()">ℹ️ عن الأداة</button>
-        <button class="hbtn ver-btn" onclick="openChangelog()">V3.3.0</button>
+        <button class="hbtn ver-btn" onclick="openChangelog()">V3.3.1</button>
         <button class="hbtn" id="settingsBtn" onclick="openSettings()">⚙️ الإعدادات</button>
       </div>
     </header>
@@ -928,11 +928,15 @@ NOTES
   <div class="modal-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="modal wide">
       <div class="modal-hdr">
-        <span>V3.3.0 — Changelog</span>
+        <span>V3.3.1 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">×</button>
       </div>
       <div class="modal-body">
         <div class="hint">
+          <b>V3.3.1</b><br>
+          - سقف الـ -2000 على Cash Amount بقى ينطبق على الاسترجاع <b>والاستبدال</b> معًا (كان قاصر على الاسترجاع بس).<br>
+          - عمود "City" في ملف Excel بقى ياخد من <b>المحافظة (Province)</b>، وعمود "Area" بقى ياخد من <b>المدينة (City)</b> من عنوان الشحن.<br>
+          <br>
           <b>V3.3.0</b><br>
           - إضافة About Modal كامل (وصف الأداة + تشريح الكود).<br>
           - ترتيب أزرار الـ header اتصلح (⚙️ الإعدادات آخر زرار على اليمين).<br>
@@ -987,7 +991,7 @@ NOTES
   </div>
 
   <script>
-    const VERSION = '3.3.0';
+    const VERSION = '3.3.1';
     const CFG_KEY = 'bosta_exchange_export_config_v3';
     const LOG_PAGE_SIZE = 100;
 
@@ -2013,7 +2017,8 @@ NOTES
 
         const parsedCash = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0);
         const rawCash = Number.isFinite(parsedCash) && parsedCash !== 0 ? parsedCash : null;
-        const cashAmountForExport = jobType === 'return' && rawCash !== null
+        // -2000 floor now applies to BOTH return and exchange (was return-only before).
+        const cashAmountForExport = rawCash !== null
           ? Math.max(rawCash, -2000)
           : rawCash;
 
@@ -2092,10 +2097,10 @@ NOTES
         ws.addRow({
           fullName:      [addr.firstName, addr.lastName].filter(Boolean).join(' ') || null,
           phone:         addr.phone    || null,
-          city:          addr.city     || null,
+          city:          addr.province || null,
           streetName:    addr.address1 || null,
           cashAmount:    cashAmountForExport,
-          area:          null,
+          area:          addr.city     || null,
           landmark:      addr.address2 || null,
           workAddress:   null,
           secondPhone:   order.customer?.phone || null,
