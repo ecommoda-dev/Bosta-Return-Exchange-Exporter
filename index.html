@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <!-- skills: html-builder v1.0.0 · worker-builder v1.0.0 · order-lifecycle v1.1.0 · constants v1.2.0 — 26-08-2026 -->
+  <!-- skills: html-builder v6.0.0 · worker-builder v2.0.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026 -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bosta Return / Exchange Exporter V4.0.0</title>
+  <title>Bosta Return / Exchange Exporter V4.1.0</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
@@ -98,7 +98,7 @@
       position: fixed;
       inset: 0;
       background: var(--bg);
-      z-index: 300;
+      z-index: 500;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -132,6 +132,9 @@
     }
     .login-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
     .login-select:disabled { opacity: .6; cursor: not-allowed; }
+    /* Progressive reveal — hidden until an employee is chosen (html-builder Step 4) */
+    .pin-zone { display: none; }
+    .pin-zone.visible { display: block; }
     .pin-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
     .pin-display { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
     .pin-dot {
@@ -356,7 +359,8 @@
       cursor: pointer;
       flex-shrink: 0;
     }
-    .order-name { direction: ltr; font-family: var(--font-mono); font-weight: 800; color: var(--accent); }
+    .order-name { direction: ltr; font-family: var(--font-mono); font-weight: 800; color: var(--accent); text-decoration: none; }
+    a.order-name:hover { text-decoration: underline; }
     .badge {
       display: inline-flex;
       align-items: center;
@@ -423,7 +427,7 @@
       position: fixed;
       inset: 0;
       background: rgba(0,0,0,.38);
-      z-index: 400;
+      z-index: 600;
       display: none;
       align-items: center;
       justify-content: center;
@@ -632,7 +636,13 @@
       margin: 0;
     }
 
-    .toast-container { position: fixed; bottom: 18px; left: 18px; z-index: 600; display: flex; flex-direction: column; gap: 8px; }
+    .export-warn {
+      margin: 0 0 12px; padding: 10px 14px; border-radius: var(--radius-sm);
+      background: var(--amber-light); border: 1px solid var(--amber-border);
+      color: var(--amber-dark); font-size: 12px; font-weight: 700; line-height: 1.7;
+    }
+
+    .toast-container { position: fixed; bottom: 18px; left: 18px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
     .toast {
       padding: 11px 14px;
       border-radius: var(--radius-sm);
@@ -667,6 +677,7 @@
           ⚙️ الإعدادات
         </button>
       </div>
+      <div id="loginVersionText" style="text-align:center;font-size:10px;color:var(--text-muted);margin-bottom:6px;font-family:var(--font-mono);"></div>
 
       <div style="text-align:center;margin-bottom:10px;font-size:28px;">📦</div>
       <div class="login-title">Bosta Return / Exchange Exporter</div>
@@ -680,31 +691,34 @@
         </select>
       </div>
 
-      <div class="pin-label" id="pinLabel">أدخل الـ PIN</div>
-      <div class="pin-display">
-        <div class="pin-dot" id="pd0"></div>
-        <div class="pin-dot" id="pd1"></div>
-        <div class="pin-dot" id="pd2"></div>
-        <div class="pin-dot" id="pd3"></div>
-      </div>
+      <div class="pin-zone" id="pinZone">
+        <div class="pin-label" id="pinLabel">أدخل الـ PIN</div>
+        <div class="pin-display">
+          <div class="pin-dot" id="pd0"></div>
+          <div class="pin-dot" id="pd1"></div>
+          <div class="pin-dot" id="pd2"></div>
+          <div class="pin-dot" id="pd3"></div>
+        </div>
 
-      <div class="pin-keypad">
-        <button class="pin-key" onclick="pinPress('1')">1</button>
-        <button class="pin-key" onclick="pinPress('2')">2</button>
-        <button class="pin-key" onclick="pinPress('3')">3</button>
-        <button class="pin-key" onclick="pinPress('4')">4</button>
-        <button class="pin-key" onclick="pinPress('5')">5</button>
-        <button class="pin-key" onclick="pinPress('6')">6</button>
-        <button class="pin-key" onclick="pinPress('7')">7</button>
-        <button class="pin-key" onclick="pinPress('8')">8</button>
-        <button class="pin-key" onclick="pinPress('9')">9</button>
-        <button class="pin-key del" onclick="pinBackspace()">⌫</button>
-        <button class="pin-key" onclick="pinPress('0')">0</button>
-        <button class="pin-key del" onclick="pinClear()">مسح</button>
+        <div class="pin-keypad">
+          <button class="pin-key" onclick="pinPress('1')">1</button>
+          <button class="pin-key" onclick="pinPress('2')">2</button>
+          <button class="pin-key" onclick="pinPress('3')">3</button>
+          <button class="pin-key" onclick="pinPress('4')">4</button>
+          <button class="pin-key" onclick="pinPress('5')">5</button>
+          <button class="pin-key" onclick="pinPress('6')">6</button>
+          <button class="pin-key" onclick="pinPress('7')">7</button>
+          <button class="pin-key" onclick="pinPress('8')">8</button>
+          <button class="pin-key" onclick="pinPress('9')">9</button>
+          <button class="pin-key del" onclick="pinBackspace()">⌫</button>
+          <button class="pin-key" onclick="pinPress('0')">0</button>
+          <button class="pin-key del" onclick="pinClear()">مسح</button>
+        </div>
+
+        <button class="btn-login" id="loginBtn" onclick="submitPin()" disabled>دخول</button>
       </div>
 
       <div class="login-error" id="loginError"></div>
-      <button class="btn-login" id="loginBtn" onclick="submitPin()" disabled>دخول</button>
     </div>
   </div>
 
@@ -720,7 +734,8 @@
       <div class="app-header-btns">
         <button class="hbtn active-user" id="activeUserBtn" onclick="logout()" title="تسجيل خروج">👤 <span id="activeUserName">—</span></button>
         <button class="hbtn" onclick="openAbout()">ℹ️ عن الأداة</button>
-        <button class="hbtn ver-btn" onclick="openChangelog()">V4.0.0</button>
+        <button class="hbtn" id="verStaleBtn" style="display:none;border-color:var(--amber);color:var(--amber-dark);background:var(--amber-light);" onclick="showWorkerStale()">⚠️ الـ Worker نسخة قديمة</button>
+        <button class="hbtn ver-btn" id="verBtn" onclick="openChangelog()">V4.1.0</button>
         <button class="hbtn" id="settingsBtn" onclick="openSettings()">⚙️ الإعدادات</button>
       </div>
     </header>
@@ -857,6 +872,8 @@
           <button class="btn btn-green" id="logExportBtn" onclick="exportLogXLSX()">⬇ تصدير السجل .xlsx</button>
         </div>
 
+        <div id="logExportWarn" class="export-warn" style="display:none;"></div>
+
         <div class="log-list" id="logList">
           <div class="log-empty">افتح التبويب أو اضغط تحديث</div>
         </div>
@@ -899,6 +916,11 @@
         <div class="hint">
           الاسترجاع والاستبدال بقى عندهم نفس التدفق: تصدير Excel، ثم زرار واحد بس لتحديث الحالة، واللي
           بيفتح نافذة تأكيد فيها Checkboxes (رفع بوسطة، وإرسال الفواتير في حالة الاستبدال) قبل ما يتفعّل زرار التأكيد.
+        </div>
+        <div class="settings-field" style="border-top:1.5px solid var(--border);padding-top:12px;">
+          <label class="settings-label">فحص النظام</label>
+          <button class="btn btn-secondary" id="diagBtn" onclick="runDiag()" type="button">🩺 افحص الأداة والاتصالات</button>
+          <div id="diagResult" style="margin-top:10px;font-size:12px;line-height:1.7;"></div>
         </div>
       </div>
       <div class="modal-ftr">
@@ -943,7 +965,9 @@
               <div class="about-ep"><code>confirm_upload</code><span>كتابة S2 + وقت التحديث + تحقق مباشر من Shopify — نفس الـ endpoint لكل من الاسترجاع والاستبدال دلوقتي</span></div>
               <div class="about-ep"><code>get_logs</code><span>عرض سجل العمليات (100/صفحة)</span></div>
               <div class="about-ep"><code>get_logs_count</code><span>إجمالي عدد العمليات المسجّلة</span></div>
-              <div class="about-ep"><code>get_logs_export</code><span>تصدير سجل العمليات كملف Excel (حتى 2000 صف)</span></div>
+              <div class="about-ep"><code>get_logs_export</code><span>تصدير سجل العمليات كملف Excel (حتى 2000 صف — يرجّع cap/total/truncated لو الملف اتقص)</span></div>
+              <div class="about-ep"><code>diag</code><span>فحص ذاتي بدون كتابة — الاتصال بشوبيفاي وD1 وOrigin (زرار 🩺 في الإعدادات)</span></div>
+              <div class="about-ep"><code>get_config</code><span>رقم نسخة الـ Worker — تستخدمه الصفحة لحارس نسخة الـ Worker (⚠️ في الهيدر)</span></div>
             </div>
           </div>
         </details>
@@ -964,11 +988,16 @@ Feature                          | File   | Section | fn/action
 كتابة S2 + تحقق مباشر               | Worker | EXPORT  | confirm_upload
 سجل العمليات + Pagination           | Both   | LOG(-JS)| get_logs / get_logs_count
 تصدير سجل العمليات (ملف مختلف)      | Both   | LOG(-JS)| get_logs_export / exportLogXLSX
+فحص ذاتي (بدون كتابة)               | Both   | SHELL-JS| diag / runDiag
+حارس نسخة الـ Worker                | Both   | SHELL-JS| get_config / checkWorkerVersion
+هايبر لينك رقم الأوردر لشوبيفاي      | HTML   | TOOL-JS | orderLink
 --------------------------------------------------------------
 
 KEY VARIABLES (HTML)
-LS Config Key : bosta_exchange_export_config_v3   (Worker URL + Secret)
-LOG_PAGE_SIZE : 100
+LS Config Key       : bosta_exchange_export_config_v3   (Worker URL + Secret)
+LOG_PAGE_SIZE        : 100
+TOOL_VERSION          : مصدر واحد لرقم نسخة الصفحة (هيدر + Changelog + شاشة الدخول)
+MIN_WORKER_VERSION    : أقل نسخة Worker مطلوبة — الحارس بيولّع لو الـ Worker أقدم منها بس
 
 NOTES
 - V4.0.0: زرار "الاستعلام" اتلغى تمامًا — الضغط على أي مربع (أحمر=استرجاع،
@@ -988,7 +1017,17 @@ NOTES
 - عمود "City" في ملف Excel = المحافظة (Province)، وعمود "Area" = المدينة
   (City) من عنوان الشحن (V3.3.1+).
 - اسم العميل في الجدول والملف بياخد من addr.name مباشرة (مش
-  firstName+lastName اللي مكنش متسحوب أصلاً من الـ API).</pre>
+  firstName+lastName اللي مكنش متسحوب أصلاً من الـ API).
+- V4.1.0: شاشة الدخول بقت على خطوتين (الكيباد مخفي لحد ما يتم اختيار
+  الموظف)، وz-index شاشة الدخول/النوافذ اتصلح لـ 500/600 بدل 300/400.
+- V4.1.0: رقم الأوردر في "الأوردرات الجاهزة للملف" بقى لينك مباشر لصفحة
+  الأوردر على شوبيفاي (orderId رقمي راجع من fetch_candidates). سجل
+  العمليات لسه بيعرض اسم الأوردر كنص عادي — الـ D1 log بيخزّن الـ GID
+  مش الرقم، فمفيش لينك آمن نبنيه من غيره.
+- ⚠️ معروف ومتعمّد: الشاشة دي لسه على تصميم أقدم من معيار html-builder
+  الحالي (v6.0.0) — التابات (main-seg بدل main-tabs-bar)، قسم الفلاتر
+  والجدول (مش unified-section/multi-select)، و--container-max Tier
+  مش متطبّقين هنا لسه. راجع CLAUDE.md بتاع الريبو للتفاصيل.</pre>
           </div>
         </details>
 
@@ -999,11 +1038,20 @@ NOTES
   <div class="modal-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="modal wide">
       <div class="modal-hdr">
-        <span>V4.0.0 — Changelog</span>
+        <span id="changelogTitle">V4.1.0 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">×</button>
       </div>
       <div class="modal-body">
         <div class="hint">
+          <b>V4.1.0</b><br>
+          - إضافة <span class="mono">?action=diag</span> و<span class="mono">?action=get_config</span> على الـ Worker (فحص ذاتي + رقم نسخة) — زرار 🩺 فحص النظام جديد في الإعدادات.<br>
+          - رقم نسخة الأداة بقى مصدر واحد (<span class="mono">TOOL_VERSION</span>) بدل نصوص منفصلة، ونص نسخة تحت زرار الإعدادات في شاشة الدخول.<br>
+          - حارس نسخة الـ Worker (⚠️ في الهيدر) — بيولّع لو الـ Worker المتصل بيه أقدم من الحد الأدنى المطلوب للصفحة.<br>
+          - شاشة الدخول بقت على خطوتين — الكيباد بيظهر بعد اختيار الاسم بس (كان ظاهر من الأول).<br>
+          - z-index لشاشة الدخول والنوافذ اتصلح (500 / 600) بدل (300 / 400) عشان ميحصلش تعارض.<br>
+          - رقم الأوردر في القوائم بقى هايبر لينك لصفحة الأوردر على Shopify.<br>
+          - تصدير سجل العمليات (.xlsx) بقى بيبيّن بانر تحذير صريح لو الملف اتقص عند سقف الـ 2000 صف بدل ما يقول "تم" على طول.<br>
+          <br>
           <b>V4.0.0</b><br>
           - إلغاء زرار "الاستعلام" نهائيًا — الضغط على مربع الاسترجاع (أحمر) أو الاستبدال (برتقالي) بيحمّل/يحدّث القائمة تلقائيًا.<br>
           - توحيد خطوة التأكيد بين الاسترجاع والاستبدال في زرار واحد بس: "تحديث حالة الأوردر إلى (In-Return / Ready)".<br>
@@ -1112,9 +1160,11 @@ NOTES
     </div>
   </div>
   <script>
-    const VERSION = '4.0.0';
+    const TOOL_VERSION = '4.1.0';
+    const MIN_WORKER_VERSION = '4.1.0'; // lowest Worker version this page relies on (adds diag/get_config + orderId + export cap fields)
     const CFG_KEY = 'bosta_exchange_export_config_v3';
     const LOG_PAGE_SIZE = 100;
+    let workerVersion = null;
 
     function getConfig() {
       try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }
@@ -1244,6 +1294,7 @@ NOTES
       updateSettingsBtn();
       updateLoginSettingsBtn();
       loadEmployeesList();
+      checkWorkerVersion();
       showToast('تم حفظ الإعدادات', 'success');
     }
 
@@ -1263,6 +1314,81 @@ NOTES
 
     function openAbout() { document.getElementById('aboutOverlay').classList.add('open'); }
     function closeAbout() { document.getElementById('aboutOverlay').classList.remove('open'); }
+
+    // ─── §SHELL-JS::version ─── single source for the version string
+    // (html-builder Standards #15) — header button, changelog title, login text.
+    function renderVersionUI() {
+      const label = `V${TOOL_VERSION}`;
+      const verBtn = document.getElementById('verBtn');
+      if (verBtn) verBtn.textContent = label;
+      const clTitle = document.getElementById('changelogTitle');
+      if (clTitle) clTitle.textContent = `${label} — Changelog`;
+      const loginVer = document.getElementById('loginVersionText');
+      if (loginVer) loginVer.textContent = label;
+    }
+
+    // Numeric-lexicographic version compare — "10" must sort above "9".
+    function cmpVersion(a, b) {
+      const pa = String(a).replace(/^v/i, '').split('.').map(Number);
+      const pb = String(b).replace(/^v/i, '').split('.').map(Number);
+      for (let i = 0; i < 3; i++) {
+        const d = (pa[i] || 0) - (pb[i] || 0);
+        if (d) return d;
+      }
+      return 0;
+    }
+
+    // ─── §SHELL-JS::workerVersionGuard ─── warns only when the connected
+    // Worker is OLDER than MIN_WORKER_VERSION — the page/Worker version
+    // numbers are independent by design, so a literal mismatch is NOT the
+    // right test (html-builder Standards #29).
+    async function checkWorkerVersion() {
+      if (!isConfigured()) return;
+      try {
+        const data = await apiFetch('get_config');
+        workerVersion = data.version || null;
+        const stale = workerVersion && cmpVersion(workerVersion, MIN_WORKER_VERSION) < 0;
+        const btn = document.getElementById('verStaleBtn');
+        if (btn) btn.style.display = stale ? '' : 'none';
+      } catch { /* الإعدادات ممكن تكون لسه ناقصة أو الـ Worker قديم بدون get_config */ }
+    }
+
+    function showWorkerStale() {
+      showToast(
+        `الـ Worker نسخته ${workerVersion || '؟'} والصفحة محتاجة ${MIN_WORKER_VERSION} على الأقل — راجع Deployments و Promote في كلاودفلير.`,
+        'error', 7000,
+      );
+    }
+
+    // ─── §SHELL-JS::orderLink ─── hyperlink to the order in Shopify Admin.
+    // Falls back to a plain span if no numeric orderId came back from the Worker.
+    function orderLink(orderNumber, orderId) {
+      const label = escapeHtml(orderNumber || '—');
+      if (!orderId) return `<span class="order-name">${label}</span>`;
+      const url = `https://admin.shopify.com/store/6c7e1a-53/orders/${escapeHtml(orderId)}`;
+      return `<a class="order-name" href="${url}" target="_blank" rel="noopener">${label}</a>`;
+    }
+
+    async function runDiag() {
+      const box = document.getElementById('diagResult');
+      const btn = document.getElementById('diagBtn');
+      btn.disabled = true;
+      box.textContent = '⏳ جاري الفحص...';
+      try {
+        const d = await apiFetch('diag');
+        const lines = [];
+        lines.push(`${d.workerVersion ? '✅' : '❌'} نسخة الـ Worker: ${escapeHtml(d.workerVersion || '—')}`);
+        lines.push(`${d.shopify?.ok ? '✅' : '❌'} الاتصال بشوبيفاي${d.shopify?.ok ? '' : ': ' + escapeHtml(d.shopify?.error || '—')}`);
+        lines.push(`${d.d1?.ok ? '✅' : '❌'} قاعدة البيانات (D1)${d.d1?.ok ? '' : ': ' + escapeHtml(d.d1?.error || '—')}`);
+        const originOk = d.allowedOrigins?.includes(d.origin);
+        lines.push(`${originOk ? '✅' : '⚠️'} Origin الحالي: ${escapeHtml(d.origin || '—')}`);
+        box.innerHTML = lines.join('<br>');
+      } catch (e) {
+        box.innerHTML = `❌ فشل الفحص: ${escapeHtml(e.message)}`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
 
     function showToast(message, type = 'info', timeout = 3600) {
       const wrap = document.getElementById('toastContainer');
@@ -1418,6 +1544,10 @@ NOTES
       document.getElementById('loginBtn').disabled = (isNewUser && firstPin ? confirmPinBuffer : pinBuffer).length !== 4;
     }
 
+    function setPinZoneVisible(visible) {
+      document.getElementById('pinZone').classList.toggle('visible', !!visible);
+    }
+
     function pinClear() {
       clearTimeout(autoLoginTimer);
       pinBuffer = '';
@@ -1428,6 +1558,8 @@ NOTES
       document.getElementById('loginBtn').textContent = 'دخول';
       document.getElementById('loginBtn').disabled = true;
       updatePinDots('');
+      // Two-step reveal — pinZone only shows once an employee is chosen.
+      setPinZoneVisible(!!document.getElementById('loginUsername').value);
     }
 
     function updatePinDots(value) {
@@ -2001,7 +2133,7 @@ NOTES
         `;
 
         const name = document.createElement('div');
-        name.innerHTML = `<span class="order-name">${escapeHtml(order.name)}</span>`;
+        name.innerHTML = orderLink(order.name, order.orderId);
 
         const customer = document.createElement('div');
         customer.innerHTML = `
@@ -2218,7 +2350,7 @@ NOTES
 
         const [logsData, countData] = await Promise.all([
           apiFetch('get_logs', { method: 'GET', params: { type, search, limit: LOG_PAGE_SIZE, offset: logOffset } }),
-          apiFetch('get_logs_count', { method: 'GET', params: { search } }),
+          apiFetch('get_logs_count', { method: 'GET', params: { type, search } }),
         ]);
 
         state.logs = logsData.entries || [];
@@ -2250,9 +2382,15 @@ NOTES
         `المعروض هنا: ${state.logs.length} — إجمالي كل العمليات المسجّلة (كل الأنواع): ${logTotalAll.toLocaleString('en-US')}`;
     }
 
-    function onLogTypeFilterChange() { loadLogs(false, true); }
+    function clearExportWarn() {
+      const w = document.getElementById('logExportWarn');
+      if (w) { w.style.display = 'none'; w.innerHTML = ''; }
+    }
+
+    function onLogTypeFilterChange() { clearExportWarn(); loadLogs(false, true); }
 
     function onLogSearchInput() {
+      clearExportWarn();
       clearTimeout(logSearchDebounce);
       logSearchDebounce = setTimeout(() => loadLogs(false, true), 350);
     }
@@ -2300,14 +2438,14 @@ NOTES
       const originalText = btn.textContent;
       btn.disabled = true;
       btn.textContent = '⏳ جاري التصدير...';
+      clearExportWarn();
 
       try {
+        const type = document.getElementById('logTypeFilter').value || undefined;
         const search = document.getElementById('logSearch').value.trim() || undefined;
-        const data = await apiFetch('get_logs_export', { method: 'GET', params: { search } });
+        const data = await apiFetch('get_logs_export', { method: 'GET', params: { type, search } });
 
-        let entries = data.entries || [];
-        const typeFilter = document.getElementById('logTypeFilter').value;
-        if (typeFilter) entries = entries.filter(e => e.type === typeFilter);
+        const entries = data.entries || [];
 
         if (!entries.length) {
           showToast('لا توجد عمليات للتصدير', 'error');
@@ -2350,7 +2488,19 @@ NOTES
         URL.revokeObjectURL(a.href);
         a.remove();
 
-        showToast(`تم تصدير ${entries.length} عملية من السجل ✓`, 'success');
+        // Truth comes from the Worker, never computed on the page — see
+        // getLogsExport()/LOG_EXPORT_MAX in index.js (html-builder Standards #30).
+        const truncated = data.truncated === true;
+        if (truncated) {
+          const warn = document.getElementById('logExportWarn');
+          warn.innerHTML = `⚠️ <b>التصدير اتقص</b> — الملف فيه ${entries.length.toLocaleString('en-US')} صف`
+            + (data.total != null ? ` من أصل <b>${Number(data.total).toLocaleString('en-US')}</b> مطابقين للفلاتر` : '')
+            + `. ضيّق الفترة أو الفلاتر وصدّر على دفعات.`;
+          warn.style.display = '';
+          showToast(`⚠️ التصدير اتقص عند ${entries.length.toLocaleString('en-US')} صف — الملف مش كامل`, 'error', 7000);
+        } else {
+          showToast(`تم تصدير ${entries.length.toLocaleString('en-US')} عملية من السجل ✓`, 'success');
+        }
       } catch (e) {
         showToast('فشل تصدير السجل: ' + e.message, 'error');
       } finally {
@@ -2413,9 +2563,11 @@ NOTES
 
     updateSettingsBtn();
     updateLoginSettingsBtn();
+    renderVersionUI();
     updateModeCardsUI();
     clearResults();
     loadEmployeesList();
+    checkWorkerVersion();
   </script>
 </body>
 </html>

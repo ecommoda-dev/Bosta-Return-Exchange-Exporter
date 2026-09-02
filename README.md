@@ -2,7 +2,7 @@
 
 # Bosta Return / Exchange Exporter
 
-![version](https://img.shields.io/badge/version-v4.0.0-blue)
+![version](https://img.shields.io/badge/version-v4.1.0-blue)
 
 أداة داخلية لفريق EcomModa — فحص أوردرات الاسترجاع والاستبدال الجاهزة
 للرفع على بوسطة، تصديرها Excel، وتأكيد الرفع بضغطة واحدة اللي بتحدّث
@@ -27,6 +27,6 @@ CLAUDE.md     قواعد الأداة وسياق الصيانة
 
 راجع `CLAUDE.md` لقايمة الـ bindings والأسرار والـ vars المطلوبة.
 
-آخر تحديث: 26-08-2026 — 20:31
+آخر تحديث: 02-09-2026 — 12:28
 
 </div>
