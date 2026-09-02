@@ -1,8 +1,53 @@
 // ═══════════════════════════════════════════════════════════════
-// Bosta Return/Exchange Exporter — Worker v5.0.0
+// Bosta Return/Exchange Exporter — Worker v5.2.0
 // EcomModa Internal Tools
-// skills: worker-builder v2.0.0 · html-builder v6.0.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026
+// skills: worker-builder v2.0.0 · html-builder v6.2.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026
 // ═══════════════════════════════════════════════════════════════
+//
+// v5.2.0 (R/E cycle correctness — 02-09-2026):
+// THE BUG: every export aggregated the line items of ALL return cycles on
+// an order (`returns[]` flattened end to end), so an order that had already
+// been through one or more CLOSED cycles shipped a Bosta row describing
+// pieces that came back weeks ago. Measured live on #51656: three cycles
+// (R1 CLOSED, R2 CLOSED, R3 OPEN) produced Return #Items = 3 and
+// Goods Value = 6300 instead of 1 and 1750. This breaks
+// ecommoda-order-lifecycle Rule 15 ② — type/stage/settlement are read from
+// the newest non-ignored cycle, never via .some()/flatMap across returns[].
+//
+// - `returns` is no longer returned to the page at all. The Worker now sorts
+//   the cycles by `createdAt` (never array position), drops CANCELED/DECLINED
+//   before sorting (their `closedAt` is null and fabricates a false overlap),
+//   and hands the page ONE `currentCycle` object + a `cycleInfo` summary.
+//   The old aggregation is now structurally unrepresentable in the frontend.
+// - The details query finally asks for `name status createdAt closedAt` on
+//   each cycle plus `pageInfo` — none of them were fetched before, which is
+//   why the page could not tell an open cycle from a closed one even in
+//   principle.
+// - One-open-cycle guard (Rule 15 ① / state-machines.md §2.4): an order with
+//   two open cycles (CYCLE_OVERLAP_OPEN), none (NO_OPEN_CYCLE), or a
+//   truncated cycle list (CYCLES_TRUNCATED) is returned `blocked` and cannot
+//   be exported or confirmed. `confirm_upload` re-checks server-side against
+//   Shopify before writing S2 and rejects with 409 CYCLE_BLOCKED — the HTML
+//   modal is no longer the only gate for this particular rule.
+// - Non-blocking flags, per Rule 13/14 (flag it, never move it — every code
+//   carries a reason, the offending value, and the resolving action):
+//   MULTI_CYCLE (legal sequential cycles), CYCLE_OVERLAP (a historical
+//   overlap, already resolved), TYPE_MISMATCH (S2 says RETURN but the open
+//   cycle carries exchange items, or vice versa — Rule 8: the API decides,
+//   not the metafield), EXCHANGE_WITHOUT_ITEMS.
+// - Three Bosta columns were reading fields the query never asked for, so
+//   they had been silently empty since the tool was written: Delivery Notes
+//   (`order.note`), Package Description and No. of Items (`order.lineItems`).
+//   They are now empty BY DECISION, with the reason in the code, rather than
+//   by accident — and neither field is fetched any more:
+//   · Package Description / No. of Items describe the package going OUT.
+//     Nothing goes out on a return, so they are filled for an exchange job
+//     only, from the open cycle's exchange items.
+//   · `order.note` holds internal CS bookkeeping, not delivery instructions —
+//     verified on #51656, whose note reads "أوردر استبدال / لا يوجد مصاريف
+//     شحن / أوردر استرجاع". Pushing that onto a live courier shipment is a
+//     business decision for Ahmed, not a silent side effect of a bug fix.
+// - DETAILS_BATCH_SIZE 50 → 25, since each order now costs more.
 //
 // v5.0.0 (paired with the HTML's full html-builder v6.0.0 UI migration —
 // 02-09-2026): get_logs / get_logs_count / get_logs_export now take CSV
@@ -87,7 +132,7 @@
 // §CONSTANTS
 // ══════════════════════════════════════════════════════
 const TOOL_NAME = 'bosta_exchange_export';
-const WORKER_VERSION = '5.0.0';
+const WORKER_VERSION = '5.2.0';
 const SHOPIFY_API_VERSION = '2026-01';
 const LOG_EXPORT_MAX = 2000;
 
@@ -105,7 +150,16 @@ const EXPORT_TYPES = ['export_return', 'export_exchange'];
 
 const DISCOVERY_PAGE_SIZE = 100;
 const DISCOVERY_MAX_PAGES = 10;
-const DETAILS_BATCH_SIZE = 50;
+// Lowered from 50 in v5.2.0 — every order now also carries its return cycles'
+// scalars, so the per-query cost roughly doubled.
+const DETAILS_BATCH_SIZE = 25;
+
+// R/E cycles — ecommoda-order-lifecycle Rule 15 / state-machines.md §2.4.
+// CANCELED / DECLINED cycles are dropped BEFORE sorting: their `closedAt` is
+// null, and a null closedAt is read as "still open" by the overlap test, so
+// leaving them in fabricates an overlap that never happened.
+const RETURNS_PAGE_SIZE = 10;
+const IGNORED_RETURN_STATUSES = ['CANCELED', 'DECLINED'];
 
 // ══════════════════════════════════════════════════════
 // §CORS — Option B (strict) — this Worker writes order metafields
@@ -475,70 +529,114 @@ async function shopifyGQL(env, token, query, variables = {}) {
   return data;
 }
 
+// ─── §SHOPIFY::returnCycles ───
+// ecommoda-order-lifecycle Rule 15 ② — the cycle that is travelling RIGHT NOW
+// is the newest OPEN cycle. Never `.some()` / `.flatMap()` across `returns[]`:
+// that answers "did this ever happen on this order?", which is a different
+// question and the wrong one for an export.
+function sortedReturnCycles(order) {
+  return (order?.returns?.edges || [])
+    .map((edge) => edge?.node)
+    .filter(Boolean)
+    .filter((cycle) => !IGNORED_RETURN_STATUSES.includes(cycle.status))
+    .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+}
+
+// state-machines.md §2.4 — a cycle opened while an earlier one was still open.
+// `closedAt === null` on an earlier cycle is read as ∞ (still open), which is
+// why CANCELED/DECLINED are filtered out before this runs.
+function hasHistoricalOverlap(cycles) {
+  return cycles.some((cycle, i) => i > 0 && (
+    cycles[i - 1].closedAt === null ||
+    String(cycle.createdAt || '') < String(cycles[i - 1].closedAt || '')
+  ));
+}
+
+// Rule 13 / Rule 14 — every code carries what is wrong, the offending value,
+// and the action that resolves it. Blocking codes stop the export; the rest
+// are flags: they move zero rows and change zero numbers.
+function analyzeReturnCycles(order, jobType) {
+  const cycles = sortedReturnCycles(order);
+  const openCycles = cycles.filter((cycle) => cycle.status !== 'CLOSED');
+  const truncated = !!order?.returns?.pageInfo?.hasNextPage;
+  const current = openCycles.length ? openCycles[openCycles.length - 1] : null;
+  const warnings = [];
+
+  let blockReason = null;
+  if (truncated) {
+    blockReason = {
+      code: 'CYCLES_TRUNCATED',
+      value: `> ${RETURNS_PAGE_SIZE} دورة`,
+      action: `الأوردر فيه أكتر من ${RETURNS_PAGE_SIZE} دورة إرجاع — مش قادرين نحدد الدورة المفتوحة بثقة. راجعه يدوي في شوبيفاي.`,
+    };
+  } else if (!openCycles.length) {
+    blockReason = {
+      code: 'NO_OPEN_CYCLE',
+      value: cleanText(order?.s2Status?.value),
+      action: 'الـ S2 بيقول فيه طلب استرجاع/استبدال لكن مفيش ولا دورة مفتوحة في شوبيفاي — خدمة العملاء تفتح الدورة أو تصلّح الـ S2.',
+    };
+  } else if (openCycles.length > 1) {
+    blockReason = {
+      code: 'CYCLE_OVERLAP_OPEN',
+      value: openCycles.map((cycle) => cycle.name).join(' · '),
+      action: 'أكتر من دورة مفتوحة في نفس الوقت — مش قادرين نعرف أنهي دورة اللي هتتشحن. خدمة العملاء تقفل الزيادة في شوبيفاي (قاعدة: دورة مفتوحة واحدة بس).',
+    };
+  }
+
+  if (!blockReason && hasHistoricalOverlap(cycles)) {
+    warnings.push({
+      code: 'CYCLE_OVERLAP',
+      value: cycles.map((cycle) => cycle.name).join(' · '),
+      action: 'دورة اتفتحت قبل ما اللي قبلها تقفل — اتحلّت دلوقتي، بس تستاهل مراجعة من خدمة العملاء.',
+    });
+  }
+
+  if (cycles.length > 1) {
+    warnings.push({
+      code: 'MULTI_CYCLE',
+      value: `${cycles.length} دورات`,
+      action: 'دورات متتابعة — قانونية. التصدير بيتم من الدورة المفتوحة بس، والدورات المقفولة مش داخلة في الملف.',
+    });
+  }
+
+  if (current) {
+    const exchangeCount = (current.exchangeLineItems?.edges || []).length;
+    // Rule 8 — the API answers return-vs-exchange, not the metafield.
+    if (jobType === 'return' && exchangeCount > 0) {
+      warnings.push({
+        code: 'TYPE_MISMATCH',
+        value: `S2 = ${cleanText(order?.s2Status?.value)} · الدورة فيها قطع استبدال`,
+        action: 'الـ S2 بيقول استرجاع لكن الدورة المفتوحة فيها قطع استبدال — راجع نوع العملية قبل الرفع على بوسطة.',
+      });
+    }
+    if (jobType === 'exchange' && exchangeCount === 0) {
+      warnings.push({
+        code: 'EXCHANGE_WITHOUT_ITEMS',
+        value: `S2 = ${cleanText(order?.s2Status?.value)} · الدورة من غير قطع استبدال`,
+        action: 'الـ S2 بيقول استبدال لكن الدورة المفتوحة مالهاش قطع استبدال — وصف الشحنة الخارجة هيطلع فاضي في ملف بوسطة.',
+      });
+    }
+  }
+
+  return {
+    current,
+    info: {
+      totalCycles: cycles.length,
+      openCycles: openCycles.length,
+      currentCycleName: current?.name || null,
+      truncated,
+      blocked: !!blockReason,
+      blockReason,
+      warnings,
+    },
+  };
+}
+
 // ─── §SHOPIFY::discoveryAndDetails ───
-function buildDetailsQuery(jobType) {
-  const returnFields = jobType === 'return' ? `
-    returns(first: 5) {
-      edges {
-        node {
-          returnLineItems(first: 25) {
-            edges {
-              node {
-                quantity
-                ... on ReturnLineItem {
-                  fulfillmentLineItem {
-                    lineItem {
-                      sku
-                      name
-                      originalUnitPriceSet { shopMoney { amount } }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  ` : '';
-
-  const exchangeFields = jobType === 'exchange' ? `
-    returns(first: 5) {
-      edges {
-        node {
-          returnLineItems(first: 25) {
-            edges {
-              node {
-                quantity
-                ... on ReturnLineItem {
-                  fulfillmentLineItem {
-                    lineItem {
-                      sku
-                      name
-                      originalUnitPriceSet { shopMoney { amount } }
-                    }
-                  }
-                }
-              }
-            }
-          }
-          exchangeLineItems(first: 25) {
-            edges {
-              node {
-                quantity
-                lineItems {
-                  sku
-                  name
-                  originalUnitPriceSet { shopMoney { amount } }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  ` : '';
-
+// One query for both job types: a return job still needs `exchangeLineItems`
+// so TYPE_MISMATCH can be detected (Rule 8), and an exchange job still needs
+// `returnLineItems` for the Return columns of the Bosta sheet.
+function buildDetailsQuery() {
   return `
     query FetchBostaReturnExchangeDetails($ids: [ID!]!) {
       nodes(ids: $ids) {
@@ -569,8 +667,45 @@ function buildDetailsQuery(jobType) {
           }
           s2Status: metafield(namespace: "custom", key: "status_2_r_e") { value }
           courier: metafield(namespace: "custom", key: "courier") { value }
-          ${returnFields}
-          ${exchangeFields}
+          returns(first: ${RETURNS_PAGE_SIZE}) {
+            pageInfo { hasNextPage }
+            edges {
+              node {
+                name
+                status
+                createdAt
+                closedAt
+                returnLineItems(first: 25) {
+                  edges {
+                    node {
+                      quantity
+                      ... on ReturnLineItem {
+                        fulfillmentLineItem {
+                          lineItem {
+                            sku
+                            name
+                            originalUnitPriceSet { shopMoney { amount } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                exchangeLineItems(first: 25) {
+                  edges {
+                    node {
+                      quantity
+                      lineItems {
+                        sku
+                        name
+                        originalUnitPriceSet { shopMoney { amount } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -639,23 +774,23 @@ async function fetchDiscoveryOrders(env, token, job) {
   };
 }
 
-async function fetchDetailsGroup(env, token, ids, jobType) {
-  const query = buildDetailsQuery(jobType);
+async function fetchDetailsGroup(env, token, ids) {
+  const query = buildDetailsQuery();
   const data = await shopifyGQL(env, token, query, { ids });
   return (data?.data?.nodes || []).filter(Boolean);
 }
 
-async function fetchDetailsGroupWithFallback(env, token, ids, jobType) {
+async function fetchDetailsGroupWithFallback(env, token, ids) {
   if (!ids.length) return [];
 
   try {
-    return await fetchDetailsGroup(env, token, ids, jobType);
+    return await fetchDetailsGroup(env, token, ids);
   } catch (err) {
     if (!isShopifyCostError(err) || ids.length === 1) throw err;
 
     const mid = Math.ceil(ids.length / 2);
-    const left = await fetchDetailsGroupWithFallback(env, token, ids.slice(0, mid), jobType);
-    const right = await fetchDetailsGroupWithFallback(env, token, ids.slice(mid), jobType);
+    const left = await fetchDetailsGroupWithFallback(env, token, ids.slice(0, mid));
+    const right = await fetchDetailsGroupWithFallback(env, token, ids.slice(mid));
     return [...left, ...right];
   }
 }
@@ -666,18 +801,34 @@ async function fetchCandidateOrders(env, token, job) {
   const orders = [];
   let fallbackPossible = false;
 
+  let blockedCount = 0;
+  let warnedCount = 0;
+
   for (const group of chunks(ids, DETAILS_BATCH_SIZE)) {
-    const details = await fetchDetailsGroupWithFallback(env, token, group, job.jobType);
+    const details = await fetchDetailsGroupWithFallback(env, token, group);
     if (details.length !== group.length) fallbackPossible = true;
 
     for (const order of details) {
       const directStatus = cleanText(order?.s2Status?.value);
       const courier = cleanText(order?.courier?.value);
-      if (directStatus === job.expectedStatus && courier.toLowerCase() === 'bosta') {
+      if (directStatus !== job.expectedStatus || courier.toLowerCase() !== 'bosta') continue;
+
+      const { current, info } = analyzeReturnCycles(order, job.jobType);
+      if (info.blocked) blockedCount += 1;
+      else if (info.warnings.length) warnedCount += 1;
+
+      // `returns` is deliberately dropped from the payload: the page gets the
+      // ONE open cycle and nothing else, so the pre-v5.2.0 "flatMap over every
+      // cycle" bug cannot come back through the frontend (Rule 15 ②).
+      const { returns, ...rest } = order;
+      orders.push({
+        ...rest,
         // orderId: numeric legacy id, for the HTML to build a Shopify hyperlink
         // (worker-builder Step 5 — "numeric order ID" rule).
-        orders.push({ ...order, orderId: numericOrderId(order) });
-      }
+        orderId: numericOrderId(order),
+        currentCycle: current,
+        cycleInfo: info,
+      });
     }
   }
 
@@ -689,8 +840,75 @@ async function fetchCandidateOrders(env, token, job) {
       detailBatchSize: DETAILS_BATCH_SIZE,
       detailsFetched: orders.length,
       detailsFallbackPossible: fallbackPossible,
+      blockedByCycles: blockedCount,
+      warnedByCycles: warnedCount,
     },
   };
+}
+
+// ─── §SHOPIFY::assertCyclesConfirmable ───
+// ecommoda-order-lifecycle Rule 15 ① / state-machines.md §2.4 — "reject + log,
+// never silently allow". This is the one gate that is actually enforceable
+// here: confirm_upload writes S2 on a live order, so it re-reads the cycles
+// from Shopify (scalars only — cheap) and refuses to write for any order whose
+// open-cycle state is ambiguous. The HTML modal is no longer the only gate.
+//
+// Not logged to D1: a `cycle_block` type is not registered in
+// `ecommoda-constants` §7, and worker-builder Rule 7 forbids writing a `type`
+// before it is registered. Register it there first, then add the writeLog.
+const CYCLE_GUARD_BATCH_SIZE = 50;
+
+async function findBlockedCycleOrders(env, token, orders, jobType) {
+  const query = `
+    query FetchBostaReturnExchangeCycleGuard($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Order {
+          id
+          name
+          s2Status: metafield(namespace: "custom", key: "status_2_r_e") { value }
+          returns(first: ${RETURNS_PAGE_SIZE}) {
+            pageInfo { hasNextPage }
+            edges { node { name status createdAt closedAt } }
+          }
+        }
+      }
+    }
+  `;
+
+  const blocked = [];
+  const seen = new Set();
+
+  for (const group of chunks(orders.map((o) => o.id), CYCLE_GUARD_BATCH_SIZE)) {
+    const data = await shopifyGQL(env, token, query, { ids: group });
+    for (const order of (data?.data?.nodes || []).filter(Boolean)) {
+      seen.add(order.id);
+      const { info } = analyzeReturnCycles(order, jobType);
+      if (info.blocked) {
+        blocked.push({
+          id: order.id,
+          name: order.name,
+          code: info.blockReason.code,
+          value: info.blockReason.value,
+          action: info.blockReason.action,
+        });
+      }
+    }
+  }
+
+  // An order Shopify did not return at all is not silently treated as fine —
+  // worker-builder Step 5A ④: "we could not confirm" is never "success".
+  for (const order of orders) {
+    if (seen.has(order.id)) continue;
+    blocked.push({
+      id: order.id,
+      name: order.name,
+      code: 'ORDER_NOT_READABLE',
+      value: order.id,
+      action: 'شوبيفاي ما رجّعتش الأوردر ده وقت فحص الدورات — ما قدرناش نتأكد، فاتمنع التحديث. جرّب تاني أو راجعه يدوي.',
+    });
+  }
+
+  return blocked;
 }
 
 // ─── §SHOPIFY::writeAndVerifyS2 ───
@@ -1042,6 +1260,19 @@ export default {
         if (!orders.length) return json({ ok: false, error: 'لا توجد أوردرات للتأكيد' }, 400, request);
 
         const token = await getAccessToken(env);
+
+        // One open R/E cycle at a time — checked against Shopify, not against
+        // what the page sent. Rejected BEFORE any write (Rule 15 ①).
+        const blockedCycles = await findBlockedCycleOrders(env, token, orders, job.jobType);
+        if (blockedCycles.length) {
+          return json({
+            ok: false,
+            code: 'CYCLE_BLOCKED',
+            error: 'فيه أوردرات حالة دورات الاسترجاع فيها مش واضحة — اتمنع تحديث الحالة لحد ما تتصلّح في شوبيفاي',
+            blocked: blockedCycles,
+          }, 409, request);
+        }
+
         // Truncated to whole seconds — see nowToSecond() note at top of file.
         const now = nowToSecond();
 

@@ -452,6 +452,9 @@
     .badge-warn { background: var(--amber-light); color: var(--amber); border-color: var(--amber-border); }
     .badge-type { background: var(--accent-light); color: var(--accent-dark); border-color: #bfdbfe; }
     .badge-purple { background: var(--purple-light); color: var(--purple); border-color: var(--purple-border); }
+    .badge-err { background: var(--red-light); color: var(--red); border-color: var(--red-border); }
+    .badge-cycle { cursor: pointer; }
+    .cycle-sub { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
     .hint {
       border: 1px dashed var(--border-strong);
       border-radius: var(--radius-sm);
@@ -585,6 +588,12 @@
       border-bottom: 1px solid var(--border);
     }
     .export-dup-table-row:last-child { border-bottom: none; }
+    .cycle-review-table .export-dup-table-head,
+    .cycle-review-table .export-dup-table-row {
+      grid-template-columns: 120px 190px 1fr;
+      align-items: start;
+    }
+    .cycle-review-table .export-dup-table-row > div { min-width: 0; line-height: 1.6; }
     .export-dup-order {
       direction: ltr;
       font-family: var(--font-mono);
@@ -745,6 +754,8 @@
     @media (max-width: 900px) {
       .mode-grid { grid-template-columns: 1fr; }
       .export-dup-table-head, .export-dup-table-row { grid-template-columns: 110px 1fr 90px; }
+      .cycle-review-table .export-dup-table-head,
+      .cycle-review-table .export-dup-table-row { grid-template-columns: 100px 140px 1fr; }
     }
   </style>
 </head>
@@ -937,6 +948,7 @@
                   <th>Customer / Address</th>
                   <th class="sortable-th" data-sort-key="s2" onclick="toggleOrderSort('s2')">S2<span class="sort-icon" data-sort-key="s2"></span></th>
                   <th class="sortable-th" data-sort-key="courier" onclick="toggleOrderSort('courier')">Courier<span class="sort-icon" data-sort-key="courier"></span></th>
+                  <th>الدورة المفتوحة</th>
                   <th>Export Status</th>
                 </tr>
               </thead>
@@ -1104,7 +1116,7 @@
 
             <h4>كيف تعمل — Workflow</h4>
             <ol>
-              <li>اضغط على مربع "أوردرات الاسترجاع" (أحمر) أو "أوردرات الاستبدال" (برتقالي) — القائمة بتتحمّل أو بتتحدّث تلقائيًا من Shopify (S2 = الحالة المتوقعة + Courier = Bosta)، من غير أي زرار استعلام منفصل. كل الأوردرات بتبقى محددة افتراضيًا.</li>
+              <li>اضغط على مربع "أوردرات الاسترجاع" (أحمر) أو "أوردرات الاستبدال" (برتقالي) — القائمة بتتحمّل أو بتتحدّث تلقائيًا من Shopify (S2 = الحالة المتوقعة + Courier = Bosta)، من غير أي زرار استعلام منفصل. كل الأوردرات بتبقى محددة افتراضيًا — ما عدا الأوردرات المتوقّفة بسبب دورات الاسترجاع (⛔ في عمود «الدورة المفتوحة»).</li>
               <li>شيّل تحديد أي أوردر مش عايز تصدّره (لو حابب) — الزرار بيتحول من "تصدير الكل" لـ "تصدير المحدد فقط (العدد)" تلقائيًا. اضغط الزرار. لو أي أوردر اتصدّر قبل كده هتظهر نافذة تحذير بالتفاصيل قبل ما تسمح بالتصدير تاني.</li>
               <li>بعد نجاح التصدير، بيتفتح تلقائيًا: تاب جديد على رابط رفع الملف على داشبورد بوسطة (<code>business.bosta.co/orders/upload/smart-upload</code>) + نافذة تأكيد تحديث حالة الأوردرات.</li>
               <li>ارفع الملف على بوسطة (في التاب اللي فتح)، ثم ارجع لنافذة التأكيد وعلّم الـ Checkboxes المطلوبة (هل رفعت بوسطة؟ وفي الاستبدال فقط: هل أرسلت الفواتير للمخزن؟) واضغط "تأكيد التحديث" — S2 بيتكتب على Shopify مباشرة مع تحقق فوري من نجاح الكتابة.</li>
@@ -1113,10 +1125,10 @@
             <h4>الـ Endpoints الرئيسية</h4>
             <table>
               <tr><th>action</th><th>الوصف</th></tr>
-              <tr><td><code>fetch_candidates</code></td><td>جلب الأوردرات المطابقة من Shopify (بيتنده تلقائي عند الضغط على المربع)</td></tr>
+              <tr><td><code>fetch_candidates</code></td><td>جلب الأوردرات المطابقة من Shopify (بيتنده تلقائي عند الضغط على المربع) — بيرجّع <code>currentCycle</code> (الدورة المفتوحة بس) + <code>cycleInfo</code> لكل أوردر</td></tr>
               <tr><td><code>check_export_duplicates</code></td><td>فحص تصدير سابق قبل بناء ملف Excel</td></tr>
               <tr><td><code>record_export</code></td><td>تسجيل عملية التصدير في السجل</td></tr>
-              <tr><td><code>confirm_upload</code></td><td>كتابة S2 + وقت التحديث + تحقق مباشر من Shopify — نفس الـ endpoint لكل من الاسترجاع والاستبدال</td></tr>
+              <tr><td><code>confirm_upload</code></td><td>فحص دورات الاسترجاع من شوبيفاي (بيرفض بـ <code>409 CYCLE_BLOCKED</code> قبل أي كتابة) ← كتابة S2 + وقت التحديث + تحقق مباشر — نفس الـ endpoint لكل من الاسترجاع والاستبدال</td></tr>
               <tr><td><code>get_logs</code> / <code>get_logs_count</code></td><td>سجل العمليات — فلاتر multi-select (<code>employees</code>/<code>types</code> CSV) + pagination</td></tr>
               <tr><td><code>get_logs_export</code></td><td>تصدير سجل العمليات كملف Excel (حتى 2000 صف — يرجّع <code>cap</code>/<code>total</code>/<code>truncated</code> لو الملف اتقص)</td></tr>
               <tr><td><code>diag</code></td><td>فحص ذاتي بدون كتابة — الاتصال بشوبيفاي وD1 وOrigin (زرار 🩺 في الإعدادات)</td></tr>
@@ -1140,6 +1152,9 @@
               <li><code>§EXPORT</code> (Worker) — <code>fetch_candidates</code> / <code>check_export_duplicates</code> / <code>record_export</code> / <code>confirm_upload</code></li>
               <li><code>§LOG-ENDPOINTS</code> (Worker) — <code>get_logs</code> / <code>get_logs_count</code> / <code>get_logs_export</code></li>
               <li><code>§DIAG</code> (Worker) — <code>diag</code> / <code>get_config</code></li>
+              <li><code>§SHOPIFY::returnCycles</code> (Worker) — <code>sortedReturnCycles</code> / <code>hasHistoricalOverlap</code> / <code>analyzeReturnCycles</code> — بتختار الدورة المفتوحة وبتطلّع أكواد المنع والتحذير</li>
+              <li><code>§SHOPIFY::assertCyclesConfirmable</code> (Worker) — <code>findBlockedCycleOrders</code> — بوابة سيرفر-سايد قبل كتابة S2</li>
+              <li><code>§CYCLES</code> (HTML) — <code>isCycleBlocked</code> / <code>cycleCellHtml</code> / <code>openCycleReviewModal</code> — عمود الدورة + نافذة المراجعة</li>
               <li><code>selectJobType</code> / <code>setModeCardsLoading</code> (HTML) — مربعات ملوّنة + تحميل تلقائي</li>
               <li><code>updateExportBtnLabel</code> (HTML) — نص زرار التصدير الوحيد ("تصدير الكل" ↔ "تصدير المحدد فقط (العدد)") حسب التحديد الحالي</li>
               <li><code>buildExcelExportFile</code> (HTML) — بناء وتنزيل ملف Excel للأوردرات</li>
@@ -1157,6 +1172,7 @@
               <li><code>TOOL_VERSION</code> — مصدر واحد لرقم نسخة الصفحة (هيدر + Changelog + شاشة الدخول)</li>
               <li><code>MIN_WORKER_VERSION</code> — أقل نسخة Worker مطلوبة — الحارس بيولّع لو الـ Worker أقدم منها بس</li>
               <li><code>msState</code> — حالة فلاتر الاختيار المتعدد (مفاتيح <code>orderStatus</code> و<code>logType</code>)</li>
+              <li><code>CYCLE_CODE_LABEL</code> — ترجمة أكواد الدورات (<code>CYCLE_OVERLAP_OPEN</code>، <code>NO_OPEN_CYCLE</code>، <code>MULTI_CYCLE</code>…) لنص عربي مختصر في البادج</li>
             </ul>
 
             <h4>NOTES</h4>
@@ -1165,6 +1181,12 @@
               <li>كل الأوردرات محددة افتراضيًا (checkbox) — زرار التصدير الوحيد بيبدأ بـ "تصدير الكل"، وبيتحول لـ "تصدير المحدد فقط (العدد)" أوتوماتيك لو الموظف شال تحديد أي أوردر. مفيش زرار "تنظيف" منفصل — <code>clearResults()</code> لسه موجودة داخليًا وبتتنده عند تبديل نوع العملية أو تسجيل الدخول/الخروج.</li>
               <li>خطوة التأكيد موحّدة بين الاسترجاع والاستبدال — نافذة واحدة فيها Checkboxes إلزامية، بتتفتح <b>تلقائيًا</b> بعد نجاح التصدير (مفيش زرار "تحديث الحالة" منفصل تعد كده). الـ checklist بيتبعت للـ Worker كـ metadata للـ audit trail بس — مش بيتحقق منه على السيرفر (البوابة الحقيقية هي نافذة الواجهة نفسها).</li>
               <li>بعد نجاح التصدير: <code>window.open(...)</code> بيفتح رابط رفع الملف على بوسطة (<code>business.bosta.co/orders/upload/smart-upload</code>) في تاب جديد، وفي نفس الوقت بتتفتح نافذة تأكيد تحديث الحالة — الاتنين تلقائي، من غير أي زرار وسيط.</li>
+              <li>🔁 <b>دورة واحدة مفتوحة بس (v5.2.0).</b> الأوردر ممكن يكون عدّى بأكتر من دورة استرجاع/استبدال. الملف بيتبنى من <b>الدورة المفتوحة الحالية بس</b> (<code>order.currentCycle</code> — الـ Worker بيرتّب <code>returns[]</code> بـ <code>createdAt</code>، بيشيل <code>CANCELED</code>/<code>DECLINED</code>، وبياخد أحدث دورة مفتوحة). قبل كده كان بيجمّع قطع <b>كل</b> الدورات — بما فيها المقفولة من شهور — فكان بيطلع في الملف قطع رجعت للمخزن خلاص. الـ Worker مابيرجّعش <code>returns</code> للصفحة أصلاً دلوقتي، فالتجميع القديم بقى مستحيل. القاعدة → <code>ecommoda-order-lifecycle</code> Rule 15 ②.</li>
+              <li>⛔ <b>أكواد المنع:</b> <code>CYCLE_OVERLAP_OPEN</code> (أكتر من دورة مفتوحة — مش عارفين أنهي واحدة هتتشحن) · <code>NO_OPEN_CYCLE</code> (S2 بيقول فيه طلب ومفيش دورة مفتوحة) · <code>CYCLES_TRUNCATED</code> (أكتر من 10 دورات) · <code>ORDER_NOT_READABLE</code> (شوبيفاي ما رجّعتش الأوردر وقت الفحص). الأوردر المتوقّف مش بيتحدد، الـ checkbox بتاعه disabled، و<code>confirm_upload</code> بيرفضه سيرفر-سايد كمان بـ 409.</li>
+              <li>⚠️ <b>أكواد للعلم بس (بتتصدّر عادي — flag it, never move it):</b> <code>MULTI_CYCLE</code> (دورات متتابعة، قانونية) · <code>CYCLE_OVERLAP</code> (تداخل تاريخي اتحل) · <code>TYPE_MISMATCH</code> (S2 بيقول استرجاع والدورة فيها قطع استبدال — <code>ecommoda-order-lifecycle</code> Rule 8: الـ API هي المرجع مش الميتافيلد) · <code>EXCHANGE_WITHOUT_ITEMS</code>. الكودين <code>CYCLE_OVERLAP</code> و<code>MULTI_CYCLE</code> مفصولين عمدًا — الأول شغل خدمة عملاء والتاني حد في الكود (<code>state-machines.md</code> §2.4).</li>
+              <li>رفض <code>confirm_upload</code> بسبب الدورات <b>مش متسجّل في D1</b> — قيمة <code>type</code> لسه مش مسجّلة في <code>ecommoda-constants</code> §7، و<code>worker-builder</code> Rule 7 بيمنع أي <code>writeLog</code> بقيمة غير مسجّلة. تتسجّل هناك الأول ثم يتضاف الـ log.</li>
+              <li>عمودا "Package Description" و"No. of Items" في ملف بوسطة بيتملوا في <b>الاستبدال بس</b> (قطع الدورة المفتوحة الخارجة). في الاسترجاع مفيش حاجة خارجة من المخزن فبيفضلوا فاضيين — بقرار صريح، مش لأن الحقل مش متسحوب (قبل v5.2.0 كانوا بيقروا <code>order.lineItems</code> اللي الـ query ما طلبتوش أصلاً).</li>
+              <li>عمود "Delivery Notes" فاضي <b>بقرار</b> مش بالصدفة. كان بيقرا <code>order.note</code> اللي الـ query ما طلبتوش أصلاً، ولمّا اتفحص على أوردر حقيقي (<span class="mono">#51656</span>) طلع محتواه ملاحظات داخلية لخدمة العملاء («أوردر استبدال / لا يوجد مصاريف شحن / أوردر استرجاع») مش تعليمات تسليم. تحويل الكلام ده لشحنة حية عند بوسطة قرار شغل يخص أحمد — لحد ما يتقرر، العمود فاضي والحقل مش متسحوب.</li>
               <li>S2 = "In-Return" بيتكتب يدوي في الاسترجاع فور تأكيد الرفع — استثناء مقصود ومؤكد مع Ahmed (06-08-2026). راجع تعليق أعلى ملف الـ Worker.</li>
               <li>كل كتابة لـ S2 بتتسجل مرتين في D1: مرة تحت tool الأداة نفسها، ومرة تحت <code>tool = 'metafields_change'</code> (للـ KPIs المشتركة بين كل الأدوات).</li>
               <li>الأداة مبتكلمش Bosta API مباشرة — الرفع الفعلي على داشبورد بوسطة لسه بيدوي بره الأداة تماماً؛ الأداة بس بتفتح صفحة الرفع لتسهيل الخطوة.</li>
@@ -1186,11 +1208,19 @@
   <div class="eco-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="eco-modal">
       <div class="eco-modal-hdr">
-        <span id="changelogTitle">V5.1.0 — Changelog</span>
+        <span id="changelogTitle">V5.2.0 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">✕</button>
       </div>
       <div class="eco-modal-body">
         <div class="hint">
+          <b>V5.2.0</b><br>
+          - 🔴 <b>إصلاح دورات الاسترجاع.</b> الملف كان بيتبني من قطع <b>كل</b> دورات الاسترجاع على الأوردر — بما فيها الدورات المقفولة من زمان. مقيس على أوردر <span class="mono">#51656</span> (تلات دورات: R1 مقفولة، R2 مقفولة، R3 مفتوحة): الملف طلع 3 قطع و<span class="mono">Goods Value = 6300</span> بدل قطعة واحدة و<span class="mono">1750</span>. دلوقتي بيتبني من <b>الدورة المفتوحة الحالية بس</b>.<br>
+          - الـ Worker بقى يرتّب الدورات بـ <span class="mono">createdAt</span> (مش بترتيب المصفوفة)، بيشيل <span class="mono">CANCELED</span>/<span class="mono">DECLINED</span> قبل الترتيب، وبيرجّع <span class="mono">currentCycle</span> واحدة بدل <span class="mono">returns[]</span> كلها — فالتجميع القديم بقى مستحيل من الواجهة.<br>
+          - عمود جديد "الدورة المفتوحة" في جدول الأوردرات + فلتر "متوقّف — دورات" + نافذة "مراجعة دورات الاسترجاع".<br>
+          - حارس الدورة الواحدة: الأوردر اللي عليه أكتر من دورة مفتوحة (أو مفيش ولا واحدة) اتمنع من التصدير ومن تحديث الحالة — و<span class="mono">confirm_upload</span> بيعيد الفحص من شوبيفاي وبيرفض بـ <span class="mono">409</span> قبل أي كتابة.<br>
+          - أكواد للعلم من غير منع: <span class="mono">MULTI_CYCLE</span> · <span class="mono">CYCLE_OVERLAP</span> · <span class="mono">TYPE_MISMATCH</span> · <span class="mono">EXCHANGE_WITHOUT_ITEMS</span>.<br>
+          - تلات أعمدة في ملف بوسطة كانت بتقرا حقول الـ query ما بتطلبهاش أصلاً، فكانت فاضية بالصدفة من أول يوم: "Delivery Notes" · "Package Description" · "No. of Items". بقت فاضية <b>بقرار مكتوب في الكود</b>: الأخيرين بيتملوا في الاستبدال بس (القطع الخارجة من الدورة المفتوحة)، و"Delivery Notes" مستنية قرار أحمد — <span class="mono">order.note</span> فيه ملاحظات داخلية مش تعليمات تسليم.<br>
+          <br>
           <b>V5.1.0</b><br>
           - حذف صندوق الإحصائيات الخمسة (مطابق للشروط / محدد للتصدير / تم التصدير / تم تحديث الحالة؟ / الحالة التالية).<br>
           - حذف زراري "تنظيف" و"تحديث حالة الأوردر إلى ..." — بقى زرار تصدير واحد بس.<br>
@@ -1276,6 +1306,34 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="cycleReviewOverlay" onclick="closeCycleReviewOnBackdrop(event)">
+    <div class="modal export-duplicates">
+      <div class="modal-hdr">
+        <span>🔁 مراجعة دورات الاسترجاع / الاستبدال</span>
+        <button class="modal-close-x" onclick="closeCycleReviewModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="export-dup-note">
+          الأداة بتصدّر <b>الدورة المفتوحة الحالية بس</b> — الدورات المقفولة قبل كده
+          مش داخلة في الملف. الأوردرات اللي عليها ⛔ متوقّفة عن التصدير وتحديث الحالة
+          لحد ما تتصلّح في شوبيفاي؛ اللي عليها ⚠️ بتتصدّر عادي وللعلم بس.
+        </div>
+        <div class="export-dup-summary" id="cycleReviewSummary"></div>
+        <div class="export-dup-table cycle-review-table">
+          <div class="export-dup-table-head">
+            <div>Order</div>
+            <div>الحالة</div>
+            <div>المطلوب</div>
+          </div>
+          <div id="cycleReviewRows"></div>
+        </div>
+      </div>
+      <div class="modal-ftr">
+        <button class="btn btn-secondary" onclick="closeCycleReviewModal()">تمام</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="statusConfirmOverlay" onclick="if(event.target===this)closeStatusConfirmModal()">
     <div class="modal status-confirm-modal">
       <div class="modal-hdr">
@@ -1322,8 +1380,8 @@
     </div>
   </div>
   <script>
-    const TOOL_VERSION = '5.1.0';
-    const MIN_WORKER_VERSION = '5.0.0'; // lowest Worker version this page relies on (CSV employees/types log filters)
+    const TOOL_VERSION = '5.2.0';
+    const MIN_WORKER_VERSION = '5.2.0'; // lowest Worker version this page relies on (order.currentCycle + order.cycleInfo)
     const SHOP_DOMAIN = '6c7e1a-53.myshopify.com';
     const CFG_KEY = 'bosta_exchange_export_config_v3';
     const LOG_PAGE_SIZE = 100;
@@ -1398,6 +1456,7 @@
       orderStatus: {
         items: [
           { value: 'ready',     label: 'جاهز' },
+          { value: 'blocked',   label: 'متوقّف — دورات' },
           { value: 'duplicate', label: 'تصدير سابق' },
           { value: 'batch',     label: 'Batch مصدّر' },
         ],
@@ -2140,6 +2199,7 @@
 
       document.getElementById('emptyOrdersHint').style.display = 'block';
       closeExportDuplicateModal();
+      closeCycleReviewModal();
       closeStatusConfirmModal();
       clearStatus();
       updateModeCardsUI();
@@ -2147,8 +2207,23 @@
       renderOrders();
     }
 
+    // ecommoda-order-lifecycle Rule 15 ① — an order whose open-cycle state is
+    // ambiguous is never exported and never confirmed. The Worker decides
+    // (cycleInfo.blocked); the page only obeys and explains.
+    function isCycleBlocked(order) {
+      return !!order?.cycleInfo?.blocked;
+    }
+
+    function selectableOrders() {
+      return state.orders.filter((order) => !isCycleBlocked(order));
+    }
+
+    function blockedOrders() {
+      return state.orders.filter(isCycleBlocked);
+    }
+
     function getSelectedOrders() {
-      return state.orders.filter(order => state.selectedOrderIds.has(order.id));
+      return state.orders.filter(order => state.selectedOrderIds.has(order.id) && !isCycleBlocked(order));
     }
 
     function payloadOrders(orders) {
@@ -2165,7 +2240,7 @@
       const master = document.getElementById('selectAllOrders');
       if (!master) return;
 
-      const total = state.orders.length;
+      const total = selectableOrders().length;
       const selected = getSelectedOrders().length;
       master.checked = total > 0 && selected === total;
       master.indeterminate = selected > 0 && selected < total;
@@ -2174,7 +2249,7 @@
 
     function toggleSelectAllOrders(master) {
       state.selectedOrderIds = master.checked
-        ? new Set(state.orders.map(order => order.id))
+        ? new Set(selectableOrders().map(order => order.id))
         : new Set();
 
       if (!master.checked) state.exportDuplicates = {};
@@ -2185,6 +2260,9 @@
     function toggleOrderSelection(cb) {
       const orderId = cb.dataset.id;
       if (!orderId) return;
+
+      const order = state.orders.find((o) => o.id === orderId);
+      if (isCycleBlocked(order)) { cb.checked = false; return; }
 
       if (cb.checked) state.selectedOrderIds.add(orderId);
       else state.selectedOrderIds.delete(orderId);
@@ -2208,7 +2286,7 @@
     function updateExportBtnLabel() {
       const btn = document.getElementById('exportBtn');
       if (!btn) return;
-      const totalCount = state.orders.length;
+      const totalCount = selectableOrders().length;
       const selectedCount = getSelectedOrders().length;
       btn.textContent = (selectedCount > 0 && selectedCount < totalCount)
         ? `📥 تصدير المحدد فقط (رفع بوسطة) (${selectedCount})`
@@ -2284,6 +2362,61 @@
       document.getElementById('exportDuplicateOverlay').classList.add('open');
     }
 
+    // ─── §CYCLES — review modal ───
+    // state-machines.md §2.4 keeps CYCLE_OVERLAP and MULTI_CYCLE as two
+    // separate codes on purpose: the first routes to Customer Service, the
+    // second is a code limitation. Never merged into one line here either.
+    function closeCycleReviewModal() {
+      document.getElementById('cycleReviewOverlay')?.classList.remove('open');
+    }
+
+    function closeCycleReviewOnBackdrop(event) {
+      if (event.target.id === 'cycleReviewOverlay') closeCycleReviewModal();
+    }
+
+    function cycleReviewRows() {
+      const rows = [];
+      state.orders.forEach((order) => {
+        const info = order.cycleInfo || {};
+        if (info.blocked && info.blockReason) {
+          rows.push({ order, blocking: true, ...info.blockReason });
+        }
+        (info.warnings || []).forEach((warn) => rows.push({ order, blocking: false, ...warn }));
+      });
+      return rows.sort((a, b) => Number(b.blocking) - Number(a.blocking));
+    }
+
+    function renderCycleReviewModal() {
+      const rows = cycleReviewRows();
+      const blockedCount = rows.filter((row) => row.blocking).length;
+
+      document.getElementById('cycleReviewSummary').innerHTML = `
+        <span class="export-dup-chip">متوقّف: ${blockedCount}</span>
+        <span class="export-dup-chip">للعلم: ${rows.length - blockedCount}</span>
+      `;
+
+      const container = document.getElementById('cycleReviewRows');
+      container.innerHTML = '';
+      rows.forEach((row) => {
+        const div = document.createElement('div');
+        div.className = 'export-dup-table-row';
+        div.innerHTML = `
+          <div class="export-dup-order">${orderLink(row.order.name, row.order.orderId)}</div>
+          <div>
+            <span class="badge ${row.blocking ? 'badge-err' : 'badge-warn'}">${row.blocking ? '⛔' : '⚠️'} ${escapeHtml(cycleCodeLabel(row.code))}</span>
+            <div class="cycle-sub">${escapeHtml(row.value || '—')}</div>
+          </div>
+          <div>${escapeHtml(row.action || '—')}</div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function openCycleReviewModal() {
+      renderCycleReviewModal();
+      document.getElementById('cycleReviewOverlay').classList.add('open');
+    }
+
     async function fetchCandidates() {
       if (!currentEmployee) { showToast('سجّل الدخول أولاً', 'error'); return; }
       if (!isConfigured()) { openSettings(); return; }
@@ -2303,7 +2436,8 @@
         });
 
         state.orders = data.orders || [];
-        state.selectedOrderIds = new Set(state.orders.map((order) => order.id));
+        // Blocked orders are never selected — not even by "تحديد الكل".
+        state.selectedOrderIds = new Set(selectableOrders().map((order) => order.id));
         state.exportedOrders = [];
         state.exportDuplicates = {};
         state.allowRepeatExport = false;
@@ -2316,6 +2450,14 @@
           showStatus(`لم يتم العثور على أوردرات مطابقة: S2 = ${JOB_META[state.jobType].expected} + Courier = Bosta`, 'error');
         } else {
           showStatus(`✓ تم تحميل ${state.orders.length} أوردر. حدّد الأوردرات المطلوبة أو استخدم "الكل"، ثم اضغط تصدير Excel.`, 'success');
+        }
+
+        const blocked = blockedOrders().length;
+        const warned = state.orders.filter((order) => !isCycleBlocked(order) && (order.cycleInfo?.warnings || []).length).length;
+        if (blocked || warned) {
+          playDuplicateAlertSound();
+          showStatus(`${blocked ? `⛔ ${blocked} أوردر متوقّف بسبب دورات الاسترجاع` : ''}${blocked && warned ? ' · ' : ''}${warned ? `⚠️ ${warned} أوردر عليه ملاحظة دورات` : ''} — راجع عمود «الدورة المفتوحة».`, blocked ? 'error' : 'warn');
+          if (blocked) openCycleReviewModal();
         }
 
         if (data.pageInfo?.stoppedByLimit) {
@@ -2335,6 +2477,14 @@
       if (!currentEmployee) { showToast('سجّل الدخول أولاً', 'error'); return; }
       const selectedOrders = getSelectedOrders();
       if (!selectedOrders.length) { showToast('حدد أوردر واحد على الأقل للتصدير', 'error'); return; }
+
+      // Defence in depth — getSelectedOrders() already drops blocked orders,
+      // and the Worker refuses them again on confirm_upload.
+      if (selectedOrders.some(isCycleBlocked)) {
+        showToast('فيه أوردرات متوقّفة بسبب دورات الاسترجاع', 'error');
+        openCycleReviewModal();
+        return;
+      }
 
       const btn = document.getElementById('exportBtn');
       btn.disabled = true;
@@ -2513,8 +2663,15 @@
         updateRunUI();
         await loadLogs(false);
       } catch (e) {
-        showStatus('فشل تحديث الحالة: ' + e.message, 'error');
-        showToast('فشل تحديث الحالة: ' + e.message, 'error');
+        if (e.data?.code === 'CYCLE_BLOCKED') {
+          const names = (e.data.blocked || []).map((row) => `${row.name} (${cycleCodeLabel(row.code)})`).join(' · ');
+          closeStatusConfirmModal();
+          showStatus(`اتمنع تحديث الحالة — حالة الدورات اتغيّرت على شوبيفاي بعد التصدير: ${names}. اعمل فحص من جديد.`, 'error');
+          showToast('اتمنع التحديث — راجع دورات الاسترجاع', 'error');
+        } else {
+          showStatus('فشل تحديث الحالة: ' + e.message, 'error');
+          showToast('فشل تحديث الحالة: ' + e.message, 'error');
+        }
       } finally {
         btn.textContent = originalText;
         updateStatusConfirmBtn();
@@ -2531,9 +2688,48 @@
     }
 
     function computeOrderStatus(order, exportedIds) {
+      if (isCycleBlocked(order)) return 'blocked';
       if (exportedIds.has(order.id)) return 'batch';
       if (state.exportDuplicates?.[order.name]) return 'duplicate';
       return 'ready';
+    }
+
+    // Rule 14 — a diagnostic badge says WHY, never just "something is off".
+    // The full reason + the resolving action live one click away, in the
+    // cycle-review modal.
+    const CYCLE_CODE_LABEL = {
+      CYCLES_TRUNCATED:       'دورات كتير',
+      NO_OPEN_CYCLE:          'لا دورة مفتوحة',
+      CYCLE_OVERLAP_OPEN:     'تداخل دورات',
+      ORDER_NOT_READABLE:     'تعذّرت القراءة',
+      CYCLE_OVERLAP:          'تداخل سابق',
+      MULTI_CYCLE:            'دورات متتابعة',
+      TYPE_MISMATCH:          'نوع مختلف',
+      EXCHANGE_WITHOUT_ITEMS: 'من غير قطع استبدال',
+    };
+
+    function cycleCodeLabel(code) {
+      return CYCLE_CODE_LABEL[code] || code || '—';
+    }
+
+    function cycleCellHtml(order) {
+      const info = order.cycleInfo || {};
+      const cycleName = info.currentCycleName || order.currentCycle?.name || null;
+
+      if (info.blocked) {
+        return `<span class="badge badge-err badge-cycle" onclick="openCycleReviewModal()" title="اضغط للتفاصيل">⛔ ${escapeHtml(cycleCodeLabel(info.blockReason?.code))}</span>`;
+      }
+
+      const warn = (info.warnings || [])[0];
+      const badge = warn
+        ? `<span class="badge badge-warn badge-cycle" onclick="openCycleReviewModal()" title="اضغط للتفاصيل">⚠️ ${escapeHtml(cycleCodeLabel(warn.code))}</span>`
+        : '<span class="badge badge-ok">دورة واحدة</span>';
+
+      const sub = cycleName
+        ? `<div class="cycle-sub">${escapeHtml(cycleName)}${info.totalCycles > 1 ? ` — من ${escapeHtml(info.totalCycles)} دورات` : ''}</div>`
+        : '';
+
+      return badge + sub;
     }
 
     function applyOrderFilters() {
@@ -2563,7 +2759,7 @@
       tbody.innerHTML = '';
 
       if (hasAnyOrders && !rows.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="data-empty">لا توجد أوردرات مطابقة للفلاتر</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="data-empty">لا توجد أوردرات مطابقة للفلاتر</td></tr>`;
         syncSelectAllOrders();
         return;
       }
@@ -2572,16 +2768,19 @@
         const addr = order.shippingAddress || {};
         const selected = state.selectedOrderIds.has(order.id);
         const st = computeOrderStatus(order, exportedIds);
-        const exportBadge = st === 'batch'
-          ? '<span class="badge badge-purple">Batch مصدّر</span>'
-          : st === 'duplicate'
-            ? '<span class="badge badge-warn">تصدير سابق</span>'
-            : '<span class="badge badge-ok">جاهز</span>';
+        const blocked = st === 'blocked';
+        const exportBadge = blocked
+          ? '<span class="badge badge-err">متوقّف</span>'
+          : st === 'batch'
+            ? '<span class="badge badge-purple">Batch مصدّر</span>'
+            : st === 'duplicate'
+              ? '<span class="badge badge-warn">تصدير سابق</span>'
+              : '<span class="badge badge-ok">جاهز</span>';
 
         const tr = document.createElement('tr');
         tr.className = selected ? 'selected' : '';
         tr.innerHTML = `
-          <td><input class="order-checkbox" type="checkbox" data-id="${escapeHtml(order.id)}" aria-label="تحديد ${escapeHtml(order.name)}" ${selected ? 'checked' : ''} onchange="toggleOrderSelection(this)" /></td>
+          <td><input class="order-checkbox" type="checkbox" data-id="${escapeHtml(order.id)}" aria-label="تحديد ${escapeHtml(order.name)}" ${selected ? 'checked' : ''} ${blocked ? 'disabled' : ''} onchange="toggleOrderSelection(this)" /></td>
           <td>${orderLink(order.name, order.orderId)}</td>
           <td>
             <div>${escapeHtml(addr.name || '—')}</div>
@@ -2589,6 +2788,7 @@
           </td>
           <td><span class="badge badge-type">${escapeHtml(order.s2Status?.value || JOB_META[state.jobType].expected)}</span></td>
           <td><span class="badge badge-ok">${escapeHtml(order.courier?.value || 'Bosta')}</span></td>
+          <td>${cycleCellHtml(order)}</td>
           <td>${exportBadge}</td>
         `;
         tbody.appendChild(tr);
@@ -2650,10 +2850,7 @@
       ]);
 
       orders.forEach(order => {
-        const addr  = order.shippingAddress || {};
-        const items = (order.lineItems?.edges || [])
-          .map(e => e.node)
-          .filter(li => (li.currentQuantity || 0) > 0);
+        const addr = order.shippingAddress || {};
 
         const parsedCash = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || 0);
         const rawCash = Number.isFinite(parsedCash) && parsedCash !== 0 ? parsedCash : null;
@@ -2661,15 +2858,17 @@
           ? Math.max(rawCash, -2000)
           : rawCash;
 
-        const count = items.reduce((s, li) => s + (li.currentQuantity || 1), 0) || null;
-        const standardPackageDescription = items
-          .map(li => `${li.sku || li.name} x${li.currentQuantity}`)
-          .join(' | ') || null;
+        // ⚠️ THE cycle rule (ecommoda-order-lifecycle Rule 15 ②).
+        // `order.currentCycle` is the ONE open R/E cycle, picked by the Worker
+        // after sorting `returns[]` by createdAt and dropping CANCELED/DECLINED.
+        // Everything in this row is read from it and from nothing else.
+        // Before v5.2.0 this code flattened EVERY cycle on the order, so a
+        // closed cycle from last month shipped again in today's Bosta file.
+        const cycle = order.currentCycle || null;
+        const returnEdges   = cycle?.returnLineItems?.edges   || [];
+        const exchangeEdges = cycle?.exchangeLineItems?.edges || [];
 
-        const allReturns = order.returns?.edges || [];
-
-        const returnLineItemsList = allReturns
-          .flatMap(r => r.node.returnLineItems?.edges || [])
+        const returnLineItemsList = returnEdges
           .map(e => {
             const li = e.node.fulfillmentLineItem?.lineItem;
             return li ? `${li.sku || li.name} x${e.node.quantity}` : null;
@@ -2677,13 +2876,11 @@
           .filter(Boolean);
         const returnDesc = returnLineItemsList.join(' | ') || null;
 
-        const returnQtyTotal = allReturns
-          .flatMap(r => r.node.returnLineItems?.edges || [])
+        const returnQtyTotal = returnEdges
           .reduce((s, e) => s + (e.node.quantity || 1), 0);
         const returnItemsCount = returnQtyTotal > 1 ? returnQtyTotal : null;
 
-        const exchangePackageRows = allReturns
-          .flatMap(r => r.node.exchangeLineItems?.edges || [])
+        const exchangePackageRows = exchangeEdges
           .flatMap(e => {
             const qty = e.node.quantity || 1;
             return (e.node.lineItems || [])
@@ -2701,32 +2898,34 @@
         const exchangePackageCount = exchangePackageRows
           .reduce((s, row) => s + (row.qty || 1), 0) || null;
 
+        // Package Description / No. of Items describe the package going OUT.
+        // On a return nothing goes out — the customer hands the pieces over —
+        // so both stay empty by design. (Until v5.2.0 these read
+        // `order.lineItems`, a field the Worker's query never asked for: the
+        // columns were empty by accident, not by decision.)
         const packageDescriptionForExport = jobType === 'exchange'
           ? exchangePackageDescription
-          : standardPackageDescription;
+          : null;
 
         const packageItemCountForExport = jobType === 'exchange'
           ? exchangePackageCount
-          : count;
+          : null;
 
-        const hasExchange = allReturns.some(r => (r.node.exchangeLineItems?.edges || []).length > 0);
+        // Rule 8 — return vs exchange is answered by the cycle, not by S2.
+        const hasExchange = exchangeEdges.length > 0;
         let goodsValue = 0;
         if (hasExchange) {
-          allReturns.forEach(r => {
-            (r.node.exchangeLineItems?.edges || []).forEach(e => {
-              const qty = e.node.quantity || 1;
-              (e.node.lineItems || []).forEach(li => {
-                goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
-              });
+          exchangeEdges.forEach(e => {
+            const qty = e.node.quantity || 1;
+            (e.node.lineItems || []).forEach(li => {
+              goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
             });
           });
         } else {
-          allReturns.forEach(r => {
-            (r.node.returnLineItems?.edges || []).forEach(e => {
-              const li  = e.node.fulfillmentLineItem?.lineItem;
-              const qty = e.node.quantity || 1;
-              if (li) goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
-            });
+          returnEdges.forEach(e => {
+            const li  = e.node.fulfillmentLineItem?.lineItem;
+            const qty = e.node.quantity || 1;
+            if (li) goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
           });
         }
         const goodsValueFinal = goodsValue > 0 ? goodsValue : null;
@@ -2746,7 +2945,12 @@
           packageType:   null,
           itemCount:     packageItemCountForExport !== 1 ? packageItemCountForExport : null,
           description:   packageDescriptionForExport,
-          deliveryNotes: order.note    || null,
+          // Empty by decision, not by accident. This used to read `order.note`,
+          // a field the Worker's query never asked for — and `note` turns out to
+          // hold internal CS bookkeeping ("أوردر استبدال / لا يوجد مصاريف شحن"),
+          // not delivery instructions. Sending that to a live courier shipment
+          // is Ahmed's call; until he makes it, the column stays empty.
+          deliveryNotes: null,
           orderRef:      order.name    || null,
           returnItems:   returnItemsCount,
           returnDesc,
