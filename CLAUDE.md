@@ -2,11 +2,11 @@
 
 # Bosta Return / Exchange Exporter (`Bosta-Return-Exchange-Exporter`)
 
-![version](https://img.shields.io/badge/version-v1.1.0-blue)
+![version](https://img.shields.io/badge/version-v1.2.0-blue)
 
 **بتعمل إيه:** فحص أوردرات الاسترجاع/الاستبدال الجاهزة لبوسطة، تصديرها Excel، وتأكيد الرفع على داشبورد بوسطة — بيحدّث S2 (`custom.status_2_r_e`) على شوبيفاي أوتوماتيك.
 **مين بيستخدمها:** المخزن
-**الإصدار:** Worker `v4.1.0` · الواجهة `v4.1.0`
+**الإصدار:** Worker `v5.0.0` · الواجهة `v5.0.0`
 
 ## الروابط
 
@@ -26,7 +26,7 @@
 | `record_export` | يسجّل عملية تصدير Excel (بيتمنع لو فيه تكرار من غير `allowRepeat`) |
 | `confirm_upload` | يكتب S2 الجديد (`In-Return` للاسترجاع · `Ready` للاستبدال) + وقت التحديث، ويتحقق مباشرة من شوبيفاي |
 | `record_manual_confirmation` | **غير مستخدم من الواجهة الحالية** (v4.0.0 دمجت خطوتين الاستبدال في `confirm_upload`) — الكود سايبه موجود لو احتاجوه تاني |
-| `get_logs` / `get_logs_count` / `get_logs_export` | سجل العمليات — الفلاتر (`employee`/`type`/`search`) موحّدة بين التلاتة، و`get_logs_export` بيرجّع `cap`/`total`/`truncated` كمان (v4.1.0) |
+| `get_logs` / `get_logs_count` / `get_logs_export` | سجل العمليات — فلاتر multi-select (`employees`/`types` CSV) + `search`، موحّدة بين التلاتة عبر `buildLogFilterSQL`. `get_logs_export` بيرجّع `cap`/`total`/`truncated` كمان (v5.0.0) |
 | `diag` | فحص ذاتي بدون كتابة (شوبيفاي · D1 · Origin) — مفيش قيم أسرار في الرد (v4.1.0) |
 | `get_config` | رقم نسخة الـ Worker — تستخدمه الواجهة لحارس نسخة الـ Worker (v4.1.0) |
 
@@ -95,7 +95,7 @@ git show 91c6027~1:3.33.html
 | ecommoda-order-lifecycle | v1.2.0 |
 | ecommoda-constants | v1.4.3 |
 
-آخر مطابقة: 02-09-2026 · `index.js` v4.1.0 · `index.html` v4.1.0
+آخر مطابقة: 02-09-2026 · `index.js` v5.0.0 · `index.html` v5.0.0
 🔴 معلّقة: — لا شيء
 
 ## مسائل مفتوحة
@@ -111,16 +111,23 @@ git show 91c6027~1:3.33.html
 - **`record_manual_confirmation` endpoint حي بس غير مستخدم** من أي مكان
   في الواجهة الحالية (v4.0.0+). سايبه الكود كما هو — قرار موثّق في هيدر
   `index.js` نفسه، مش حاجة اتكشفت في النقل.
-- 🟡 **الواجهة لسه على تصميم أقدم من `ecommoda-html-builder` v6.0.0** (مُستحسن،
-  مش كاسر — مفيش سلوك غلط، بس مفيش استفادة من المعيار الحالي). راجعتها
-  02-09-2026 وصلّحت البنود اللي كانت فعليًا بق (login كيباد ظاهر قبل اختيار
-  الاسم، z-index شاشة الدخول/النوافذ، حارس نسخة الـ Worker، `diag`/`get_config`،
-  هايبر لينك رقم الأوردر، تصدير سجل بيبيّن التقصّ). لسه ما اتعملش: التابات
-  الرئيسية (`.main-seg` بدل `.main-tabs-bar`)، قسم فلاتر/جدول موحّد
-  (`unified-section` + multi-select)، `--container-max` Tier، وصيغة عرض
-  التاريخ/الوقت الموحّدة (`📅 … 🕐 …`). ده تحويل واجهة كامل مش تصليح بق —
-  يستاهل جلسة منفصلة مركّزة بدل ما يتعمل جنب مراجعة تانية.
+- ✅ **تحويل الواجهة الكامل لـ `ecommoda-html-builder` v6.0.0 — اتعمل 02-09-2026
+  (v5.0.0).** التابات الرئيسية (`.main-tabs-bar`/`.main-tab-btn`)، قسم
+  فلاتر/جدول موحّد (`unified-section`) لكل من "الأوردرات الجاهزة للملف"
+  وسجل العمليات، كل الفلاتر multi-select (`msState.orderStatus` /
+  `msState.logType`)، `--container-max` Tier M (1200px)، About/Changelog على
+  شِل `.eco-modal`، زرار الإغلاق بإطار أحمر حقيقي (كان نص أحمر بس رغم اسم
+  الكلاس الصح)، سجل العمليات جدول حقيقي بعمودي تاريخ/وقت منفصلين وترتيب على
+  الأعمدة، وصيغة `📅 …/…/… 🕐 …:…`. الـ Worker اتحدّث بالتوازي (v5.0.0) —
+  `get_logs*` بقت تاخد `employees`/`types` CSV بدل قيمة واحدة.
+  🟡 **لسه ما اتعملش (مُستحسن، معروف ومتعمّد):** Freeze on Scroll
+  (`tabs-and-modals.md` § 1b — هيدر مضغوط + chip تاب عند السكرول). مش كاسر
+  لأن الأداة من غيره بتشتغل عادي، بس التابات هتفضل واخدة مساحة تابتة أثناء
+  السكرول. موثّق في مودال About (تشريح الكود) كمان.
+  ⚠️ **"النتائج" في تاب سجل العمليات = عدد كلي من السيرفر مش `filtered.length`**
+  — استثناء متعمّد عن `data-table-standard.md` § 7 بسبب الـ pagination
+  الحقيقي (Log Filter Model v2)؛ موثّق في مودال About.
 
-آخر تحديث: 02-09-2026 — 12:28
+آخر تحديث: 02-09-2026 — 12:54
 
 </div>

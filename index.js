@@ -1,8 +1,16 @@
 // ═══════════════════════════════════════════════════════════════
-// Bosta Return/Exchange Exporter — Worker v4.1.0
+// Bosta Return/Exchange Exporter — Worker v5.0.0
 // EcomModa Internal Tools
 // skills: worker-builder v2.0.0 · html-builder v6.0.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026
 // ═══════════════════════════════════════════════════════════════
+//
+// v5.0.0 (paired with the HTML's full html-builder v6.0.0 UI migration —
+// 02-09-2026): get_logs / get_logs_count / get_logs_export now take CSV
+// multi-value `employees` and `types` params (?types=scan,export_return)
+// instead of single `employee`/`type` strings, via a shared
+// buildLogFilterSQL() helper — the HTML's log tab filters are now
+// multi-select (html-builder Log Filter Model v2). This is a breaking
+// query-param rename for anyone calling this Worker directly.
 //
 // v4.1.0 (skill-compliance pass — 02-09-2026):
 // - Added `?action=diag` and `?action=get_config` — mandatory for any Worker
@@ -79,7 +87,7 @@
 // §CONSTANTS
 // ══════════════════════════════════════════════════════
 const TOOL_NAME = 'bosta_exchange_export';
-const WORKER_VERSION = '4.1.0';
+const WORKER_VERSION = '5.0.0';
 const SHOPIFY_API_VERSION = '2026-01';
 const LOG_EXPORT_MAX = 2000;
 
@@ -136,6 +144,14 @@ function assertPost(request) {
 
 function cleanText(v) {
   return String(v ?? '').trim();
+}
+
+// Parses a CSV query param (?employees=ahmed,sara) into a clean string array.
+function csvParam(url, key) {
+  return (url.searchParams.get(key) || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
 }
 
 // Truncates to whole seconds so a value written now and re-read later
@@ -284,27 +300,37 @@ async function writeLog(db, entry) {
   ).run();
 }
 
-// getLogs — canonical: login/logout excluded in SQL, max 100/page.
-async function getLogs(db, {
-  tool     = null,
-  employee = null,
-  type     = null,
-  search   = null,
-  limit    = 100,
-  offset   = 0,
-} = {}) {
-  let sql = "SELECT * FROM logs WHERE type NOT IN ('login','logout')";
+// buildLogFilterSQL — shared WHERE-clause builder for getLogs/getLogsCount/
+// getLogsExport. `employees`/`types` are arrays (from CSV query params) so the
+// HTML's multi-select log filters (html-builder Log Filter Model v2) can pass
+// more than one value per filter — a single `employee`/`type` string still
+// works too (treated as a 1-element list).
+function buildLogFilterSQL({ tool = null, employees = [], types = [], search = null } = {}) {
+  let sql = "WHERE type NOT IN ('login','logout')";
   const b = [];
 
-  if (tool)     { sql += ' AND tool = ?';     b.push(tool); }
-  if (employee) { sql += ' AND employee = ?'; b.push(employee); }
-  if (type)     { sql += ' AND type = ?';     b.push(type); }
+  if (tool) { sql += ' AND tool = ?'; b.push(tool); }
+  if (employees?.length) { sql += ` AND employee IN (${employees.map(() => '?').join(',')})`; b.push(...employees); }
+  if (types?.length)     { sql += ` AND type IN (${types.map(() => '?').join(',')})`;         b.push(...types); }
   if (search) {
     sql += ' AND (order_name LIKE ? OR notes LIKE ?)';
     b.push(`%${search}%`, `%${search}%`);
   }
 
-  sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
+  return { sql, b };
+}
+
+// getLogs — canonical: login/logout excluded in SQL, max 100/page.
+async function getLogs(db, {
+  tool      = null,
+  employees = [],
+  types     = [],
+  search    = null,
+  limit     = 100,
+  offset    = 0,
+} = {}) {
+  const { sql: where, b } = buildLogFilterSQL({ tool, employees, types, search });
+  const sql = `SELECT * FROM logs ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
   b.push(Math.min(limit, 100), offset);
 
   return (await db.prepare(sql).bind(...b).all()).results;
@@ -313,24 +339,9 @@ async function getLogs(db, {
 // getLogsCount — call in parallel with getLogs() for pagination UI.
 // Must accept every filter getLogs() accepts, or the displayed total silently
 // stops matching what's on screen (html-builder Standards #31).
-async function getLogsCount(db, {
-  tool     = null,
-  employee = null,
-  type     = null,
-  search   = null,
-} = {}) {
-  let sql = "SELECT COUNT(*) as total FROM logs WHERE type NOT IN ('login','logout')";
-  const b = [];
-
-  if (tool)     { sql += ' AND tool = ?';     b.push(tool); }
-  if (employee) { sql += ' AND employee = ?'; b.push(employee); }
-  if (type)     { sql += ' AND type = ?';     b.push(type); }
-  if (search) {
-    sql += ' AND (order_name LIKE ? OR notes LIKE ?)';
-    b.push(`%${search}%`, `%${search}%`);
-  }
-
-  const row = await db.prepare(sql).bind(...b).first();
+async function getLogsCount(db, { tool = null, employees = [], types = [], search = null } = {}) {
+  const { sql: where, b } = buildLogFilterSQL({ tool, employees, types, search });
+  const row = await db.prepare(`SELECT COUNT(*) as total FROM logs ${where}`).bind(...b).first();
   return row?.total ?? 0;
 }
 
@@ -339,26 +350,11 @@ async function getLogsCount(db, {
 // (HTML) must show `truncated` explicitly rather than reporting the export as
 // complete (html-builder Standards #30 — a capped export must never render as
 // an unconditional "تم تصدير N عملية ✓").
-async function getLogsExport(db, {
-  tool     = null,
-  employee = null,
-  type     = null,
-  search   = null,
-} = {}) {
-  let sql = "SELECT * FROM logs WHERE type NOT IN ('login','logout')";
-  const b = [];
+async function getLogsExport(db, { tool = null, employees = [], types = [], search = null } = {}) {
+  const { sql: where, b } = buildLogFilterSQL({ tool, employees, types, search });
+  const total = await getLogsCount(db, { tool, employees, types, search });
 
-  if (tool)     { sql += ' AND tool = ?';     b.push(tool); }
-  if (employee) { sql += ' AND employee = ?'; b.push(employee); }
-  if (type)     { sql += ' AND type = ?';     b.push(type); }
-  if (search) {
-    sql += ' AND (order_name LIKE ? OR notes LIKE ?)';
-    b.push(`%${search}%`, `%${search}%`);
-  }
-
-  const total = await getLogsCount(db, { tool, employee, type, search });
-
-  sql += ' ORDER BY timestamp DESC LIMIT ?';
+  const sql = `SELECT * FROM logs ${where} ORDER BY timestamp DESC LIMIT ?`;
   const entries = (await db.prepare(sql).bind(...b, LOG_EXPORT_MAX).all()).results;
 
   return {
@@ -1113,29 +1109,31 @@ export default {
       // ──────────────────────────────────────────────────────
 
       // ─── §LOG-ENDPOINTS ───────────────────────────────────
+      // CSV multi-select params, per html-builder Log Filter Model v2 —
+      // ?employees=ahmed,sara & ?types=scan,export_return
       if (action === 'get_logs') {
-        const employee = url.searchParams.get('employee') || null;
-        const type     = url.searchParams.get('type')     || null;
-        const search   = url.searchParams.get('search')   || null;
-        const limit    = Math.min(parseInt(url.searchParams.get('limit')  || '100', 10), 100);
-        const offset   = Math.max(parseInt(url.searchParams.get('offset') || '0', 10),    0);
-        const entries  = await getLogs(env.DB, { tool: TOOL_NAME, employee, type, search, limit, offset });
+        const employees = csvParam(url, 'employees');
+        const types     = csvParam(url, 'types');
+        const search    = url.searchParams.get('search') || null;
+        const limit     = Math.min(parseInt(url.searchParams.get('limit')  || '100', 10), 100);
+        const offset    = Math.max(parseInt(url.searchParams.get('offset') || '0', 10),    0);
+        const entries   = await getLogs(env.DB, { tool: TOOL_NAME, employees, types, search, limit, offset });
         return json({ ok: true, entries }, 200, request);
       }
 
       if (action === 'get_logs_count') {
-        const employee = url.searchParams.get('employee') || null;
-        const type     = url.searchParams.get('type')     || null;
-        const search   = url.searchParams.get('search')   || null;
-        const total    = await getLogsCount(env.DB, { tool: TOOL_NAME, employee, type, search });
+        const employees = csvParam(url, 'employees');
+        const types     = csvParam(url, 'types');
+        const search    = url.searchParams.get('search') || null;
+        const total     = await getLogsCount(env.DB, { tool: TOOL_NAME, employees, types, search });
         return json({ ok: true, total }, 200, request);
       }
 
       if (action === 'get_logs_export') {
-        const employee = url.searchParams.get('employee') || null;
-        const type     = url.searchParams.get('type')     || null;
-        const search   = url.searchParams.get('search')   || null;
-        const result   = await getLogsExport(env.DB, { tool: TOOL_NAME, employee, type, search });
+        const employees = csvParam(url, 'employees');
+        const types     = csvParam(url, 'types');
+        const search    = url.searchParams.get('search') || null;
+        const result    = await getLogsExport(env.DB, { tool: TOOL_NAME, employees, types, search });
         return json({ ok: true, ...result }, 200, request);
       }
       // ──────────────────────────────────────────────────────
