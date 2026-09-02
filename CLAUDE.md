@@ -2,11 +2,11 @@
 
 # Bosta Return / Exchange Exporter (`Bosta-Return-Exchange-Exporter`)
 
-![version](https://img.shields.io/badge/version-v1.5.0-blue)
+![version](https://img.shields.io/badge/version-v1.6.0-blue)
 
 **بتعمل إيه:** فحص أوردرات الاسترجاع/الاستبدال الجاهزة لبوسطة، تصديرها Excel، وتأكيد الرفع على داشبورد بوسطة — بيحدّث S2 (`custom.status_2_r_e`) على شوبيفاي أوتوماتيك.
 **مين بيستخدمها:** المخزن
-**الإصدار:** Worker `v5.3.0` · الواجهة `v5.3.0`
+**الإصدار:** Worker `v5.4.0` · الواجهة `v5.4.0`
 
 ## الروابط
 
@@ -24,7 +24,7 @@
 | `fetch_candidates` | يجيب أوردرات الاسترجاع/الاستبدال المرشّحة من شوبيفاي (`status_2_r_e` + `courier = Bosta`) — بيرجّع `currentCycle` (الدورة المفتوحة **بس**) + `cycleInfo` لكل أوردر، ومابيرجّعش `returns[]` خالص (v5.2.0) |
 | `check_export_duplicates` | يفحص لو **نفس دورة** الأوردر دي اتصدّرت قبل كده — المفتاح = اسم الأوردر + `cycleName` (v5.3.0) |
 | `record_export` | يسجّل عملية تصدير Excel (بيتمنع لو فيه تكرار من غير `allowRepeat`) — بيخزّن `cycleName`/`cycleCreatedAt` في `extra` (v5.3.0) |
-| `confirm_upload` | بيفحص دورات الاسترجاع من شوبيفاي الأول ويرفض بـ `409 CYCLE_BLOCKED` قبل أي كتابة (v5.2.0)، بعدين يكتب S2 الجديد (`In-Return` للاسترجاع · `Ready` للاستبدال) + وقت التحديث، ويتحقق مباشرة من شوبيفاي |
+| `confirm_upload` | بيفحص دورات الاسترجاع من شوبيفاي الأول ويرفض بـ `409 CYCLE_BLOCKED` قبل أي كتابة (v5.2.0) — والرفض بيتسجّل في D1 كـ `cycle_block` مع `logged` في الرد (v5.4.0). بعدين يكتب S2 الجديد (`In-Return` للاسترجاع · `Ready` للاستبدال) + وقت التحديث، ويتحقق مباشرة من شوبيفاي |
 | `record_manual_confirmation` | **غير مستخدم من الواجهة الحالية** (v4.0.0 دمجت خطوتين الاستبدال في `confirm_upload`) — الكود سايبه موجود لو احتاجوه تاني |
 | `get_logs` / `get_logs_count` / `get_logs_export` | سجل العمليات — فلاتر multi-select (`employees`/`types` CSV) + `search`، موحّدة بين التلاتة عبر `buildLogFilterSQL`. `get_logs_export` بيرجّع `cap`/`total`/`truncated` كمان (v5.0.0) |
 | `diag` | فحص ذاتي بدون كتابة (شوبيفاي · D1 · Origin) — مفيش قيم أسرار في الرد (v4.1.0) |
@@ -35,13 +35,16 @@
 ```
 tool  : bosta_exchange_export
 type  : scan · export_return · export_exchange · confirm_return · confirm_exchange ·
-        manual_confirm_return · manual_confirm_exchange · login
+        manual_confirm_return · manual_confirm_exchange · login · cycle_block
 ```
 
 > كل `confirm_upload` ناجح بيكتب **كمان** صف في `tool = 'metafields_change'` (`type = 'update'`)
 > — ده مطلوب عشان الـ cycle-time / R-E-cycle KPIs (بتتقرا من `metafields_change` بس) تشوف التحديث ده.
 
-> القيم دي متسجّلة بالفعل في جدول D1 في `ecommoda-constants` §7 — مفيش تسجيل مطلوب.
+> 🔴 **`cycle_block` (v5.4.0) لسه محتاج تسجيل في `ecommoda-constants` §7.** أحمد
+> بيسجّله. باقي القيم متسجّلة بالفعل. القاعدة (`worker-builder` Rule 7) بتقول
+> التسجيل **قبل** النشر مش بعده — ده استثناء واعي، متكتب هنا عشان اللي هيقرا
+> بعد كده مايفتكرش إن التسجيل اتعمل.
 
 ## المضبوط فعليًا في الداشبورد
 
@@ -106,8 +109,8 @@ git show 91c6027~1:3.33.html
 | ecommoda-order-lifecycle | v1.2.0 |
 | ecommoda-constants | v1.4.3 |
 
-آخر مطابقة: 02-09-2026 · `index.js` v5.3.0 · `index.html` v5.3.0
-🔴 معلّقة: — لا شيء
+آخر مطابقة: 02-09-2026 · `index.js` v5.4.0 · `index.html` v5.4.0
+🔴 معلّقة: — `cycle_block` مستني التسجيل في `ecommoda-constants` §7
 
 ## مسائل مفتوحة
 
@@ -126,11 +129,12 @@ git show 91c6027~1:3.33.html
   ⚠️ الـ `note` ملاحظات **داخلية** لخدمة العملاء (على `#51656`: «أوردر استبدال
   / لا يوجد مصاريف شحن / أوردر استرجاع») — الكلام ده بقى بيوصل للمندوب فعليًا.
   `flattenNote()` بتحوّله لسطر واحد قبل الكتابة في الملف.
-- 🔵 **رفض `confirm_upload` بسبب الدورات مش متسجّل في D1.** المهارة بتقول
-  «reject + log»، والـ reject اتعمل. الـ log لأ — لأن `worker-builder` Rule 7
-  بيمنع أي `writeLog` بقيمة `type` مش مسجّلة في `ecommoda-constants` §7.
-  المطلوب: تسجيل `type` جديد (مقترح `cycle_block`) في الجدول هناك **الأول**،
-  وبعدين يتضاف الـ `writeLog` في `findBlockedCycleOrders`.
+- ✅ **رفض `confirm_upload` بسبب الدورات — اتسجّل 02-09-2026 (v5.4.0).**
+  قاعدة «reject + log» بقت مكتملة: صف D1 لكل أوردر متمنوع بـ
+  `type = 'cycle_block'` شايل الكود والقيمة والإجراء والحالة اللي **ما
+  اتكتبتش**، وفلتر جديد في تاب السجل. فشل الكتابة في D1 بيرجع `logged: false`
+  والواجهة بتقوله صراحة (`worker-builder` Step 5A ⑦) — الرفض بيفضل قايم.
+  🔴 **باقي:** تسجيل `cycle_block` في `ecommoda-constants` §7 (أحمد بيعمله).
 - ✅ **مفتاح فحص التكرار — اتصلح 02-09-2026 (v5.3.0): اسم الأوردر + اسم
   الدورة.** كان بالاسم بس، فأوردر بدورة تانية **شرعية** (`MULTI_CYCLE`) كان
   بيتقفل كـ«مكرر» ويحتاج `allowRepeat` — والحماية كانت بتفقد معناها أوردر ورا
@@ -138,13 +142,6 @@ git show 91c6027~1:3.33.html
   **الصفوف القديمة** (قبل v5.3.0، مالهاش اسم دورة) لا بتتلغي ولا بتتحسب على
   عماها: بتتطابق مع الدورة الحالية **بس** لو `timestamp >= cycle.createdAt` —
   تصدير حصل قبل ما الدورة توجد مستحيل يكون تصدير ليها. مفيش migration.
-- 🔵 **`returns[].exchangeLineItems` بترجع فاضية على الدورات المقفولة.**
-  ملاحظ على `#51656`: الأدمن بيعرض «Exchange item for return #51656-R2»
-  والـ API بترجّع `exchangeLineItems: []` على الدورات الـ `CLOSED`، بينما
-  دورة استبدال **مفتوحة** (`#31809`) بترجّع البيانات كاملة. مش مؤثر على
-  الأداة دي (بنقرا الدورة المفتوحة بس)، بس يخص أي تصنيف تاريخي مبني على
-  `ecommoda-order-lifecycle` Rule 8 — يستاهل تسجيل هناك.
-
 - ✅ **`ALLOWED_ORIGINS` — راجعتها 02-09-2026: مفيش `ecommoda24.github.io` في الكود
   الحالي.** `ecommoda-constants` §5 و§11 بند 10 لسه بيحسبوا الأداة دي من الـ ٥
   اللي محتاجة تنظيف — القيمة الوحيدة الموجودة فعليًا هنا (`index.js`) هي
@@ -184,6 +181,6 @@ git show 91c6027~1:3.33.html
   `clearResults()` لسه موجودة داخليًا (بتتنده عند تبديل نوع العملية/الدخول/
   الخروج) رغم حذف زرار "تنظيف" اللي كان بينده عليها.
 
-آخر تحديث: 02-09-2026 — 17:25
+آخر تحديث: 02-09-2026 — 18:05
 
 </div>

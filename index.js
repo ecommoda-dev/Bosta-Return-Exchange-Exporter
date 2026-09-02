@@ -1,8 +1,26 @@
 // ═══════════════════════════════════════════════════════════════
-// Bosta Return/Exchange Exporter — Worker v5.3.0
+// Bosta Return/Exchange Exporter — Worker v5.4.0
 // EcomModa Internal Tools
 // skills: worker-builder v2.0.0 · html-builder v6.2.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026
 // ═══════════════════════════════════════════════════════════════
+//
+// v5.4.0 (the cycle rejection is now logged — 02-09-2026):
+// order-lifecycle Rule 15 ① and Rule 10 both say "reject + log, never
+// silently allow". v5.2.0 shipped the reject; this ships the log. Every
+// order refused by the cycle guard writes one D1 row —
+// type = 'cycle_block' — carrying the code, the offending value, the
+// resolving action, and the S2 write that did NOT happen, so the guard's
+// history is answerable ("how often, on which orders, by whom") instead of
+// living only in a toast the employee already dismissed.
+//
+// ⚠️ REGISTRATION: `cycle_block` is a NEW `type` value for this tool.
+// worker-builder Rule 7 requires it in `ecommoda-constants` §7 BEFORE this
+// ships. Ahmed is registering it — noted here so the next reader does not
+// take its presence as proof it was done.
+//
+// Rows are written before the 409 is returned, and a D1 failure is surfaced
+// as `logged: false` on the response rather than swallowed (Step 5A ⑦) —
+// the rejection still stands either way; what is at stake is the record.
 //
 // v5.3.0 (duplicate key + Delivery Notes — 02-09-2026, both Ahmed's call):
 // - The duplicate guard was keyed on the ORDER NAME alone, so a legitimate
@@ -150,7 +168,7 @@
 // §CONSTANTS
 // ══════════════════════════════════════════════════════
 const TOOL_NAME = 'bosta_exchange_export';
-const WORKER_VERSION = '5.3.0';
+const WORKER_VERSION = '5.4.0';
 const SHOPIFY_API_VERSION = '2026-01';
 const LOG_EXPORT_MAX = 2000;
 
@@ -165,6 +183,10 @@ const NEXT_STATUS_BY_JOB = {
 };
 
 const EXPORT_TYPES = ['export_return', 'export_exchange'];
+
+// ⚠️ NEW in v5.4.0 — must exist in `ecommoda-constants` §7 for this tool
+// (worker-builder Rule 7). Written only when the cycle guard refuses a write.
+const CYCLE_BLOCK_TYPE = 'cycle_block';
 
 const DISCOVERY_PAGE_SIZE = 100;
 const DISCOVERY_MAX_PAGES = 10;
@@ -915,9 +937,7 @@ async function fetchCandidateOrders(env, token, job) {
 // from Shopify (scalars only — cheap) and refuses to write for any order whose
 // open-cycle state is ambiguous. The HTML modal is no longer the only gate.
 //
-// Not logged to D1: a `cycle_block` type is not registered in
-// `ecommoda-constants` §7, and worker-builder Rule 7 forbids writing a `type`
-// before it is registered. Register it there first, then add the writeLog.
+// The rejection IS logged, as of v5.4.0 — see `logCycleBlocks` below.
 const CYCLE_GUARD_BATCH_SIZE = 50;
 
 async function findBlockedCycleOrders(env, token, orders, jobType) {
@@ -949,6 +969,7 @@ async function findBlockedCycleOrders(env, token, orders, jobType) {
         blocked.push({
           id: order.id,
           name: order.name,
+          s2Status: cleanText(order?.s2Status?.value) || null,
           code: info.blockReason.code,
           value: info.blockReason.value,
           action: info.blockReason.action,
@@ -964,6 +985,7 @@ async function findBlockedCycleOrders(env, token, orders, jobType) {
     blocked.push({
       id: order.id,
       name: order.name,
+      s2Status: order.s2Status || null,
       code: 'ORDER_NOT_READABLE',
       value: order.id,
       action: 'شوبيفاي ما رجّعتش الأوردر ده وقت فحص الدورات — ما قدرناش نتأكد، فاتمنع التحديث. جرّب تاني أو راجعه يدوي.',
@@ -971,6 +993,41 @@ async function findBlockedCycleOrders(env, token, orders, jobType) {
   }
 
   return blocked;
+}
+
+// Rule 15 ① / Rule 10 — "reject + log". One row per refused order, written
+// before the 409 goes back. A D1 failure does not undo the rejection, but it
+// must be visible: the caller gets `logged: false` (Step 5A ⑦), never silence.
+async function logCycleBlocks(db, blocked, job, employee) {
+  if (!blocked.length) return { logged: true, logError: null };
+
+  const now = new Date().toISOString();
+  try {
+    await writeLogsBatch(db, blocked.map((row) => ({
+      timestamp: now,
+      tool: TOOL_NAME,
+      type: CYCLE_BLOCK_TYPE,
+      employee,
+      orderId: row.id,
+      orderName: row.name,
+      // The S2 write that did NOT happen — before and after are the same value
+      // on purpose: nothing moved.
+      valueBefore: row.s2Status || job.expectedStatus,
+      valueAfter: row.s2Status || job.expectedStatus,
+      notes: `اتمنع تحديث S2 إلى ${job.nextStatus} — ${row.code}: ${row.value}`,
+      extra: {
+        jobType: job.jobType,
+        expectedStatus: job.expectedStatus,
+        blockedNextStatus: job.nextStatus,
+        code: row.code,
+        value: row.value,
+        action: row.action,
+      },
+    })));
+    return { logged: true, logError: null };
+  } catch (e) {
+    return { logged: false, logError: e.message };
+  }
 }
 
 // ─── §SHOPIFY::writeAndVerifyS2 ───
@@ -1331,11 +1388,14 @@ export default {
         // what the page sent. Rejected BEFORE any write (Rule 15 ①).
         const blockedCycles = await findBlockedCycleOrders(env, token, orders, job.jobType);
         if (blockedCycles.length) {
+          const { logged, logError } = await logCycleBlocks(env.DB, blockedCycles, job, employee);
           return json({
             ok: false,
             code: 'CYCLE_BLOCKED',
             error: 'فيه أوردرات حالة دورات الاسترجاع فيها مش واضحة — اتمنع تحديث الحالة لحد ما تتصلّح في شوبيفاي',
             blocked: blockedCycles,
+            logged,
+            logError,
           }, 409, request);
         }
 

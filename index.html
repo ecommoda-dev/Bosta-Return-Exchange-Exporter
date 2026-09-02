@@ -1153,7 +1153,7 @@
               <li><code>§LOG-ENDPOINTS</code> (Worker) — <code>get_logs</code> / <code>get_logs_count</code> / <code>get_logs_export</code></li>
               <li><code>§DIAG</code> (Worker) — <code>diag</code> / <code>get_config</code></li>
               <li><code>§SHOPIFY::returnCycles</code> (Worker) — <code>sortedReturnCycles</code> / <code>hasHistoricalOverlap</code> / <code>analyzeReturnCycles</code> — بتختار الدورة المفتوحة وبتطلّع أكواد المنع والتحذير</li>
-              <li><code>§SHOPIFY::assertCyclesConfirmable</code> (Worker) — <code>findBlockedCycleOrders</code> — بوابة سيرفر-سايد قبل كتابة S2</li>
+              <li><code>§SHOPIFY::assertCyclesConfirmable</code> (Worker) — <code>findBlockedCycleOrders</code> / <code>logCycleBlocks</code> — بوابة سيرفر-سايد قبل كتابة S2 + تسجيل الرفض في D1</li>
               <li><code>§CYCLES</code> (HTML) — <code>isCycleBlocked</code> / <code>cycleCellHtml</code> / <code>openCycleReviewModal</code> — عمود الدورة + نافذة المراجعة</li>
               <li><code>selectJobType</code> / <code>setModeCardsLoading</code> (HTML) — مربعات ملوّنة + تحميل تلقائي</li>
               <li><code>updateExportBtnLabel</code> (HTML) — نص زرار التصدير الوحيد ("تصدير الكل" ↔ "تصدير المحدد فقط (العدد)") حسب التحديد الحالي</li>
@@ -1184,7 +1184,7 @@
               <li>🔁 <b>دورة واحدة مفتوحة بس (v5.2.0).</b> الأوردر ممكن يكون عدّى بأكتر من دورة استرجاع/استبدال. الملف بيتبنى من <b>الدورة المفتوحة الحالية بس</b> (<code>order.currentCycle</code> — الـ Worker بيرتّب <code>returns[]</code> بـ <code>createdAt</code>، بيشيل <code>CANCELED</code>/<code>DECLINED</code>، وبياخد أحدث دورة مفتوحة). قبل كده كان بيجمّع قطع <b>كل</b> الدورات — بما فيها المقفولة من شهور — فكان بيطلع في الملف قطع رجعت للمخزن خلاص. الـ Worker مابيرجّعش <code>returns</code> للصفحة أصلاً دلوقتي، فالتجميع القديم بقى مستحيل. القاعدة → <code>ecommoda-order-lifecycle</code> Rule 15 ②.</li>
               <li>⛔ <b>أكواد المنع:</b> <code>CYCLE_OVERLAP_OPEN</code> (أكتر من دورة مفتوحة — مش عارفين أنهي واحدة هتتشحن) · <code>NO_OPEN_CYCLE</code> (S2 بيقول فيه طلب ومفيش دورة مفتوحة) · <code>CYCLES_TRUNCATED</code> (أكتر من 10 دورات) · <code>ORDER_NOT_READABLE</code> (شوبيفاي ما رجّعتش الأوردر وقت الفحص). الأوردر المتوقّف مش بيتحدد، الـ checkbox بتاعه disabled، و<code>confirm_upload</code> بيرفضه سيرفر-سايد كمان بـ 409.</li>
               <li>⚠️ <b>أكواد للعلم بس (بتتصدّر عادي — flag it, never move it):</b> <code>MULTI_CYCLE</code> (دورات متتابعة، قانونية) · <code>CYCLE_OVERLAP</code> (تداخل تاريخي اتحل) · <code>TYPE_MISMATCH</code> (S2 بيقول استرجاع والدورة فيها قطع استبدال — <code>ecommoda-order-lifecycle</code> Rule 8: الـ API هي المرجع مش الميتافيلد) · <code>EXCHANGE_WITHOUT_ITEMS</code>. الكودين <code>CYCLE_OVERLAP</code> و<code>MULTI_CYCLE</code> مفصولين عمدًا — الأول شغل خدمة عملاء والتاني حد في الكود (<code>state-machines.md</code> §2.4).</li>
-              <li>رفض <code>confirm_upload</code> بسبب الدورات <b>مش متسجّل في D1</b> — قيمة <code>type</code> لسه مش مسجّلة في <code>ecommoda-constants</code> §7، و<code>worker-builder</code> Rule 7 بيمنع أي <code>writeLog</code> بقيمة غير مسجّلة. تتسجّل هناك الأول ثم يتضاف الـ log.</li>
+              <li>رفض <code>confirm_upload</code> بسبب الدورات <b>بيتسجّل في D1</b> (v5.4.0) — صف لكل أوردر متمنوع بـ <code>type = 'cycle_block'</code>، شايل الكود والقيمة والإجراء والحالة اللي <b>ما اتكتبتش</b>. ظاهر في تاب سجل العمليات تحت فلتر «منع — دورات الاسترجاع». لو الكتابة في D1 نفسها فشلت، الرد بيرجّع <code>logged: false</code> والواجهة بتقول كده صراحة — الرفض بيفضل قايم، اللي بيضيع هو السجل بس.</li>
               <li>عمودا "Package Description" و"No. of Items" في ملف بوسطة بيتملوا في <b>الاستبدال بس</b> (قطع الدورة المفتوحة الخارجة). في الاسترجاع مفيش حاجة خارجة من المخزن فبيفضلوا فاضيين — بقرار صريح، مش لأن الحقل مش متسحوب (قبل v5.2.0 كانوا بيقروا <code>order.lineItems</code> اللي الـ query ما طلبتوش أصلاً).</li>
               <li>عمود "Delivery Notes" بقى بيتملى من <code>order.note</code> (قرار أحمد — v5.3.0). كان بيقرا الحقل ده من غير ما الـ query تطلبه، فكان <b>دايمًا فاضي</b> من أول يوم. ⚠️ خلي بالك: الـ <code>note</code> ده ملاحظات <b>داخلية</b> لخدمة العملاء (على <span class="mono">#51656</span>: «أوردر استبدال / لا يوجد مصاريف شحن / أوردر استرجاع») — الكلام ده بقى بيوصل للمندوب. <code>flattenNote()</code> بتحوّله لسطر واحد عشان الملاحظة متعددة السطور ماتكسرش ملف بوسطة.</li>
               <li>🔑 <b>مفتاح فحص التكرار = اسم الأوردر + اسم الدورة</b> (v5.3.0). قبل كده كان الاسم بس، فأوردر بدورة تانية <b>شرعية</b> كان بيتقفل كـ«مكرر» ويحتاج <code>allowRepeat</code> — والحماية كانت بتفقد معناها أوردر ورا التاني. <code>record_export</code> بقى بيخزّن <code>cycleName</code>/<code>cycleCreatedAt</code> في <code>extra</code>. الصفوف القديمة (قبل v5.3.0) مالهاش اسم دورة — مش بتتلغي ولا بتتحسب على عماها: بتتطابق مع الدورة الحالية <b>بس</b> لو اتكتبت <b>بعد</b> ما الدورة دي اتفتحت (<code>timestamp >= cycle.createdAt</code>)، لأن تصدير حصل قبل ما الدورة توجد أصلاً مستحيل يكون تصدير ليها. مفيش أي migration للبيانات.</li>
@@ -1209,11 +1209,16 @@
   <div class="eco-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="eco-modal">
       <div class="eco-modal-hdr">
-        <span id="changelogTitle">V5.3.0 — Changelog</span>
+        <span id="changelogTitle">V5.4.0 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">✕</button>
       </div>
       <div class="eco-modal-body">
         <div class="hint">
+          <b>V5.4.0</b><br>
+          - رفض تحديث الحالة بسبب دورات الاسترجاع بقى <b>يتسجّل في D1</b> — صف لكل أوردر متمنوع (<span class="mono">type = 'cycle_block'</span>) شايل سبب المنع والحالة اللي ما اتكتبتش. القاعدة «reject + log» بقت مكتملة (الرفض كان شغال من v5.2.0، الناقص كان السجل).<br>
+          - فلتر جديد في سجل العمليات: «منع — دورات الاسترجاع».<br>
+          - لو الكتابة في السجل نفسها فشلت، الواجهة بتقول كده صراحة بدل ما تسكت.<br>
+          <br>
           <b>V5.3.0</b><br>
           - فحص التكرار بقى على <b>اسم الأوردر + اسم الدورة</b> بدل اسم الأوردر لوحده — أوردر بدورة استرجاع/استبدال تانية شرعية مابقاش يتقفل كـ«مكرر». الصفوف القديمة في السجل (مالهاش اسم دورة) بتتطابق مع الدورة الحالية بس لو اتكتبت <b>بعد</b> ما الدورة اتفتحت — من غير أي migration.<br>
           - عمود "Delivery Notes" في ملف بوسطة بقى بيتملى من ملاحظة الأوردر (<span class="mono">note</span>) فعليًا — كان مقروء في الكود ومش متسحوب من الـ query، يعني فاضي من أول يوم. الملاحظة بتتحوّل لسطر واحد قبل ما تتكتب في الملف.<br>
@@ -1385,8 +1390,8 @@
     </div>
   </div>
   <script>
-    const TOOL_VERSION = '5.3.0';
-    const MIN_WORKER_VERSION = '5.3.0'; // lowest Worker version this page relies on (per-cycle duplicate key)
+    const TOOL_VERSION = '5.4.0';
+    const MIN_WORKER_VERSION = '5.4.0'; // lowest Worker version this page relies on (cycle_block log rows)
     const SHOP_DOMAIN = '6c7e1a-53.myshopify.com';
     const CFG_KEY = 'bosta_exchange_export_config_v3';
     const LOG_PAGE_SIZE = 100;
@@ -1476,6 +1481,7 @@
           { value: 'manual_confirm_exchange',  label: 'Manual Confirm Exchange' },
           { value: 'confirm_return',           label: 'Status Update — Return' },
           { value: 'confirm_exchange',         label: 'Status Update — Exchange' },
+          { value: 'cycle_block',              label: 'منع — دورات الاسترجاع' },
         ],
         selected: new Set(),
       },
@@ -2675,9 +2681,15 @@
       } catch (e) {
         if (e.data?.code === 'CYCLE_BLOCKED') {
           const names = (e.data.blocked || []).map((row) => `${row.name} (${cycleCodeLabel(row.code)})`).join(' · ');
+          // The rejection stands either way; a failed D1 write only costs the
+          // record — and it says so instead of staying silent.
+          const logNote = e.data.logged === false
+            ? ` ⚠️ الرفض ما اتسجّلش في السجل (${e.data.logError || 'خطأ D1'}).`
+            : '';
           closeStatusConfirmModal();
-          showStatus(`اتمنع تحديث الحالة — حالة الدورات اتغيّرت على شوبيفاي بعد التصدير: ${names}. اعمل فحص من جديد.`, 'error');
+          showStatus(`اتمنع تحديث الحالة — حالة الدورات اتغيّرت على شوبيفاي بعد التصدير: ${names}. اعمل فحص من جديد.${logNote}`, 'error');
           showToast('اتمنع التحديث — راجع دورات الاسترجاع', 'error');
+          await loadLogs(false);
         } else {
           showStatus('فشل تحديث الحالة: ' + e.message, 'error');
           showToast('فشل تحديث الحالة: ' + e.message, 'error');
@@ -3193,6 +3205,7 @@
         manual_confirm_exchange: 'Manual Confirm Exchange',
         confirm_return: 'Status Update — Return',
         confirm_exchange: 'Status Update — Exchange',
+        cycle_block: 'منع — دورات الاسترجاع',
         login: 'Login',
         logout: 'Logout',
       };
