@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <!-- skills: html-builder v6.0.0 · worker-builder v2.0.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026 -->
+  <!-- skills: html-builder v6.1.0 · worker-builder v2.0.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026 -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bosta Return / Exchange Exporter V4.1.0</title>
@@ -260,21 +260,6 @@
     .mode-card.mode-exchange { border-color: var(--amber-border); }
     .mode-card.mode-exchange:hover:not(:disabled) { background: var(--amber-light); }
     .mode-card.mode-exchange.active { border-color: var(--amber); background: var(--amber-light); box-shadow: 0 0 0 2px rgba(217,119,6,.12); }
-
-    .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; margin-top: 14px; }
-    .stat-box {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 10px;
-    }
-    .stat-label { font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
-    .stat-value { font-family: var(--font-mono); font-size: 18px; font-weight: 800; margin-top: 3px; direction: ltr; text-align: right; }
-    .stat-green .stat-value { color: var(--green); }
-    .stat-red .stat-value { color: var(--red); }
-    .stat-blue .stat-value { color: var(--accent); }
-    .stat-amber .stat-value { color: var(--amber); }
-    .stat-purple .stat-value { color: var(--purple); }
 
     .actions-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
     .btn {
@@ -758,7 +743,6 @@
     @keyframes toastIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
     @media (max-width: 900px) {
-      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .mode-grid { grid-template-columns: 1fr; }
       .export-dup-table-head, .export-dup-table-row { grid-template-columns: 110px 1fr 90px; }
     }
@@ -869,33 +853,8 @@
           </button>
         </div>
 
-        <div class="summary-grid">
-          <div class="stat-box stat-blue">
-            <div class="stat-label">مطابق للشروط</div>
-            <div class="stat-value" id="statOrders">0</div>
-          </div>
-          <div class="stat-box stat-blue">
-            <div class="stat-label">محدد للتصدير</div>
-            <div class="stat-value" id="statSelected">0</div>
-          </div>
-          <div class="stat-box stat-green">
-            <div class="stat-label">تم التصدير</div>
-            <div class="stat-value" id="statExported">لا</div>
-          </div>
-          <div class="stat-box stat-purple">
-            <div class="stat-label">تم تحديث الحالة؟</div>
-            <div class="stat-value" id="statStatusUpdated">لا</div>
-          </div>
-          <div class="stat-box stat-amber">
-            <div class="stat-label">الحالة التالية (S2)</div>
-            <div class="stat-value" id="statNext">In-Return</div>
-          </div>
-        </div>
-
         <div class="actions-row">
-          <button class="btn btn-green" id="exportBtn" onclick="exportCurrentOrders()" disabled>📥 تصدير Excel (رفع بوسطة)</button>
-          <button class="btn btn-purple" id="updateStatusBtn" onclick="openStatusConfirmModal()" disabled>📌 تحديث حالة الأوردر إلى (In-Return)</button>
-          <button class="btn btn-secondary" onclick="clearResults()">تنظيف</button>
+          <button class="btn btn-green" id="exportBtn" onclick="exportCurrentOrders()" disabled>📥 تصدير الكل (رفع بوسطة)</button>
         </div>
 
         <div class="status-bar" id="statusBar"></div>
@@ -1111,8 +1070,9 @@
           <input class="settings-input" id="cfgAdminUrl" />
         </div>
         <div class="hint">
-          الاسترجاع والاستبدال بقى عندهم نفس التدفق: تصدير Excel، ثم زرار واحد بس لتحديث الحالة، واللي
-          بيفتح نافذة تأكيد فيها Checkboxes (رفع بوسطة، وإرسال الفواتير في حالة الاستبدال) قبل ما يتفعّل زرار التأكيد.
+          الاسترجاع والاستبدال بقى عندهم نفس التدفق: كل الأوردرات محددة تلقائيًا، اضغط "تصدير الكل" (أو شيّل تحديد
+          اللي مش عايزه فيتحول الزرار لـ "تصدير المحدد فقط") — بعد التصدير بتتفتح صفحة رفع الملف على بوسطة في تاب
+          جديد + نافذة تأكيد تحديث الحالة تلقائيًا.
         </div>
         <div class="settings-field" style="border-top:1.5px solid var(--border);padding-top:12px;">
           <label class="settings-label">فحص النظام</label>
@@ -1144,10 +1104,10 @@
 
             <h4>كيف تعمل — Workflow</h4>
             <ol>
-              <li>اضغط على مربع "أوردرات الاسترجاع" (أحمر) أو "أوردرات الاستبدال" (برتقالي) — القائمة بتتحمّل أو بتتحدّث تلقائيًا من Shopify (S2 = الحالة المتوقعة + Courier = Bosta)، من غير أي زرار استعلام منفصل.</li>
-              <li>حدد الأوردرات المطلوبة (أو اختر "الكل")، ثم اضغط "تصدير Excel". لو أي أوردر اتصدّر قبل كده هتظهر نافذة تحذير بالتفاصيل قبل ما تسمح بالتصدير تاني.</li>
-              <li>ارفع الملف يدوياً على داشبورد بوسطة (خارج الأداة — الأداة مبتكلمش Bosta API مباشرة).</li>
-              <li>اضغط زرار "تحديث حالة الأوردر" — نافذة تأكيد ملوّنة هتفتح فيها Checkboxes (هل رفعت بوسطة؟ وفي الاستبدال فقط: هل أرسلت الفواتير للمخزن؟). لازم تعليم كل الـ checkboxes المطلوبة عشان زرار "تأكيد التحديث" يتفعّل.</li>
+              <li>اضغط على مربع "أوردرات الاسترجاع" (أحمر) أو "أوردرات الاستبدال" (برتقالي) — القائمة بتتحمّل أو بتتحدّث تلقائيًا من Shopify (S2 = الحالة المتوقعة + Courier = Bosta)، من غير أي زرار استعلام منفصل. كل الأوردرات بتبقى محددة افتراضيًا.</li>
+              <li>شيّل تحديد أي أوردر مش عايز تصدّره (لو حابب) — الزرار بيتحول من "تصدير الكل" لـ "تصدير المحدد فقط (العدد)" تلقائيًا. اضغط الزرار. لو أي أوردر اتصدّر قبل كده هتظهر نافذة تحذير بالتفاصيل قبل ما تسمح بالتصدير تاني.</li>
+              <li>بعد نجاح التصدير، بيتفتح تلقائيًا: تاب جديد على رابط رفع الملف على داشبورد بوسطة (<code>business.bosta.co/orders/upload/smart-upload</code>) + نافذة تأكيد تحديث حالة الأوردرات.</li>
+              <li>ارفع الملف على بوسطة (في التاب اللي فتح)، ثم ارجع لنافذة التأكيد وعلّم الـ Checkboxes المطلوبة (هل رفعت بوسطة؟ وفي الاستبدال فقط: هل أرسلت الفواتير للمخزن؟) واضغط "تأكيد التحديث" — S2 بيتكتب على Shopify مباشرة مع تحقق فوري من نجاح الكتابة.</li>
             </ol>
 
             <h4>الـ Endpoints الرئيسية</h4>
@@ -1181,7 +1141,9 @@
               <li><code>§LOG-ENDPOINTS</code> (Worker) — <code>get_logs</code> / <code>get_logs_count</code> / <code>get_logs_export</code></li>
               <li><code>§DIAG</code> (Worker) — <code>diag</code> / <code>get_config</code></li>
               <li><code>selectJobType</code> / <code>setModeCardsLoading</code> (HTML) — مربعات ملوّنة + تحميل تلقائي</li>
+              <li><code>updateExportBtnLabel</code> (HTML) — نص زرار التصدير الوحيد ("تصدير الكل" ↔ "تصدير المحدد فقط (العدد)") حسب التحديد الحالي</li>
               <li><code>buildExcelExportFile</code> (HTML) — بناء وتنزيل ملف Excel للأوردرات</li>
+              <li><code>performExcelExport</code> (HTML) — بعد نجاح التصدير بتفتح رابط رفع بوسطة في تاب جديد وتنادي <code>openStatusConfirmModal</code> تلقائيًا</li>
               <li><code>openStatusConfirmModal</code> / <code>submitStatusConfirm</code> (HTML) — نافذة تأكيد تحديث الحالة (Checklist)</li>
               <li><code>fetchLog</code> / <code>renderLogTable</code> / <code>exportLogXLSX</code> (HTML) — سجل العمليات كجدول + تصدير</li>
               <li><code>orderLink</code> (HTML) — هايبر لينك رقم الأوردر لشوبيفاي</li>
@@ -1200,10 +1162,12 @@
             <h4>NOTES</h4>
             <ul>
               <li>زرار "الاستعلام" اتلغى تمامًا — الضغط على أي مربع (أحمر=استرجاع، برتقالي=استبدال) بيحمّل القائمة تلقائيًا، وبيشتغل كـ refresh لو ضغطته تاني وهو نشط بالفعل.</li>
-              <li>خطوة التأكيد موحّدة بين الاسترجاع والاستبدال — زرار واحد بيفتح نافذة فيها Checkboxes إلزامية. الـ checklist بيتبعت للـ Worker كـ metadata للـ audit trail بس — مش بيتحقق منه على السيرفر (البوابة الحقيقية هي زرار الواجهة نفسه).</li>
+              <li>كل الأوردرات محددة افتراضيًا (checkbox) — زرار التصدير الوحيد بيبدأ بـ "تصدير الكل"، وبيتحول لـ "تصدير المحدد فقط (العدد)" أوتوماتيك لو الموظف شال تحديد أي أوردر. مفيش زرار "تنظيف" منفصل — <code>clearResults()</code> لسه موجودة داخليًا وبتتنده عند تبديل نوع العملية أو تسجيل الدخول/الخروج.</li>
+              <li>خطوة التأكيد موحّدة بين الاسترجاع والاستبدال — نافذة واحدة فيها Checkboxes إلزامية، بتتفتح <b>تلقائيًا</b> بعد نجاح التصدير (مفيش زرار "تحديث الحالة" منفصل تعد كده). الـ checklist بيتبعت للـ Worker كـ metadata للـ audit trail بس — مش بيتحقق منه على السيرفر (البوابة الحقيقية هي نافذة الواجهة نفسها).</li>
+              <li>بعد نجاح التصدير: <code>window.open(...)</code> بيفتح رابط رفع الملف على بوسطة (<code>business.bosta.co/orders/upload/smart-upload</code>) في تاب جديد، وفي نفس الوقت بتتفتح نافذة تأكيد تحديث الحالة — الاتنين تلقائي، من غير أي زرار وسيط.</li>
               <li>S2 = "In-Return" بيتكتب يدوي في الاسترجاع فور تأكيد الرفع — استثناء مقصود ومؤكد مع Ahmed (06-08-2026). راجع تعليق أعلى ملف الـ Worker.</li>
               <li>كل كتابة لـ S2 بتتسجل مرتين في D1: مرة تحت tool الأداة نفسها، ومرة تحت <code>tool = 'metafields_change'</code> (للـ KPIs المشتركة بين كل الأدوات).</li>
-              <li>الأداة مبتكلمش Bosta API مباشرة — رفع الملف على داشبورد بوسطة يدوي بره الأداة تماماً.</li>
+              <li>الأداة مبتكلمش Bosta API مباشرة — الرفع الفعلي على داشبورد بوسطة لسه بيدوي بره الأداة تماماً؛ الأداة بس بتفتح صفحة الرفع لتسهيل الخطوة.</li>
               <li>Cash Amount: سقف الـ -2000 بينطبق على الاسترجاع والاستبدال معًا.</li>
               <li>عمود "City" في ملف Excel = المحافظة (Province)، وعمود "Area" = المدينة (City) من عنوان الشحن.</li>
               <li>اسم العميل في الجدول والملف بياخد من <code>addr.name</code> مباشرة (مش firstName+lastName اللي مكنش متسحوب أصلاً من الـ API).</li>
@@ -1222,11 +1186,17 @@
   <div class="eco-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="eco-modal">
       <div class="eco-modal-hdr">
-        <span id="changelogTitle">V5.0.0 — Changelog</span>
+        <span id="changelogTitle">V5.1.0 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">✕</button>
       </div>
       <div class="eco-modal-body">
         <div class="hint">
+          <b>V5.1.0</b><br>
+          - حذف صندوق الإحصائيات الخمسة (مطابق للشروط / محدد للتصدير / تم التصدير / تم تحديث الحالة؟ / الحالة التالية).<br>
+          - حذف زراري "تنظيف" و"تحديث حالة الأوردر إلى ..." — بقى زرار تصدير واحد بس.<br>
+          - كل الأوردرات محددة تلقائيًا عند تحميل القائمة — الزرار بيبدأ "📥 تصدير الكل"، وبيتحول لـ "📥 تصدير المحدد فقط (العدد)" لو شيّلت تحديد أي أوردر.<br>
+          - بعد نجاح التصدير: بتتفتح تلقائيًا صفحة رفع الملف على بوسطة (<span class="mono">business.bosta.co/orders/upload/smart-upload</span>) في تاب جديد + نافذة تأكيد تحديث الحالة — من غير أي زرار وسيط.<br>
+          <br>
           <b>V5.0.0</b><br>
           - تحويل الواجهة الكامل لمعيار html-builder v6.0.0: التابات الرئيسية بقت <span class="mono">main-tabs-bar</span> بعرض كامل، وقسم "الأوردرات الجاهزة للملف" وتاب "سجل العمليات" بقوا قسم موحّد (فلاتر + جدول) بدل كارتين منفصلين.<br>
           - كل الفلاتر (حالة التصدير، نوع العملية) بقت اختيار متعدد (multi-select) بدل قائمة واحدة/الكل.<br>
@@ -1352,7 +1322,7 @@
     </div>
   </div>
   <script>
-    const TOOL_VERSION = '5.0.0';
+    const TOOL_VERSION = '5.1.0';
     const MIN_WORKER_VERSION = '5.0.0'; // lowest Worker version this page relies on (CSV employees/types log filters)
     const SHOP_DOMAIN = '6c7e1a-53.myshopify.com';
     const CFG_KEY = 'bosta_exchange_export_config_v3';
@@ -2145,12 +2115,6 @@
     function updateModeCardsUI() {
       document.getElementById('modeReturn').classList.toggle('active', state.jobType === 'return');
       document.getElementById('modeExchange').classList.toggle('active', state.jobType === 'exchange');
-      document.getElementById('statNext').textContent = JOB_META[state.jobType].next;
-
-      const statusBtn = document.getElementById('updateStatusBtn');
-      statusBtn.innerHTML = JOB_META[state.jobType].statusButtonText;
-      statusBtn.classList.remove('btn-red', 'btn-warning', 'btn-purple');
-      statusBtn.classList.add(JOB_META[state.jobType].btnClass);
     }
 
     function setModeCardsLoading(loading) {
@@ -2231,18 +2195,24 @@
     }
 
     function updateRunUI() {
-      const totalCount = state.orders.length;
       const selectedCount = getSelectedOrders().length;
 
-      document.getElementById('statOrders').textContent = String(totalCount);
-      document.getElementById('statSelected').textContent = String(selectedCount);
-      document.getElementById('statExported').textContent = state.exported ? 'نعم' : 'لا';
-      document.getElementById('statStatusUpdated').textContent = state.statusUpdated ? 'نعم' : 'لا';
-
+      updateExportBtnLabel();
       document.getElementById('exportBtn').disabled = selectedCount === 0;
-      document.getElementById('updateStatusBtn').disabled = !state.exported || state.exportedOrders.length === 0 || state.statusUpdated;
 
       syncSelectAllOrders();
+    }
+
+    // كل الأوردرات محددة افتراضيًا (fetchCandidates) — "تصدير الكل" بيفضل
+    // ظاهر لحد ما الموظف يشيل تحديد أوردر بنفسه، هنا بس بيتحول لـ "تصدير المحدد فقط".
+    function updateExportBtnLabel() {
+      const btn = document.getElementById('exportBtn');
+      if (!btn) return;
+      const totalCount = state.orders.length;
+      const selectedCount = getSelectedOrders().length;
+      btn.textContent = (selectedCount > 0 && selectedCount < totalCount)
+        ? `📥 تصدير المحدد فقط (رفع بوسطة) (${selectedCount})`
+        : '📥 تصدير الكل (رفع بوسطة)';
     }
 
     function playDuplicateAlertSound() {
@@ -2333,7 +2303,7 @@
         });
 
         state.orders = data.orders || [];
-        state.selectedOrderIds = new Set();
+        state.selectedOrderIds = new Set(state.orders.map((order) => order.id));
         state.exportedOrders = [];
         state.exportDuplicates = {};
         state.allowRepeatExport = false;
@@ -2396,7 +2366,7 @@
         showToast('فشل فحص التكرار: ' + e.message, 'error');
         return;
       } finally {
-        btn.textContent = '📥 تصدير Excel (رفع بوسطة)';
+        btn.disabled = false;
         updateRunUI();
       }
 
@@ -2432,9 +2402,14 @@
         state.allowRepeatExport = !!allowRepeat;
         state.exportDuplicates = allowRepeat ? state.exportDuplicates : {};
 
-        showStatus(`✓ تم تصدير ${orders.length} أوردر. الخطوة التالية: ارفع الملف على داشبورد بوسطة، ثم اضغط زرار تحديث الحالة.`, 'success');
+        showStatus(`✓ تم تصدير ${orders.length} أوردر. افتح ملف بوسطة وحدّث حالة الأوردرات في النافذة اللي فتحت.`, 'success');
         showToast(`✓ تم تصدير ${orders.length} أوردر`, 'success');
         await loadLogs(false);
+
+        // بعد نجاح التصدير: افتح رفع الملف على بوسطة في تاب جديد + نافذة تأكيد
+        // تحديث الحالة تلقائيًا — الموظف مش محتاج يدوّر على زرار منفصل.
+        window.open('https://business.bosta.co/orders/upload/smart-upload', '_blank', 'noopener');
+        openStatusConfirmModal();
       } catch (e) {
         if (e.data?.code === 'DUPLICATES_FOUND') {
           state.exportDuplicates = e.data.duplicates || {};
@@ -2446,7 +2421,6 @@
           showToast('فشل التصدير: ' + e.message, 'error');
         }
       } finally {
-        btn.textContent = '📥 تصدير Excel (رفع بوسطة)';
         updateRunUI();
       }
     }

@@ -2,11 +2,11 @@
 
 # Bosta Return / Exchange Exporter (`Bosta-Return-Exchange-Exporter`)
 
-![version](https://img.shields.io/badge/version-v1.2.0-blue)
+![version](https://img.shields.io/badge/version-v1.3.0-blue)
 
 **بتعمل إيه:** فحص أوردرات الاسترجاع/الاستبدال الجاهزة لبوسطة، تصديرها Excel، وتأكيد الرفع على داشبورد بوسطة — بيحدّث S2 (`custom.status_2_r_e`) على شوبيفاي أوتوماتيك.
 **مين بيستخدمها:** المخزن
-**الإصدار:** Worker `v5.0.0` · الواجهة `v5.0.0`
+**الإصدار:** Worker `v5.0.0` · الواجهة `v5.1.0`
 
 ## الروابط
 
@@ -91,11 +91,11 @@ git show 91c6027~1:3.33.html
 | المهارة | الإصدار وقت آخر تعديل |
 |---|---|
 | ecommoda-worker-builder | v2.0.0 |
-| ecommoda-html-builder | v6.0.0 |
+| ecommoda-html-builder | v6.1.0 |
 | ecommoda-order-lifecycle | v1.2.0 |
 | ecommoda-constants | v1.4.3 |
 
-آخر مطابقة: 02-09-2026 · `index.js` v5.0.0 · `index.html` v5.0.0
+آخر مطابقة: 02-09-2026 · `index.js` v5.0.0 · `index.html` v5.1.0
 🔴 معلّقة: — لا شيء
 
 ## مسائل مفتوحة
@@ -127,7 +127,18 @@ git show 91c6027~1:3.33.html
   ⚠️ **"النتائج" في تاب سجل العمليات = عدد كلي من السيرفر مش `filtered.length`**
   — استثناء متعمّد عن `data-table-standard.md` § 7 بسبب الـ pagination
   الحقيقي (Log Filter Model v2)؛ موثّق في مودال About.
+- ✅ **تبسيط تبويب التصدير — اتعمل 02-09-2026 (v5.1.0)، بطلب مباشر من أحمد.**
+  حذف صندوق الإحصائيات الخمسة (مطابق للشروط / محدد للتصدير / تم التصدير /
+  تم تحديث الحالة؟ / الحالة التالية) وزراري "تنظيف" و"تحديث حالة الأوردر
+  إلى ...". بقى فيه زرار تصدير واحد بس — كل الأوردرات محددة افتراضيًا
+  (`fetchCandidates` بيملي `state.selectedOrderIds` بكل الـ IDs)، والزرار
+  بيبدأ "📥 تصدير الكل" ويتحول لـ "📥 تصدير المحدد فقط (العدد)" لو الموظف
+  شال تحديد أي أوردر (`updateExportBtnLabel`). بعد نجاح `performExcelExport`
+  بيتفتحوا تلقائيًا: تاب جديد على `business.bosta.co/orders/upload/smart-upload`
+  + نافذة تأكيد تحديث الحالة (`openStatusConfirmModal`) — من غير زرار وسيط.
+  `clearResults()` لسه موجودة داخليًا (بتتنده عند تبديل نوع العملية/الدخول/
+  الخروج) رغم حذف زرار "تنظيف" اللي كان بينده عليها.
 
-آخر تحديث: 02-09-2026 — 12:54
+آخر تحديث: 02-09-2026 — 14:20
 
 </div>
