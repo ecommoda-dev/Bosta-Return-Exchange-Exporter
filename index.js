@@ -84,7 +84,6 @@ const DETAILS_BATCH_SIZE = 50;
 // ══════════════════════════════════════════════════════
 const ALLOWED_ORIGINS = [
   'https://ecommoda-dev.github.io',
-  'https://ecommoda24.github.io',
 ];
 
 function getCORS(request) {
