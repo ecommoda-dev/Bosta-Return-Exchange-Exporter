@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <!-- skills: html-builder v1.0.0 · worker-builder v1.0.0 · order-lifecycle v1.1.0 · constants v1.2.0 — 26-08-2026 -->
+  <!-- skills: html-builder v6.0.0 · worker-builder v2.0.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026 -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bosta Return / Exchange Exporter V4.0.0</title>
+  <title>Bosta Return / Exchange Exporter V4.1.0</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
@@ -38,6 +38,7 @@
       --purple-border:  #c4b5fd;
       --radius:         12px;
       --radius-sm:      8px;
+      --container-max:  1200px; /* Tier M — Log Tab is now a real <table> (data-table-standard §9) */
       --shadow:         0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
       --font-body:      'Noto Sans Arabic', -apple-system, sans-serif;
       --font-mono:      'IBM Plex Mono', monospace;
@@ -52,7 +53,7 @@
       min-height: 100vh;
     }
     button, input, select { font-family: inherit; }
-    .container { max-width: 1040px; margin: 0 auto; padding: 16px; }
+    .container { max-width: var(--container-max); margin: 0 auto; padding: 16px; }
 
     .app-header {
       background: var(--surface);
@@ -98,7 +99,7 @@
       position: fixed;
       inset: 0;
       background: var(--bg);
-      z-index: 300;
+      z-index: 500;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -132,6 +133,9 @@
     }
     .login-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
     .login-select:disabled { opacity: .6; cursor: not-allowed; }
+    /* Progressive reveal — hidden until an employee is chosen (html-builder Step 4) */
+    .pin-zone { display: none; }
+    .pin-zone.visible { display: block; }
     .pin-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
     .pin-display { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
     .pin-dot {
@@ -180,33 +184,34 @@
     .btn-login:hover { background: var(--accent-dark); }
     .btn-login:disabled { opacity: .5; cursor: not-allowed; }
 
-    .main-tabs-wrap {
+    /* ── Main Tabs — full width, equal split (html-builder tabs-and-modals.md § 1) ── */
+    .main-tabs-bar {
+      display: flex; gap: 4px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 12px 16px;
-      margin-bottom: 12px;
+      padding: 6px;
+      margin-bottom: 14px;
       box-shadow: var(--shadow);
-      display: flex;
-      justify-content: flex-start;
     }
-    .main-seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 10px; padding: 4px; gap: 4px; }
-    .main-seg-btn {
-      display: flex; flex-direction: column; align-items: center; gap: 2px;
-      padding: 9px 34px;
-      border-radius: 7px;
-      font-size: 12px;
-      font-weight: 800;
-      color: var(--text-secondary);
-      cursor: pointer;
-      border: none;
+    .main-tab-btn {
+      flex: 1;
+      padding: 9px 10px;
+      border: 2px solid transparent;
       background: transparent;
-      transition: all .15s;
-      min-width: 150px;
+      border-radius: var(--radius-sm);
+      font-family: inherit; font-size: 12.5px; font-weight: 700;
+      color: var(--text-secondary);
+      cursor: pointer; transition: all .15s;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      white-space: nowrap;
     }
-    .main-seg-btn .msb-icon { font-size: 17px; }
-    .main-seg-btn.active { background: var(--accent); color: #fff; box-shadow: 0 2px 7px rgba(37,99,235,.3); }
-    .main-seg-btn:not(.active):hover { background: var(--accent-light); color: var(--accent); }
+    .main-tab-btn:hover  { background: var(--surface-2); color: var(--text-primary); }
+    .main-tab-btn.active {
+      background: var(--accent); color: #fff;
+      border-color: var(--accent);
+      box-shadow: 0 2px 8px rgba(37,99,235,.25);
+    }
 
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
@@ -314,49 +319,140 @@
     .status-bar.error { background: var(--red-light); border-color: var(--red-border); color: var(--red); }
     .status-bar.warn { background: var(--amber-light); border-color: var(--amber-border); color: var(--amber); }
 
-    .orders-list {
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      margin-top: 12px;
-      background: var(--surface);
-      display: none;
+    /* ══════════════════════════════════════════════════════
+       Unified filter+table section — data-table-standard.md
+       ══════════════════════════════════════════════════════ */
+    .unified-section {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 16px;
     }
-    .orders-list.show { display: block; }
-    .orders-list-head {
-      display: grid;
-      grid-template-columns: 76px 90px 1fr 150px 120px 115px;
-      gap: 10px;
-      background: var(--surface-2);
-      border-bottom: 1px solid var(--border);
-      padding: 8px 12px;
-      font-size: 11px;
-      font-weight: 800;
-      color: var(--text-secondary);
+    .section-divider { border-top: 1px solid var(--border); }
+
+    .flt-header {
+      display: flex; align-items: center; justify-content: space-between; padding: 10px 16px;
+      background: var(--surface-2); cursor: pointer; user-select: none; transition: background .12s;
+      border-radius: var(--radius) var(--radius) 0 0; flex-wrap: wrap; gap: 8px;
     }
-    .order-row {
-      display: grid;
-      grid-template-columns: 76px 90px 1fr 150px 120px 115px;
-      gap: 10px;
-      padding: 9px 12px;
-      border-bottom: 1px solid var(--border);
-      align-items: center;
-      font-size: 12px;
+    .flt-header:hover { background: #f0f4f8; }
+    .flt-header-right { display: flex; align-items: center; gap: 10px; }
+    .flt-icon { width: 34px; height: 22.5px; color: var(--text-muted); transition: color .2s; flex-shrink: 0; }
+    .flt-icon.active { color: var(--accent); }
+    .flt-toggle { font-size: 13px; color: var(--text-muted); transition: transform .25s; }
+    .flt-toggle.open { transform: rotate(180deg); }
+    .flt-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .flt-body.collapsed { display: none; }
+    .flt-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+    .clear-btn {
+      display: flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: var(--radius-sm);
+      font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s;
+      white-space: nowrap; height: 34px;
+      border: 1px solid var(--red-border); color: var(--red); background: var(--red-light);
     }
-    .order-row:last-child { border-bottom: none; }
-    .order-row:hover { background: var(--surface-2); }
-    .order-row.selected { background: var(--accent-light); }
-    .order-select-head, .order-select-cell { display: flex; align-items: center; justify-content: center; }
-    .order-select-label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
-    .order-select-label span { font-size: 11px; font-weight: 800; color: var(--text-secondary); }
-    .order-checkbox {
-      width: 15px;
-      height: 15px;
-      accent-color: var(--accent);
-      cursor: pointer;
-      flex-shrink: 0;
+    .clear-btn:hover { background: var(--red); color: #fff; border-color: var(--red); }
+    .clear-btn.inactive { border-color: var(--border); color: var(--text-muted); background: var(--surface-2); cursor: not-allowed; opacity: .6; }
+    .clear-btn.inactive:hover { background: var(--surface-2); color: var(--text-muted); border-color: var(--border); }
+
+    .search-wrap { position: relative; max-width: 280px; flex: 1; min-width: 200px; }
+    .search-input {
+      width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      padding: 8px 12px 8px 34px; font-family: inherit; font-size: 13px; height: 36px; box-sizing: border-box;
+      outline: none; background: var(--surface); transition: border-color .15s, background .15s;
     }
-    .order-name { direction: ltr; font-family: var(--font-mono); font-weight: 800; color: var(--accent); }
+    .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
+    .search-input.has-value { border-color: var(--accent); background: var(--accent-light); }
+    .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--text-muted); pointer-events: none; }
+
+    .ms-chips-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .ms-chips-row:empty { display: none; }
+    .chips-label { font-size: 11.5px; font-weight: 700; color: var(--text-secondary); white-space: nowrap; }
+    .ms-chip {
+      display: flex; align-items: center; gap: 5px; background: var(--accent-light); color: var(--accent-dark);
+      border: 1px solid #bfdbfe; border-radius: 20px; padding: 3px 6px 3px 10px; font-size: 11.5px; font-weight: 600;
+    }
+    .ms-chip button { border: none; background: rgba(37,99,235,.15); color: var(--accent-dark); width: 16px; height: 16px; border-radius: 50%; font-size: 11px; cursor: pointer; line-height: 1; }
+    .ms-chip button:hover { background: var(--accent); color: #fff; }
+
+    .tbl-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; background: var(--surface-2); cursor: pointer; user-select: none; transition: background .12s; flex-wrap: wrap; }
+    .tbl-bar:hover { background: #f0f4f8; }
+    .tbl-bar-right, .tbl-bar-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .tbl-toggle { font-size: 13px; color: var(--text-muted); transition: transform .25s; }
+    .tbl-toggle.open { transform: rotate(180deg); }
+    .tbl-body-wrap { max-height: 4000px; overflow: hidden; transition: max-height .3s ease; border-radius: 0 0 var(--radius) var(--radius); }
+    .tbl-body-wrap.collapsed { max-height: 0; }
+    .tbl-scroll { overflow-x: auto; border-radius: 0 0 var(--radius) var(--radius); }
+    .results-wrap { display: flex; align-items: center; gap: 8px; }
+    .results-label { font-size: 14px; font-weight: 800; color: var(--text-primary); white-space: nowrap; }
+    .results-count {
+      display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 34px; padding: 0 10px;
+      font-family: var(--font-mono); font-size: 17px; font-weight: 800;
+      color: var(--purple); background: var(--purple-light); border: 1.5px solid var(--purple-border); border-radius: var(--radius-sm);
+    }
+    .act-btn { padding: 7px 12px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 800; cursor: pointer; border: 1.5px solid var(--border-strong); background: var(--surface); color: var(--text-secondary); transition: all .15s; }
+    .act-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    .act-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .act-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .act-btn.primary:hover:not(:disabled) { background: var(--accent-dark); }
+    .act-btn.green { background: var(--green); color: #fff; border-color: var(--green); }
+    .act-btn.purple { background: var(--purple); color: #fff; border-color: var(--purple); }
+
+    /* Data table formatting — design-system.md § Data Tables */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .data-table thead th, .data-table tbody td {
+      text-align: center; padding: 9px 10px; border-bottom: 1px solid var(--border);
+      border-inline-start: 1px solid var(--border);
+    }
+    .data-table thead th:first-child, .data-table tbody td:first-child { border-inline-start: none; }
+    .data-table thead th { background: var(--surface-2); font-size: 11px; font-weight: 800; color: var(--text-secondary); white-space: nowrap; }
+    .data-table tbody tr:last-child td { border-bottom: none; }
+    .data-table tbody tr:hover { background: var(--surface-2); }
+    .data-table tbody tr.selected { background: var(--accent-light); }
+    .col-num { font-family: var(--font-mono); direction: ltr; white-space: nowrap; }
+    .sortable-th { cursor: pointer; user-select: none; transition: background .12s, color .12s; }
+    .sortable-th:hover { background: var(--accent-light); color: var(--accent-dark); }
+    .sortable-th.sorted { background: var(--accent-light); color: var(--accent-dark); }
+    .sort-icon { display: inline-block; font-size: 10px; color: var(--accent); font-weight: 900; }
+    .sort-icon.active { margin-inline-start: 4px; }
+    .data-empty { padding: 20px; text-align: center; color: var(--text-muted); }
+
+    /* Multi-select filter — multi-select-filter.md */
+    .ms-wrap { position: relative; }
+    .ms-btn {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      min-width: 170px; height: 36px; padding: 6px 10px;
+      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      background: var(--surface); font-family: inherit; font-size: 12px; font-weight: 600;
+      color: var(--text-primary); cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .ms-btn:hover { border-color: var(--accent); }
+    .ms-btn.has-selection { border-color: var(--accent); color: var(--accent-dark); background: var(--accent-light); }
+    .ms-btn.open { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
+    .ms-btn .ms-count { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 20px; padding: 1px 7px; min-width: 18px; text-align: center; }
+    .ms-btn .ms-arrow { font-size: 9px; color: var(--text-muted); transition: transform .2s; flex-shrink: 0; }
+    .ms-btn.open .ms-arrow { transform: rotate(180deg); }
+    .ms-menu {
+      position: absolute; top: calc(100% + 4px); right: 0; z-index: 200; width: 260px; max-width: 80vw;
+      background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      box-shadow: 0 8px 28px rgba(0,0,0,.14); display: none; flex-direction: column; overflow: hidden;
+    }
+    .ms-menu.open { display: flex; }
+    .ms-selectall-row { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 12px; font-weight: 700; cursor: pointer; user-select: none; }
+    .ms-selectall-row:hover { background: #f0f4f8; }
+    .ms-list { max-height: 220px; overflow-y: auto; padding: 4px; }
+    .ms-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 12.5px; cursor: pointer; user-select: none; transition: background .1s; }
+    .ms-item:hover { background: var(--surface-2); }
+    .ms-item.checked { background: var(--accent-light); }
+    .ms-item input[type=checkbox], .ms-selectall-row input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+    .ms-item .ms-item-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ms-empty { padding: 18px; text-align: center; font-size: 12px; color: var(--text-muted); }
+    .ms-ftr-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+    .ms-ftr-clear { font-size: 11.5px; font-weight: 700; color: var(--red); background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 5px; }
+    .ms-ftr-clear:hover { background: var(--red-light); }
+    .ms-ftr-count { font-size: 11px; color: var(--text-muted); }
+
+    .order-link { direction: ltr; font-family: var(--font-mono); font-weight: 800; color: var(--accent); text-decoration: none; }
+    .order-link:hover { text-decoration: underline; }
+    .order-num { direction: ltr; font-family: var(--font-mono); font-weight: 800; }
     .badge {
       display: inline-flex;
       align-items: center;
@@ -381,40 +477,8 @@
       line-height: 1.7;
     }
 
-    .log-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px; }
-    .log-field { display: flex; flex-direction: column; gap: 4px; }
-    .log-label { font-size: 10px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; }
-    .log-fsel, .log-finput {
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      padding: 7px 10px;
-      background: var(--surface);
-      color: var(--text-primary);
-      outline: none;
-      font-size: 12px;
-      min-height: 36px;
-    }
-    .log-fsel:focus, .log-finput:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
-    .log-list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-    .log-entry {
-      display: flex;
-      gap: 12px;
-      padding: 12px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-    }
-    .log-entry:last-child { border-bottom: none; }
-    .log-entry:hover { background: var(--surface-2); }
-    .log-dot { width: 10px; height: 10px; border-radius: 999px; margin-top: 5px; flex: 0 0 auto; }
-    .log-dot.scan { background: var(--purple); }
-    .log-dot.export { background: var(--accent); }
-    .log-dot.confirm { background: var(--green); }
-    .log-content { min-width: 0; flex: 1; }
-    .log-top { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
-    .log-notes { font-size: 12px; line-height: 1.7; color: var(--text-primary); }
-    .log-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px; font-size: 11px; color: var(--text-muted); }
-    .log-empty { padding: 16px; color: var(--text-muted); text-align: center; background: var(--surface-2); }
-    .log-pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+    /* Log Tab pagination — kept below the table (data-table-standard § 9) */
+    .log-pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 16px; flex-wrap: wrap; }
     .log-page-indicator { font-size: 12px; color: var(--text-secondary); font-weight: 800; }
     .log-stats-text { font-size: 11px; color: var(--text-muted); }
     .mono { font-family: var(--font-mono); direction: ltr; }
@@ -423,7 +487,7 @@
       position: fixed;
       inset: 0;
       background: rgba(0,0,0,.38);
-      z-index: 400;
+      z-index: 600;
       display: none;
       align-items: center;
       justify-content: center;
@@ -442,10 +506,48 @@
     .modal.wide { max-width: 720px; }
     @keyframes modalIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     .modal-hdr { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 800; font-size: 15px; }
-    .modal-close-x { border: none; background: transparent; color: var(--red); cursor: pointer; border-radius: var(--radius-sm); font-size: 17px; padding: 3px 8px; }
-    .modal-close-x:hover { background: var(--red-light); }
+    /* .modal-close-x — canonical style (tabs-and-modals.md § 3): red border + background, not bare text */
+    .modal-close-x {
+      background: var(--red-light); border: 1.5px solid var(--red-border); color: var(--red);
+      font-size: 14px; font-weight: 700; line-height: 1; padding: 4px 11px; border-radius: var(--radius-sm);
+      font-family: inherit; cursor: pointer; transition: all .15s;
+    }
+    .modal-close-x:hover { background: var(--red); color: #fff; border-color: var(--red); }
     .modal-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; max-height: 75vh; overflow: auto; }
     .modal-ftr { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+    /* ── Modal Shell for long-scroll content — About / Changelog only
+       (tabs-and-modals.md § 2). Settings/confirm modals keep .modal above. ── */
+    .eco-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 600;
+      display: none; align-items: center; justify-content: center; padding: 20px;
+    }
+    .eco-overlay.open { display: flex; }
+    .eco-modal {
+      background: var(--surface); border-radius: var(--radius);
+      width: 90%; max-width: calc(var(--container-max) * .9); max-height: 85vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,.18); overflow: hidden;
+      animation: modalIn .2s ease;
+    }
+    .eco-modal-hdr {
+      display: flex; justify-content: space-between; align-items: center; padding: 14px 18px;
+      border-bottom: 1px solid var(--border); font-size: 15px; font-weight: 800;
+      background: var(--surface); flex-shrink: 0;
+    }
+    .eco-modal-body { overflow-y: auto; padding: 16px 20px; flex: 1; }
+    .eco-modal-ftr { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
+
+    /* About Modal content — tabs-and-modals.md § 4 */
+    .about-sec { border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 10px; overflow: hidden; }
+    .about-sec > summary { padding: 11px 14px; font-weight: 700; font-size: 14px; background: var(--surface-2); cursor: pointer; user-select: none; }
+    .about-sec-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.75; }
+    .about-sec-body h4 { font-size: 12px; font-weight: 700; color: var(--accent); margin-top: 4px; }
+    .about-sec-body ol, .about-sec-body ul { padding-inline-start: 20px; display: flex; flex-direction: column; gap: 4px; }
+    .about-sec-body code { font-family: var(--font-mono); font-size: 11px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; direction: ltr; display: inline-block; }
+    .about-sec-body table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .about-sec-body th, .about-sec-body td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+    .about-pre { font-family: var(--font-mono); font-size: 11px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; overflow-x: auto; white-space: pre; direction: ltr; text-align: left; line-height: 1.65; margin: 0; }
     .modal.export-duplicates { max-width: 820px; }
     .export-dup-note {
       border: 1px solid var(--amber-border);
@@ -632,7 +734,13 @@
       margin: 0;
     }
 
-    .toast-container { position: fixed; bottom: 18px; left: 18px; z-index: 600; display: flex; flex-direction: column; gap: 8px; }
+    .export-warn {
+      margin: 0 0 12px; padding: 10px 14px; border-radius: var(--radius-sm);
+      background: var(--amber-light); border: 1px solid var(--amber-border);
+      color: var(--amber-dark); font-size: 12px; font-weight: 700; line-height: 1.7;
+    }
+
+    .toast-container { position: fixed; bottom: 18px; left: 18px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
     .toast {
       padding: 11px 14px;
       border-radius: var(--radius-sm);
@@ -652,8 +760,6 @@
     @media (max-width: 900px) {
       .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .mode-grid { grid-template-columns: 1fr; }
-      .orders-list-head, .order-row { grid-template-columns: 70px 90px 1fr; }
-      .orders-list-head > div:nth-child(n+4), .order-row > div:nth-child(n+4) { display: none; }
       .export-dup-table-head, .export-dup-table-row { grid-template-columns: 110px 1fr 90px; }
     }
   </style>
@@ -667,6 +773,7 @@
           ⚙️ الإعدادات
         </button>
       </div>
+      <div id="loginVersionText" style="text-align:center;font-size:10px;color:var(--text-muted);margin-bottom:6px;font-family:var(--font-mono);"></div>
 
       <div style="text-align:center;margin-bottom:10px;font-size:28px;">📦</div>
       <div class="login-title">Bosta Return / Exchange Exporter</div>
@@ -680,31 +787,34 @@
         </select>
       </div>
 
-      <div class="pin-label" id="pinLabel">أدخل الـ PIN</div>
-      <div class="pin-display">
-        <div class="pin-dot" id="pd0"></div>
-        <div class="pin-dot" id="pd1"></div>
-        <div class="pin-dot" id="pd2"></div>
-        <div class="pin-dot" id="pd3"></div>
-      </div>
+      <div class="pin-zone" id="pinZone">
+        <div class="pin-label" id="pinLabel">أدخل الـ PIN</div>
+        <div class="pin-display">
+          <div class="pin-dot" id="pd0"></div>
+          <div class="pin-dot" id="pd1"></div>
+          <div class="pin-dot" id="pd2"></div>
+          <div class="pin-dot" id="pd3"></div>
+        </div>
 
-      <div class="pin-keypad">
-        <button class="pin-key" onclick="pinPress('1')">1</button>
-        <button class="pin-key" onclick="pinPress('2')">2</button>
-        <button class="pin-key" onclick="pinPress('3')">3</button>
-        <button class="pin-key" onclick="pinPress('4')">4</button>
-        <button class="pin-key" onclick="pinPress('5')">5</button>
-        <button class="pin-key" onclick="pinPress('6')">6</button>
-        <button class="pin-key" onclick="pinPress('7')">7</button>
-        <button class="pin-key" onclick="pinPress('8')">8</button>
-        <button class="pin-key" onclick="pinPress('9')">9</button>
-        <button class="pin-key del" onclick="pinBackspace()">⌫</button>
-        <button class="pin-key" onclick="pinPress('0')">0</button>
-        <button class="pin-key del" onclick="pinClear()">مسح</button>
+        <div class="pin-keypad">
+          <button class="pin-key" onclick="pinPress('1')">1</button>
+          <button class="pin-key" onclick="pinPress('2')">2</button>
+          <button class="pin-key" onclick="pinPress('3')">3</button>
+          <button class="pin-key" onclick="pinPress('4')">4</button>
+          <button class="pin-key" onclick="pinPress('5')">5</button>
+          <button class="pin-key" onclick="pinPress('6')">6</button>
+          <button class="pin-key" onclick="pinPress('7')">7</button>
+          <button class="pin-key" onclick="pinPress('8')">8</button>
+          <button class="pin-key" onclick="pinPress('9')">9</button>
+          <button class="pin-key del" onclick="pinBackspace()">⌫</button>
+          <button class="pin-key" onclick="pinPress('0')">0</button>
+          <button class="pin-key del" onclick="pinClear()">مسح</button>
+        </div>
+
+        <button class="btn-login" id="loginBtn" onclick="submitPin()" disabled>دخول</button>
       </div>
 
       <div class="login-error" id="loginError"></div>
-      <button class="btn-login" id="loginBtn" onclick="submitPin()" disabled>دخول</button>
     </div>
   </div>
 
@@ -720,22 +830,15 @@
       <div class="app-header-btns">
         <button class="hbtn active-user" id="activeUserBtn" onclick="logout()" title="تسجيل خروج">👤 <span id="activeUserName">—</span></button>
         <button class="hbtn" onclick="openAbout()">ℹ️ عن الأداة</button>
-        <button class="hbtn ver-btn" onclick="openChangelog()">V4.0.0</button>
+        <button class="hbtn" id="verStaleBtn" style="display:none;border-color:var(--amber);color:var(--amber-dark);background:var(--amber-light);" onclick="showWorkerStale()">⚠️ الـ Worker نسخة قديمة</button>
+        <button class="hbtn ver-btn" id="verBtn" onclick="openChangelog()">V4.1.0</button>
         <button class="hbtn" id="settingsBtn" onclick="openSettings()">⚙️ الإعدادات</button>
       </div>
     </header>
 
-    <div class="main-tabs-wrap">
-      <div class="main-seg">
-        <button class="main-seg-btn active" id="tabExport" onclick="switchMainTab('export')">
-          <span class="msb-icon">📤</span>
-          <span>تصدير الأوردرات</span>
-        </button>
-        <button class="main-seg-btn" id="tabLogs" onclick="switchMainTab('logs')">
-          <span class="msb-icon">🧾</span>
-          <span>سجل العمليات</span>
-        </button>
-      </div>
+    <div class="main-tabs-bar">
+      <button class="main-tab-btn active" id="tabExport" onclick="switchMainTab('export')">📤 تصدير الأوردرات</button>
+      <button class="main-tab-btn" id="tabLogs" onclick="switchMainTab('logs')">🧾 سجل العمليات</button>
     </div>
 
     <section class="tab-panel active" id="exportPanel">
@@ -798,79 +901,190 @@
         <div class="status-bar" id="statusBar"></div>
       </div>
 
-      <div class="card">
-        <div class="card-title">
-          <h2>الأوردرات الجاهزة للملف</h2>
-          <span id="orderListHint">اضغط على أحد المربعين فوق لتحميل القائمة تلقائيًا</span>
-        </div>
-
-        <div class="hint" id="emptyOrdersHint">
-          الأداة هتسحب من Shopify مباشرة باستخدام:
-          <b>metafields.custom.status_2_r_e</b> + <b>metafields.custom.courier</b>، وبعدها تعمل direct-read verification قبل عرض الأوردرات.
-        </div>
-
-        <div class="orders-list" id="ordersList">
-          <div class="orders-list-head">
-            <div class="order-select-head">
-              <label class="order-select-label">
-                <input type="checkbox" id="selectAllOrders" onchange="toggleSelectAllOrders(this)" />
-                <span>الكل</span>
-              </label>
-            </div>
-            <div>Order</div>
-            <div>Customer / Address</div>
-            <div>S2</div>
-            <div>Courier</div>
-            <div>Export Status</div>
+      <div class="unified-section" id="ordersSection">
+        <div class="flt-header" onclick="toggleOrderFilters()">
+          <div class="flt-header-right">
+            <span class="flt-toggle open" id="ordersFltToggleIcon">▲</span>
+            <svg class="flt-icon" id="ordersFltIcon" viewBox="0 0 36 24" fill="none"
+                 stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="2 3 13 3 8.3 10.2 8.3 19 6.7 19 6.7 10.2 2 3"></polygon>
+              <line x1="18" y1="5"  x2="33" y2="5"></line>
+              <line x1="18" y1="11" x2="29" y2="11"></line>
+              <line x1="18" y1="17" x2="25" y2="17"></line>
+            </svg>
           </div>
-          <div id="ordersRows"></div>
+          <button class="clear-btn inactive" id="ordersClearBtn"
+            onclick="event.stopPropagation(); clearOrderFilters();">✕ مسح كل الفلاتر</button>
+        </div>
+
+        <div class="flt-body" id="ordersFltBody">
+          <div class="flt-row">
+            <div class="search-wrap">
+              <input type="text" class="search-input" id="orderSearchInput" placeholder="بحث برقم الأوردر..."
+                oninput="onOrderSearchInput(this)">
+              <span class="search-icon">🔍</span>
+            </div>
+
+            <div class="ms-wrap" id="msWrap-orderStatus">
+              <button class="ms-btn" id="msBtn-orderStatus" onclick="msToggle('orderStatus')" data-default-label="حالة التصدير: الكل">
+                <span id="msBtnLabel-orderStatus">حالة التصدير: الكل</span>
+                <span class="ms-arrow">▾</span>
+              </button>
+              <div class="ms-menu" id="msMenu-orderStatus">
+                <div class="ms-ftr-top">
+                  <button class="ms-ftr-clear" onclick="msClear('orderStatus')">مسح الاختيار</button>
+                  <span class="ms-ftr-count" id="msFtrCount-orderStatus"></span>
+                </div>
+                <div class="ms-selectall-row" onclick="msToggleSelectAll('orderStatus')">
+                  <input type="checkbox" id="msSelectAll-orderStatus"
+                    onclick="event.stopPropagation()" onchange="msToggleSelectAll('orderStatus', this.checked)">
+                  <span id="msSelectAllLabel-orderStatus">تحديد الكل</span>
+                </div>
+                <div class="ms-list" id="msList-orderStatus"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ms-chips-row" id="chipsRow-orderStatus"></div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="tbl-bar" onclick="toggleOrdersTable()">
+          <div class="tbl-bar-right">
+            <span class="tbl-toggle open" id="ordersTblToggleIcon">▲</span>
+            <div class="results-wrap">
+              <span class="results-label">النتائج:</span>
+              <span class="results-count" id="ordersFilteredCount">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tbl-body-wrap" id="ordersTblBodyWrap">
+          <div class="hint" id="emptyOrdersHint" style="margin:14px 16px;">
+            الأداة هتسحب من Shopify مباشرة باستخدام:
+            <b>metafields.custom.status_2_r_e</b> + <b>metafields.custom.courier</b>، وبعدها تعمل direct-read verification قبل عرض الأوردرات.
+          </div>
+          <div class="tbl-scroll">
+            <table class="data-table" id="ordersTable" style="display:none;">
+              <thead>
+                <tr>
+                  <th>
+                    <label class="order-select-label" style="justify-content:center;">
+                      <input type="checkbox" id="selectAllOrders" class="order-checkbox" onchange="toggleSelectAllOrders(this)" />
+                    </label>
+                  </th>
+                  <th class="sortable-th" data-sort-key="name" onclick="toggleOrderSort('name')">Order<span class="sort-icon" data-sort-key="name"></span></th>
+                  <th>Customer / Address</th>
+                  <th class="sortable-th" data-sort-key="s2" onclick="toggleOrderSort('s2')">S2<span class="sort-icon" data-sort-key="s2"></span></th>
+                  <th class="sortable-th" data-sort-key="courier" onclick="toggleOrderSort('courier')">Courier<span class="sort-icon" data-sort-key="courier"></span></th>
+                  <th>Export Status</th>
+                </tr>
+              </thead>
+              <tbody id="ordersRows"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
 
     <section class="tab-panel" id="logsPanel">
-      <div class="card">
-        <div class="card-title">
-          <h2>سجل العمليات</h2>
-          <span>Scan / Export / Status Update — بدون login/logout</span>
-        </div>
-
-        <div class="log-toolbar">
-          <div class="log-field">
-            <label class="log-label">نوع العملية</label>
-            <select class="log-fsel" id="logTypeFilter" onchange="onLogTypeFilterChange()">
-              <option value="">الكل</option>
-              <option value="scan">Scan</option>
-              <option value="export_return">Export Return</option>
-              <option value="export_exchange">Export Exchange</option>
-              <option value="manual_confirm_return">Manual Confirm Return</option>
-              <option value="manual_confirm_exchange">Manual Confirm Exchange</option>
-              <option value="confirm_return">Status Update — Return</option>
-              <option value="confirm_exchange">Status Update — Exchange</option>
-            </select>
+      <div class="unified-section" id="logSection">
+        <div class="flt-header" onclick="toggleLogFilters()">
+          <div class="flt-header-right">
+            <span class="flt-toggle open" id="logFltToggleIcon">▲</span>
+            <svg class="flt-icon" id="logFltIcon" viewBox="0 0 36 24" fill="none"
+                 stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="2 3 13 3 8.3 10.2 8.3 19 6.7 19 6.7 10.2 2 3"></polygon>
+              <line x1="18" y1="5"  x2="33" y2="5"></line>
+              <line x1="18" y1="11" x2="29" y2="11"></line>
+              <line x1="18" y1="17" x2="25" y2="17"></line>
+            </svg>
           </div>
-          <div class="log-field">
-            <label class="log-label">بحث (اسم الأوردر / الملاحظات)</label>
-            <input class="log-finput" id="logSearch" oninput="onLogSearchInput()" />
+          <button class="clear-btn inactive" id="logClearBtn"
+            onclick="event.stopPropagation(); clearLogFilters();">✕ مسح كل الفلاتر</button>
+        </div>
+
+        <div class="flt-body" id="logFltBody">
+          <div class="flt-row">
+            <div class="search-wrap">
+              <input type="text" class="search-input" id="logSearch" placeholder="بحث (اسم الأوردر / الملاحظات)..."
+                oninput="onLogSearchInput()">
+              <span class="search-icon">🔍</span>
+            </div>
+
+            <div class="ms-wrap" id="msWrap-logType">
+              <button class="ms-btn" id="msBtn-logType" onclick="msToggle('logType')" data-default-label="نوع العملية: الكل">
+                <span id="msBtnLabel-logType">نوع العملية: الكل</span>
+                <span class="ms-arrow">▾</span>
+              </button>
+              <div class="ms-menu" id="msMenu-logType">
+                <div class="ms-ftr-top">
+                  <button class="ms-ftr-clear" onclick="msClear('logType')">مسح الاختيار</button>
+                  <span class="ms-ftr-count" id="msFtrCount-logType"></span>
+                </div>
+                <div class="ms-selectall-row" onclick="msToggleSelectAll('logType')">
+                  <input type="checkbox" id="msSelectAll-logType"
+                    onclick="event.stopPropagation()" onchange="msToggleSelectAll('logType', this.checked)">
+                  <span id="msSelectAllLabel-logType">تحديد الكل</span>
+                </div>
+                <div class="ms-list" id="msList-logType"></div>
+              </div>
+            </div>
           </div>
-          <button class="btn btn-secondary" onclick="loadLogs(true)">↻ تحديث السجل</button>
-          <button class="btn btn-green" id="logExportBtn" onclick="exportLogXLSX()">⬇ تصدير السجل .xlsx</button>
+
+          <div class="ms-chips-row" id="chipsRow-logType"></div>
         </div>
 
-        <div class="log-list" id="logList">
-          <div class="log-empty">افتح التبويب أو اضغط تحديث</div>
+        <div class="section-divider"></div>
+
+        <div class="tbl-bar" onclick="toggleLogTable()">
+          <div class="tbl-bar-right">
+            <span class="tbl-toggle open" id="logTblToggleIcon">▲</span>
+            <div class="results-wrap">
+              <span class="results-label">النتائج:</span>
+              <span class="results-count" id="logFilteredCount">—</span>
+            </div>
+          </div>
+          <div class="tbl-bar-left">
+            <button class="act-btn" onclick="event.stopPropagation(); loadLogs(true);">↺ تحديث</button>
+            <button class="act-btn green" id="logExportBtn" onclick="event.stopPropagation(); exportLogXLSX();">⬇ تصدير XLSX</button>
+          </div>
         </div>
 
-        <div class="log-pagination">
-          <button class="btn btn-secondary" id="logPrevBtn" onclick="changeLogPage(-1)" disabled>‹ الأقدم</button>
-          <span class="log-page-indicator" id="logPageIndicator">—</span>
-          <span class="log-stats-text" id="logStatsText"></span>
-          <button class="btn btn-secondary" id="logNextBtn" onclick="changeLogPage(1)" disabled>الأحدث ›</button>
+        <div class="tbl-body-wrap" id="logTblBodyWrap">
+          <div id="logExportWarn" class="export-warn" style="display:none;margin:14px 16px 0;"></div>
+          <div class="tbl-scroll">
+            <table class="data-table" id="logTable" style="display:none;">
+              <thead>
+                <tr>
+                  <th class="sortable-th" data-sort-key="date" onclick="toggleLogSort('date')">التاريخ<span class="sort-icon" data-sort-key="date"></span></th>
+                  <th class="sortable-th" data-sort-key="time" onclick="toggleLogSort('time')">الوقت<span class="sort-icon" data-sort-key="time"></span></th>
+                  <th class="sortable-th" data-sort-key="type" onclick="toggleLogSort('type')">نوع العملية<span class="sort-icon" data-sort-key="type"></span></th>
+                  <th class="sortable-th" data-sort-key="order" onclick="toggleLogSort('order')">الأوردر<span class="sort-icon" data-sort-key="order"></span></th>
+                  <th>الموظف</th>
+                  <th>قبل</th>
+                  <th>بعد</th>
+                  <th>ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody id="logRows"></tbody>
+            </table>
+            <div class="data-empty" id="logEmpty">افتح التبويب أو اضغط تحديث</div>
+          </div>
+
+          <div class="log-pagination">
+            <button class="btn btn-secondary" id="logPrevBtn" onclick="changeLogPage(-1)" disabled>‹ الأقدم</button>
+            <span class="log-page-indicator" id="logPageIndicator">—</span>
+            <span class="log-stats-text" id="logStatsText"></span>
+            <button class="btn btn-secondary" id="logNextBtn" onclick="changeLogPage(1)" disabled>الأحدث ›</button>
+          </div>
         </div>
-        <div class="hint" style="margin-top:8px;">
-          ملاحظة: "تصدير Excel" اللي فوق في تبويب "تصدير الأوردرات" بيصدّر <b>ملف الأوردرات نفسه</b> علشان يترفع على داشبورد بوسطة.
-          زرار "⬇ تصدير السجل .xlsx" هنا بيصدّر <b>سجل العمليات</b> (مين عمل إيه وإمتى) — ملفين مختلفين لغرضين مختلفين.
-        </div>
+      </div>
+
+      <div class="hint" style="margin-top:8px;">
+        ملاحظة: "تصدير Excel" في تبويب "تصدير الأوردرات" بيصدّر <b>ملف الأوردرات نفسه</b> علشان يترفع على داشبورد بوسطة.
+        زرار "⬇ تصدير XLSX" هنا بيصدّر <b>سجل العمليات</b> (مين عمل إيه وإمتى) — ملفين مختلفين لغرضين مختلفين.
       </div>
     </section>
   </div>
@@ -900,6 +1114,11 @@
           الاسترجاع والاستبدال بقى عندهم نفس التدفق: تصدير Excel، ثم زرار واحد بس لتحديث الحالة، واللي
           بيفتح نافذة تأكيد فيها Checkboxes (رفع بوسطة، وإرسال الفواتير في حالة الاستبدال) قبل ما يتفعّل زرار التأكيد.
         </div>
+        <div class="settings-field" style="border-top:1.5px solid var(--border);padding-top:12px;">
+          <label class="settings-label">فحص النظام</label>
+          <button class="btn btn-secondary" id="diagBtn" onclick="runDiag()" type="button">🩺 افحص الأداة والاتصالات</button>
+          <div id="diagResult" style="margin-top:10px;font-size:12px;line-height:1.7;"></div>
+        </div>
       </div>
       <div class="modal-ftr">
         <button class="btn btn-secondary" onclick="closeSettings()">إلغاء</button>
@@ -908,87 +1127,91 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="aboutOverlay" onclick="if(event.target===this)closeAbout()">
-    <div class="modal" style="max-width:640px;">
-      <div class="modal-hdr">
-        <span>ℹ️ عن الأداة — Bosta Return / Exchange Exporter</span>
-        <button class="modal-close-x" onclick="closeAbout()">×</button>
+  <div class="eco-overlay" id="aboutOverlay" onclick="if(event.target===this)closeAbout()">
+    <div class="eco-modal">
+      <div class="eco-modal-hdr">
+        <span>ℹ️ About — Bosta Return / Exchange Exporter</span>
+        <button class="modal-close-x" onclick="closeAbout()">✕</button>
       </div>
-      <div class="modal-body">
+      <div class="eco-modal-body">
 
-        <details open>
-          <summary class="about-summary">📋 وصف الأداة</summary>
-          <div class="about-body">
-            <p class="about-desc">
-              تصدير ملفات Excel لأوردرات الاسترجاع والاستبدال (S2) اللي جاهزة تترفع على داشبورد بوسطة،
-              مع منع التصدير المكرر لنفس الأوردر، وتحديث حالة S2 على Shopify مع تحقق مباشر بعد كل تحديث.
-            </p>
+        <details class="about-sec" open>
+          <summary>📋 وصف الأداة</summary>
+          <div class="about-sec-body">
+            <p><strong>الهدف:</strong> تصدير ملفات Excel لأوردرات الاسترجاع والاستبدال (S2) اللي جاهزة تترفع على داشبورد بوسطة،
+              مع منع التصدير المكرر لنفس الأوردر، وتحديث حالة S2 على Shopify مع تحقق مباشر بعد كل تحديث.</p>
+            <p><strong>المستخدمون المستهدفون:</strong> موظفو خدمة العملاء / المخزن المسؤولون عن متابعة أوردرات الاسترجاع والاستبدال.</p>
 
-            <div class="about-label">المستخدمون</div>
-            <p>موظفو خدمة العملاء / المخزن المسؤولون عن متابعة أوردرات الاسترجاع والاستبدال.</p>
+            <h4>كيف تعمل — Workflow</h4>
+            <ol>
+              <li>اضغط على مربع "أوردرات الاسترجاع" (أحمر) أو "أوردرات الاستبدال" (برتقالي) — القائمة بتتحمّل أو بتتحدّث تلقائيًا من Shopify (S2 = الحالة المتوقعة + Courier = Bosta)، من غير أي زرار استعلام منفصل.</li>
+              <li>حدد الأوردرات المطلوبة (أو اختر "الكل")، ثم اضغط "تصدير Excel". لو أي أوردر اتصدّر قبل كده هتظهر نافذة تحذير بالتفاصيل قبل ما تسمح بالتصدير تاني.</li>
+              <li>ارفع الملف يدوياً على داشبورد بوسطة (خارج الأداة — الأداة مبتكلمش Bosta API مباشرة).</li>
+              <li>اضغط زرار "تحديث حالة الأوردر" — نافذة تأكيد ملوّنة هتفتح فيها Checkboxes (هل رفعت بوسطة؟ وفي الاستبدال فقط: هل أرسلت الفواتير للمخزن؟). لازم تعليم كل الـ checkboxes المطلوبة عشان زرار "تأكيد التحديث" يتفعّل.</li>
+            </ol>
 
-            <div class="about-label">كيف تعمل</div>
-            <div class="about-steps">
-              <div class="about-step"><span class="about-num">1</span><span>اضغط على مربع "أوردرات الاسترجاع" (أحمر) أو "أوردرات الاستبدال" (برتقالي) — القائمة بتتحمّل أو بتتحدّث تلقائيًا من Shopify (S2 = الحالة المتوقعة + Courier = Bosta)، من غير أي زرار استعلام منفصل.</span></div>
-              <div class="about-step"><span class="about-num">2</span><span>حدد الأوردرات المطلوبة (أو اختر "الكل")، ثم اضغط "تصدير Excel". لو أي أوردر اتصدّر قبل كده هتظهر نافذة تحذير بالتفاصيل قبل ما تسمح بالتصدير تاني.</span></div>
-              <div class="about-step"><span class="about-num">3</span><span>ارفع الملف يدوياً على داشبورد بوسطة (خارج الأداة — الأداة مبتكلمش Bosta API مباشرة).</span></div>
-              <div class="about-step"><span class="about-num">4</span><span>اضغط زرار "تحديث حالة الأوردر" — نافذة تأكيد ملوّنة هتفتح فيها Checkboxes (هل رفعت بوسطة؟ وفي الاستبدال فقط: هل أرسلت الفواتير للمخزن؟). لازم تعليم كل الـ checkboxes المطلوبة عشان زرار "تأكيد التحديث" يتفعّل.</span></div>
-            </div>
+            <h4>الـ Endpoints الرئيسية</h4>
+            <table>
+              <tr><th>action</th><th>الوصف</th></tr>
+              <tr><td><code>fetch_candidates</code></td><td>جلب الأوردرات المطابقة من Shopify (بيتنده تلقائي عند الضغط على المربع)</td></tr>
+              <tr><td><code>check_export_duplicates</code></td><td>فحص تصدير سابق قبل بناء ملف Excel</td></tr>
+              <tr><td><code>record_export</code></td><td>تسجيل عملية التصدير في السجل</td></tr>
+              <tr><td><code>confirm_upload</code></td><td>كتابة S2 + وقت التحديث + تحقق مباشر من Shopify — نفس الـ endpoint لكل من الاسترجاع والاستبدال</td></tr>
+              <tr><td><code>get_logs</code> / <code>get_logs_count</code></td><td>سجل العمليات — فلاتر multi-select (<code>employees</code>/<code>types</code> CSV) + pagination</td></tr>
+              <tr><td><code>get_logs_export</code></td><td>تصدير سجل العمليات كملف Excel (حتى 2000 صف — يرجّع <code>cap</code>/<code>total</code>/<code>truncated</code> لو الملف اتقص)</td></tr>
+              <tr><td><code>diag</code></td><td>فحص ذاتي بدون كتابة — الاتصال بشوبيفاي وD1 وOrigin (زرار 🩺 في الإعدادات)</td></tr>
+              <tr><td><code>get_config</code></td><td>رقم نسخة الـ Worker — تستخدمه الصفحة لحارس نسخة الـ Worker</td></tr>
+            </table>
 
-            <div class="about-label">الـ Endpoints الرئيسية</div>
-            <div class="about-endpoints">
-              <div class="about-ep"><code>fetch_candidates</code><span>جلب الأوردرات المطابقة من Shopify (بيتنده تلقائي عند الضغط على المربع)</span></div>
-              <div class="about-ep"><code>check_export_duplicates</code><span>فحص تصدير سابق قبل بناء ملف Excel</span></div>
-              <div class="about-ep"><code>record_export</code><span>تسجيل عملية التصدير في السجل</span></div>
-              <div class="about-ep"><code>confirm_upload</code><span>كتابة S2 + وقت التحديث + تحقق مباشر من Shopify — نفس الـ endpoint لكل من الاسترجاع والاستبدال دلوقتي</span></div>
-              <div class="about-ep"><code>get_logs</code><span>عرض سجل العمليات (100/صفحة)</span></div>
-              <div class="about-ep"><code>get_logs_count</code><span>إجمالي عدد العمليات المسجّلة</span></div>
-              <div class="about-ep"><code>get_logs_export</code><span>تصدير سجل العمليات كملف Excel (حتى 2000 صف)</span></div>
-            </div>
+            <h4>⚙️ إجراءات كل خيار</h4>
+            <table>
+              <tr><th>الحالة / الخيار</th><th>الإجراءات التي تُنفَّذ</th></tr>
+              <tr><td><code>أوردرات الاسترجاع</code></td><td>كتابة <code>status_2_r_e = In-Return</code> ← كتابة <code>printing_time_s2</code> ← تحقق مباشر من شوبيفاي ← تسجيل في سجل الأداة ← تسجيل تحت <code>metafields_change</code> (للـ KPIs المشتركة)</td></tr>
+              <tr><td><code>أوردرات الاستبدال</code></td><td>كتابة <code>status_2_r_e = Ready</code> ← كتابة <code>printing_time_s2</code> ← تحقق مباشر من شوبيفاي ← تسجيل في سجل الأداة (مع تأكيد إرسال الفواتير) ← تسجيل تحت <code>metafields_change</code></td></tr>
+            </table>
           </div>
         </details>
 
-        <details>
-          <summary class="about-summary">🔧 تشريح الكود</summary>
-          <div class="about-body">
-            <pre class="about-code">FEATURE MAP
---------------------------------------------------------------
-Feature                          | File   | Section | fn/action
---------------------------------------------------------------
-مربعات ملوّنة + تحميل تلقائي        | HTML   | TOOL    | selectJobType / setModeCardsLoading
-استعلام الأوردرات المطابقة          | Worker | EXPORT  | fetch_candidates
-فحص تصدير مكرر                     | Worker | EXPORT  | check_export_duplicates
-بناء وتنزيل ملف Excel (الأوردرات)   | HTML   | TOOL-JS | buildExcelExportFile
-تسجيل التصدير                      | Worker | EXPORT  | record_export
-نافذة تأكيد تحديث الحالة (Checklist)| HTML   | TOOL-JS | openStatusConfirmModal / submitStatusConfirm
-كتابة S2 + تحقق مباشر               | Worker | EXPORT  | confirm_upload
-سجل العمليات + Pagination           | Both   | LOG(-JS)| get_logs / get_logs_count
-تصدير سجل العمليات (ملف مختلف)      | Both   | LOG(-JS)| get_logs_export / exportLogXLSX
---------------------------------------------------------------
+        <details class="about-sec">
+          <summary>🔧 تشريح الكود</summary>
+          <div class="about-sec-body">
+            <h4>FEATURE MAP</h4>
+            <ul>
+              <li><code>§EXPORT</code> (Worker) — <code>fetch_candidates</code> / <code>check_export_duplicates</code> / <code>record_export</code> / <code>confirm_upload</code></li>
+              <li><code>§LOG-ENDPOINTS</code> (Worker) — <code>get_logs</code> / <code>get_logs_count</code> / <code>get_logs_export</code></li>
+              <li><code>§DIAG</code> (Worker) — <code>diag</code> / <code>get_config</code></li>
+              <li><code>selectJobType</code> / <code>setModeCardsLoading</code> (HTML) — مربعات ملوّنة + تحميل تلقائي</li>
+              <li><code>buildExcelExportFile</code> (HTML) — بناء وتنزيل ملف Excel للأوردرات</li>
+              <li><code>openStatusConfirmModal</code> / <code>submitStatusConfirm</code> (HTML) — نافذة تأكيد تحديث الحالة (Checklist)</li>
+              <li><code>fetchLog</code> / <code>renderLogTable</code> / <code>exportLogXLSX</code> (HTML) — سجل العمليات كجدول + تصدير</li>
+              <li><code>orderLink</code> (HTML) — هايبر لينك رقم الأوردر لشوبيفاي</li>
+              <li><code>checkWorkerVersion</code> / <code>runDiag</code> (HTML) — حارس نسخة الـ Worker + الفحص الذاتي</li>
+            </ul>
 
-KEY VARIABLES (HTML)
-LS Config Key : bosta_exchange_export_config_v3   (Worker URL + Secret)
-LOG_PAGE_SIZE : 100
+            <h4>KEY VARIABLES</h4>
+            <ul>
+              <li><code>CFG_KEY = 'bosta_exchange_export_config_v3'</code> — مفتاح localStorage لـ Worker URL + Secret</li>
+              <li><code>LOG_PAGE_SIZE = 100</code></li>
+              <li><code>TOOL_VERSION</code> — مصدر واحد لرقم نسخة الصفحة (هيدر + Changelog + شاشة الدخول)</li>
+              <li><code>MIN_WORKER_VERSION</code> — أقل نسخة Worker مطلوبة — الحارس بيولّع لو الـ Worker أقدم منها بس</li>
+              <li><code>msState</code> — حالة فلاتر الاختيار المتعدد (مفاتيح <code>orderStatus</code> و<code>logType</code>)</li>
+            </ul>
 
-NOTES
-- V4.0.0: زرار "الاستعلام" اتلغى تمامًا — الضغط على أي مربع (أحمر=استرجاع،
-  برتقالي=استبدال) بيحمّل القائمة تلقائيًا، وبيشتغل كـ refresh لو ضغطته
-  تاني وهو نشط بالفعل.
-- V4.0.0: خطوة التأكيد بقت موحّدة بين الاسترجاع والاستبدال — زرار واحد
-  بيفتح نافذة فيها Checkboxes إلزامية قبل ما "تأكيد التحديث" يتفعّل.
-  الـ checklist بيتبعت للـ Worker كـ metadata للـ audit trail بس — مش
-  بيتحقق منه على السيرفر (البوابة الحقيقية هي زرار الواجهة نفسه).
-- S2 = "In-Return" بيتكتب يدوي في الاسترجاع فور تأكيد الرفع — استثناء
-  مقصود ومؤكد مع Ahmed (06-08-2026). راجع تعليق أعلى ملف الـ Worker.
-- كل كتابة لـ S2 بتتسجل مرتين في D1: مرة تحت tool الأداة نفسها، ومرة تحت
-  tool = 'metafields_change' (للـ KPIs المشتركة بين كل الأدوات مستقبلاً).
-- الأداة مبتكلمش Bosta API مباشرة — رفع الملف على داشبورد بوسطة يدوي بره
-  الأداة تماماً.
-- Cash Amount: سقف الـ -2000 بينطبق على الاسترجاع والاستبدال معًا (V3.3.1+).
-- عمود "City" في ملف Excel = المحافظة (Province)، وعمود "Area" = المدينة
-  (City) من عنوان الشحن (V3.3.1+).
-- اسم العميل في الجدول والملف بياخد من addr.name مباشرة (مش
-  firstName+lastName اللي مكنش متسحوب أصلاً من الـ API).</pre>
+            <h4>NOTES</h4>
+            <ul>
+              <li>زرار "الاستعلام" اتلغى تمامًا — الضغط على أي مربع (أحمر=استرجاع، برتقالي=استبدال) بيحمّل القائمة تلقائيًا، وبيشتغل كـ refresh لو ضغطته تاني وهو نشط بالفعل.</li>
+              <li>خطوة التأكيد موحّدة بين الاسترجاع والاستبدال — زرار واحد بيفتح نافذة فيها Checkboxes إلزامية. الـ checklist بيتبعت للـ Worker كـ metadata للـ audit trail بس — مش بيتحقق منه على السيرفر (البوابة الحقيقية هي زرار الواجهة نفسه).</li>
+              <li>S2 = "In-Return" بيتكتب يدوي في الاسترجاع فور تأكيد الرفع — استثناء مقصود ومؤكد مع Ahmed (06-08-2026). راجع تعليق أعلى ملف الـ Worker.</li>
+              <li>كل كتابة لـ S2 بتتسجل مرتين في D1: مرة تحت tool الأداة نفسها، ومرة تحت <code>tool = 'metafields_change'</code> (للـ KPIs المشتركة بين كل الأدوات).</li>
+              <li>الأداة مبتكلمش Bosta API مباشرة — رفع الملف على داشبورد بوسطة يدوي بره الأداة تماماً.</li>
+              <li>Cash Amount: سقف الـ -2000 بينطبق على الاسترجاع والاستبدال معًا.</li>
+              <li>عمود "City" في ملف Excel = المحافظة (Province)، وعمود "Area" = المدينة (City) من عنوان الشحن.</li>
+              <li>اسم العميل في الجدول والملف بياخد من <code>addr.name</code> مباشرة (مش firstName+lastName اللي مكنش متسحوب أصلاً من الـ API).</li>
+              <li>رقم الأوردر لينك مباشر لصفحة الأوردر على شوبيفاي في كل مكان — "الأوردرات الجاهزة للملف" (<code>orderId</code> رقمي راجع من <code>fetch_candidates</code>) وسجل العمليات كمان (<code>numericIdFromGid()</code> بيستخرج الرقم من الـ GID المخزّن في <code>order_id</code>).</li>
+              <li>"النتائج" في تاب سجل العمليات = العدد الكلي المطابق للفلاتر من السيرفر (<code>get_logs_count</code>)، مش <code>filtered.length</code> على الصفحة المحمّلة — الأداة بتستخدم Log Filter Model v2 (server-side pagination حقيقي)، فالعدّ الكامل مش موجود عند العميل أصلاً. استثناء موثّق عن قاعدة "النتائج client-side دايمًا" في <code>data-table-standard.md</code>.</li>
+              <li>الترتيب (sort) في جدول السجل بيرتّب <strong>الصفحة المحمّلة حاليًا بس</strong> (100 صف)، مش كل السجل المطابق — نفس السبب.</li>
+              <li>⚠️ معروف ومتعمّد: Freeze on Scroll (هيدر مضغوط + chip تاب عند السكرول، <code>tabs-and-modals.md</code> § 1b) لسه ما اتطبّقش هنا.</li>
+            </ul>
           </div>
         </details>
 
@@ -996,14 +1219,31 @@ NOTES
     </div>
   </div>
 
-  <div class="modal-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
-    <div class="modal wide">
-      <div class="modal-hdr">
-        <span>V4.0.0 — Changelog</span>
-        <button class="modal-close-x" onclick="closeChangelog()">×</button>
+  <div class="eco-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
+    <div class="eco-modal">
+      <div class="eco-modal-hdr">
+        <span id="changelogTitle">V5.0.0 — Changelog</span>
+        <button class="modal-close-x" onclick="closeChangelog()">✕</button>
       </div>
-      <div class="modal-body">
+      <div class="eco-modal-body">
         <div class="hint">
+          <b>V5.0.0</b><br>
+          - تحويل الواجهة الكامل لمعيار html-builder v6.0.0: التابات الرئيسية بقت <span class="mono">main-tabs-bar</span> بعرض كامل، وقسم "الأوردرات الجاهزة للملف" وتاب "سجل العمليات" بقوا قسم موحّد (فلاتر + جدول) بدل كارتين منفصلين.<br>
+          - كل الفلاتر (حالة التصدير، نوع العملية) بقت اختيار متعدد (multi-select) بدل قائمة واحدة/الكل.<br>
+          - سجل العمليات بقى جدول حقيقي (تاريخ/وقت منفصلين + ترتيب على الأعمدة) بدل بطاقات، وفلاتره بقت <span class="mono">employees</span>/<span class="mono">types</span> (قوايم CSV) بدل قيمة واحدة.<br>
+          - <span class="mono">--container-max</span> بقى Tier M (1200px) بدل عرض ثابت 1040px.<br>
+          - نافذتا "عن الأداة" و"سجل التحديثات" بقوا بشِل <span class="mono">.eco-modal</span> (90% من عرض الأداة، هيدر ثابت عند السكرول).<br>
+          - زرار الإغلاق ✕ بقى بإطار أحمر وخلفية حمراء في كل النوافذ (كان نص أحمر بس بدون إطار).<br>
+          <br>
+          <b>V4.1.0</b><br>
+          - إضافة <span class="mono">?action=diag</span> و<span class="mono">?action=get_config</span> على الـ Worker (فحص ذاتي + رقم نسخة) — زرار 🩺 فحص النظام جديد في الإعدادات.<br>
+          - رقم نسخة الأداة بقى مصدر واحد (<span class="mono">TOOL_VERSION</span>) بدل نصوص منفصلة، ونص نسخة تحت زرار الإعدادات في شاشة الدخول.<br>
+          - حارس نسخة الـ Worker (⚠️ في الهيدر) — بيولّع لو الـ Worker المتصل بيه أقدم من الحد الأدنى المطلوب للصفحة.<br>
+          - شاشة الدخول بقت على خطوتين — الكيباد بيظهر بعد اختيار الاسم بس (كان ظاهر من الأول).<br>
+          - z-index لشاشة الدخول والنوافذ اتصلح (500 / 600) بدل (300 / 400) عشان ميحصلش تعارض.<br>
+          - رقم الأوردر في القوائم بقى هايبر لينك لصفحة الأوردر على Shopify.<br>
+          - تصدير سجل العمليات (.xlsx) بقى بيبيّن بانر تحذير صريح لو الملف اتقص عند سقف الـ 2000 صف بدل ما يقول "تم" على طول.<br>
+          <br>
           <b>V4.0.0</b><br>
           - إلغاء زرار "الاستعلام" نهائيًا — الضغط على مربع الاسترجاع (أحمر) أو الاستبدال (برتقالي) بيحمّل/يحدّث القائمة تلقائيًا.<br>
           - توحيد خطوة التأكيد بين الاسترجاع والاستبدال في زرار واحد بس: "تحديث حالة الأوردر إلى (In-Return / Ready)".<br>
@@ -1032,7 +1272,7 @@ NOTES
           - Popup تعرض رقم الأوردر، آخر وقت تصدير، وعدد مرات التصدير، مع تنبيه صوتي.
         </div>
       </div>
-      <div class="modal-ftr">
+      <div class="eco-modal-ftr">
         <button class="btn btn-primary" onclick="closeChangelog()">تمام</button>
       </div>
     </div>
@@ -1112,9 +1352,12 @@ NOTES
     </div>
   </div>
   <script>
-    const VERSION = '4.0.0';
+    const TOOL_VERSION = '5.0.0';
+    const MIN_WORKER_VERSION = '5.0.0'; // lowest Worker version this page relies on (CSV employees/types log filters)
+    const SHOP_DOMAIN = '6c7e1a-53.myshopify.com';
     const CFG_KEY = 'bosta_exchange_export_config_v3';
     const LOG_PAGE_SIZE = 100;
+    let workerVersion = null;
 
     function getConfig() {
       try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; }
@@ -1173,6 +1416,250 @@ NOTES
         throw err;
       }
       return data;
+    }
+
+    // ══════════════════════════════════════════════════════
+    // §FILTERS — unified filter/table sections (data-table-standard.md +
+    // multi-select-filter.md). One generic multi-select component shared by
+    // both sections, keyed by 'orderStatus' (orders table) and 'logType'
+    // (log table).
+    // ══════════════════════════════════════════════════════
+    const msState = {
+      orderStatus: {
+        items: [
+          { value: 'ready',     label: 'جاهز' },
+          { value: 'duplicate', label: 'تصدير سابق' },
+          { value: 'batch',     label: 'Batch مصدّر' },
+        ],
+        selected: new Set(),
+      },
+      logType: {
+        items: [
+          { value: 'scan',                     label: 'Scan' },
+          { value: 'export_return',            label: 'Export Return' },
+          { value: 'export_exchange',          label: 'Export Exchange' },
+          { value: 'manual_confirm_return',    label: 'Manual Confirm Return' },
+          { value: 'manual_confirm_exchange',  label: 'Manual Confirm Exchange' },
+          { value: 'confirm_return',           label: 'Status Update — Return' },
+          { value: 'confirm_exchange',         label: 'Status Update — Exchange' },
+        ],
+        selected: new Set(),
+      },
+    };
+    const filterLabels = { orderStatus: 'حالة التصدير', logType: 'نوع العملية' };
+
+    function msRenderList(key) {
+      const st = msState[key];
+      const listEl = document.getElementById(`msList-${key}`);
+      listEl.innerHTML = !st.items.length
+        ? '<div class="ms-empty">لا توجد نتائج</div>'
+        : st.items.map((it) => {
+            const checked = st.selected.has(it.value);
+            return `<div class="ms-item ${checked ? 'checked' : ''}" onclick="msToggleItem('${key}','${it.value}')">
+              <input type="checkbox" ${checked ? 'checked' : ''} onclick="event.stopPropagation(); msToggleItem('${key}','${it.value}')">
+              <span class="ms-item-label">${escapeHtml(it.label)}</span>
+            </div>`;
+          }).join('');
+
+      const allChecked = st.items.length > 0 && st.items.every((it) => st.selected.has(it.value));
+      const selAll = document.getElementById(`msSelectAll-${key}`);
+      if (selAll) selAll.checked = allChecked;
+
+      msUpdateButtonLabel(key);
+      const ftrCount = document.getElementById(`msFtrCount-${key}`);
+      if (ftrCount) ftrCount.textContent = `${st.selected.size} مختار`;
+    }
+
+    function msUpdateButtonLabel(key) {
+      const st = msState[key];
+      const btn = document.getElementById(`msBtn-${key}`);
+      const lbl = document.getElementById(`msBtnLabel-${key}`);
+      const n = st.selected.size;
+      btn.classList.toggle('has-selection', n > 0);
+      if (n === 0) {
+        lbl.textContent = btn.dataset.defaultLabel || 'الكل';
+      } else if (n === 1) {
+        const item = st.items.find((it) => it.value === [...st.selected][0]);
+        lbl.textContent = item ? item.label : [...st.selected][0];
+      } else {
+        lbl.innerHTML = `${n} محددين <span class="ms-count">${n}</span>`;
+      }
+    }
+
+    function msToggle(key) {
+      const menu = document.getElementById(`msMenu-${key}`), btn = document.getElementById(`msBtn-${key}`);
+      const willOpen = !menu.classList.contains('open');
+      Object.keys(msState).forEach((k) => {
+        document.getElementById(`msMenu-${k}`)?.classList.remove('open');
+        document.getElementById(`msBtn-${k}`)?.classList.remove('open');
+      });
+      if (willOpen) { menu.classList.add('open'); btn.classList.add('open'); }
+    }
+
+    function msToggleItem(key, value) {
+      const st = msState[key];
+      st.selected.has(value) ? st.selected.delete(value) : st.selected.add(value);
+      msRenderList(key); renderChips(); onMsFilterChanged(key);
+    }
+
+    function msToggleSelectAll(key, forceState) {
+      const st = msState[key];
+      const allChecked = st.items.length > 0 && st.items.every((it) => st.selected.has(it.value));
+      const shouldCheck = forceState !== undefined ? forceState : !allChecked;
+      st.items.forEach((it) => shouldCheck ? st.selected.add(it.value) : st.selected.delete(it.value));
+      msRenderList(key); renderChips(); onMsFilterChanged(key);
+    }
+
+    function msClear(key) {
+      msState[key].selected.clear();
+      msRenderList(key); renderChips(); onMsFilterChanged(key);
+    }
+
+    function onMsFilterChanged(key) {
+      if (key === 'orderStatus') { applyOrderFilters(); }
+      else if (key === 'logType') { clearExportWarn(); logOffset = 0; loadLogs(false, false); }
+    }
+
+    // ⚠️ حارس document.contains(e.target) إلزامي — من غيره القائمة بتتقفل بعد
+    // أول اختيار لأن msRenderList بتعيد بناء innerHTML (multi-select-filter.md § 8)
+    document.addEventListener('click', (e) => {
+      if (!document.contains(e.target)) return;
+      Object.keys(msState).forEach((k) => {
+        const wrap = document.getElementById(`msWrap-${k}`);
+        if (wrap && !wrap.contains(e.target)) {
+          document.getElementById(`msMenu-${k}`)?.classList.remove('open');
+          document.getElementById(`msBtn-${k}`)?.classList.remove('open');
+        }
+      });
+    });
+
+    function renderChips() {
+      Object.keys(msState).forEach((key) => {
+        const row = document.getElementById(`chipsRow-${key}`);
+        if (!row) return;
+        const label = filterLabels[key] || key;
+        const chips = [...msState[key].selected].map((val) => {
+          const item = msState[key].items.find((it) => it.value === val);
+          const v = item ? item.label : val;
+          return `<span class="ms-chip">${escapeHtml(v)}<button onclick="msToggleItem('${key}','${val.replace(/'/g, "\\'")}')">✕</button></span>`;
+        }).join('');
+        row.innerHTML = chips ? `<span class="chips-label">${label}:</span>${chips}` : '';
+      });
+    }
+
+    // ── Collapsible filter/table sections ──
+    function toggleOrderFilters() {
+      document.getElementById('ordersFltBody').classList.toggle('collapsed');
+      document.getElementById('ordersFltToggleIcon').classList.toggle('open');
+    }
+    function toggleOrdersTable() {
+      document.getElementById('ordersTblBodyWrap').classList.toggle('collapsed');
+      document.getElementById('ordersTblToggleIcon').classList.toggle('open');
+    }
+    function toggleLogFilters() {
+      document.getElementById('logFltBody').classList.toggle('collapsed');
+      document.getElementById('logFltToggleIcon').classList.toggle('open');
+    }
+    function toggleLogTable() {
+      document.getElementById('logTblBodyWrap').classList.toggle('collapsed');
+      document.getElementById('logTblToggleIcon').classList.toggle('open');
+    }
+
+    // ── Orders section: filter-active state + clear-all ──
+    function orderSearchTerm() { return (document.getElementById('orderSearchInput')?.value || ''); }
+    function anyOrderFilterActive() {
+      return msState.orderStatus.selected.size > 0 || orderSearchTerm().trim().length > 0;
+    }
+    function updateOrderFilterIconState() {
+      const active = anyOrderFilterActive();
+      document.getElementById('ordersFltIcon').classList.toggle('active', active);
+      document.getElementById('ordersClearBtn').classList.toggle('inactive', !active);
+    }
+    function clearOrderFilters() {
+      msState.orderStatus.selected.clear();
+      const input = document.getElementById('orderSearchInput');
+      if (input) input.value = '';
+      msRenderList('orderStatus'); renderChips();
+      applyOrderFilters();
+    }
+    function onOrderSearchInput(el) {
+      el.classList.toggle('has-value', el.value.trim().length > 0);
+      applyOrderFilters();
+    }
+
+    // ── Log section: filter-active state + clear-all ──
+    function anyLogFilterActive() {
+      return msState.logType.selected.size > 0 || (document.getElementById('logSearch')?.value || '').trim().length > 0;
+    }
+    function updateLogFilterIconState() {
+      const active = anyLogFilterActive();
+      document.getElementById('logFltIcon').classList.toggle('active', active);
+      document.getElementById('logClearBtn').classList.toggle('inactive', !active);
+    }
+    function clearLogFilters() {
+      msState.logType.selected.clear();
+      const input = document.getElementById('logSearch');
+      if (input) { input.value = ''; input.classList.remove('has-value'); }
+      msRenderList('logType'); renderChips();
+      clearExportWarn();
+      logOffset = 0;
+      loadLogs(false, false);
+    }
+
+    // ── Sorting — independent of filters (data-table-standard.md § 8) ──
+    const orderSortAccessors = {
+      name:    (o) => o.name || '',
+      s2:      (o) => o.s2Status?.value || '',
+      courier: (o) => o.courier?.value || '',
+    };
+    let orderSortState = { key: null, dir: null };
+    function toggleOrderSort(key) {
+      if (orderSortState.key !== key) { orderSortState.key = key; orderSortState.dir = 'asc'; }
+      else if (orderSortState.dir === 'asc') { orderSortState.dir = 'desc'; }
+      else { orderSortState.key = null; orderSortState.dir = null; }
+      updateSortHeaderUI('ordersTable', orderSortState);
+      applyOrderFilters();
+    }
+    function applyOrderSort(rows) {
+      if (!orderSortState.key) return rows;
+      const dir = orderSortState.dir === 'asc' ? 1 : -1;
+      const acc = orderSortAccessors[orderSortState.key];
+      return [...rows].sort((a, b) => String(acc(a)).localeCompare(String(acc(b))) * dir);
+    }
+
+    const logSortConfig = { date: { type: 'date' }, time: { type: 'date' }, type: { type: 'string' }, order: { type: 'string' } };
+    let logSortState = { key: null, dir: null };
+    function toggleLogSort(key) {
+      if (logSortState.key !== key) { logSortState.key = key; logSortState.dir = 'asc'; }
+      else if (logSortState.dir === 'asc') { logSortState.dir = 'desc'; }
+      else { logSortState.key = null; logSortState.dir = null; }
+      updateSortHeaderUI('logTable', logSortState);
+      renderLogTable();
+    }
+    // ⚠️ Sorts only the currently loaded page (100 rows) — the log tab is
+    // server-paginated (Log Filter Model v2), so there is no full matching
+    // set on the client to sort across. Documented in the About modal.
+    function applyLogSort(rows) {
+      if (!logSortState.key) return rows;
+      const cfg = logSortConfig[logSortState.key];
+      const dir = logSortState.dir === 'asc' ? 1 : -1;
+      return [...rows].sort((a, b) => {
+        if (cfg.type === 'date') return ((a.date?.getTime() || 0) - (b.date?.getTime() || 0)) * dir;
+        return String(a[logSortState.key] || '').localeCompare(String(b[logSortState.key] || '')) * dir;
+      });
+    }
+
+    function updateSortHeaderUI(tableId, sortState) {
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      table.querySelectorAll('.sort-icon').forEach((el) => {
+        const isActive = sortState.key === el.dataset.sortKey;
+        el.textContent = isActive ? (sortState.dir === 'asc' ? '▲' : '▼') : '';
+        el.classList.toggle('active', isActive);
+      });
+      table.querySelectorAll('.sortable-th').forEach((th) => {
+        th.classList.toggle('sorted', th.dataset.sortKey === sortState.key);
+      });
     }
 
     const state = {
@@ -1244,6 +1731,7 @@ NOTES
       updateSettingsBtn();
       updateLoginSettingsBtn();
       loadEmployeesList();
+      checkWorkerVersion();
       showToast('تم حفظ الإعدادات', 'success');
     }
 
@@ -1263,6 +1751,92 @@ NOTES
 
     function openAbout() { document.getElementById('aboutOverlay').classList.add('open'); }
     function closeAbout() { document.getElementById('aboutOverlay').classList.remove('open'); }
+
+    // ─── §SHELL-JS::version ─── single source for the version string
+    // (html-builder Standards #15) — header button, changelog title, login text.
+    function renderVersionUI() {
+      const label = `V${TOOL_VERSION}`;
+      const verBtn = document.getElementById('verBtn');
+      if (verBtn) verBtn.textContent = label;
+      const clTitle = document.getElementById('changelogTitle');
+      if (clTitle) clTitle.textContent = `${label} — Changelog`;
+      const loginVer = document.getElementById('loginVersionText');
+      if (loginVer) loginVer.textContent = label;
+    }
+
+    // Numeric-lexicographic version compare — "10" must sort above "9".
+    function cmpVersion(a, b) {
+      const pa = String(a).replace(/^v/i, '').split('.').map(Number);
+      const pb = String(b).replace(/^v/i, '').split('.').map(Number);
+      for (let i = 0; i < 3; i++) {
+        const d = (pa[i] || 0) - (pb[i] || 0);
+        if (d) return d;
+      }
+      return 0;
+    }
+
+    // ─── §SHELL-JS::workerVersionGuard ─── warns only when the connected
+    // Worker is OLDER than MIN_WORKER_VERSION — the page/Worker version
+    // numbers are independent by design, so a literal mismatch is NOT the
+    // right test (html-builder Standards #29).
+    async function checkWorkerVersion() {
+      if (!isConfigured()) return;
+      try {
+        const data = await apiFetch('get_config');
+        workerVersion = data.version || null;
+        const stale = workerVersion && cmpVersion(workerVersion, MIN_WORKER_VERSION) < 0;
+        const btn = document.getElementById('verStaleBtn');
+        if (btn) btn.style.display = stale ? '' : 'none';
+      } catch { /* الإعدادات ممكن تكون لسه ناقصة أو الـ Worker قديم بدون get_config */ }
+    }
+
+    function showWorkerStale() {
+      showToast(
+        `الـ Worker نسخته ${workerVersion || '؟'} والصفحة محتاجة ${MIN_WORKER_VERSION} على الأقل — راجع Deployments و Promote في كلاودفلير.`,
+        'error', 7000,
+      );
+    }
+
+    // ─── §SHELL-JS::orderLink ─── hyperlink to the order in Shopify Admin
+    // (design-system.md "Order Number Display"). Falls back to a plain
+    // non-link span if no numeric id is available — never guess a URL.
+    function numericIdFromGid(id) {
+      const s = String(id || '').trim();
+      if (!s) return null;
+      return s.includes('/') ? s.split('/').pop() : s;
+    }
+
+    function shopifyOrderUrl(orderId) {
+      return `https://${SHOP_DOMAIN}/admin/orders/${numericIdFromGid(orderId)}`;
+    }
+
+    function orderLink(orderNumber, orderId) {
+      const label = escapeHtml(orderNumber || '—');
+      const id = numericIdFromGid(orderId);
+      if (!id) return `<span class="order-num">${label}</span>`;
+      return `<a class="order-link" href="${shopifyOrderUrl(id)}" target="_blank" rel="noopener">${label}</a>`;
+    }
+
+    async function runDiag() {
+      const box = document.getElementById('diagResult');
+      const btn = document.getElementById('diagBtn');
+      btn.disabled = true;
+      box.textContent = '⏳ جاري الفحص...';
+      try {
+        const d = await apiFetch('diag');
+        const lines = [];
+        lines.push(`${d.workerVersion ? '✅' : '❌'} نسخة الـ Worker: ${escapeHtml(d.workerVersion || '—')}`);
+        lines.push(`${d.shopify?.ok ? '✅' : '❌'} الاتصال بشوبيفاي${d.shopify?.ok ? '' : ': ' + escapeHtml(d.shopify?.error || '—')}`);
+        lines.push(`${d.d1?.ok ? '✅' : '❌'} قاعدة البيانات (D1)${d.d1?.ok ? '' : ': ' + escapeHtml(d.d1?.error || '—')}`);
+        const originOk = d.allowedOrigins?.includes(d.origin);
+        lines.push(`${originOk ? '✅' : '⚠️'} Origin الحالي: ${escapeHtml(d.origin || '—')}`);
+        box.innerHTML = lines.join('<br>');
+      } catch (e) {
+        box.innerHTML = `❌ فشل الفحص: ${escapeHtml(e.message)}`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
 
     function showToast(message, type = 'info', timeout = 3600) {
       const wrap = document.getElementById('toastContainer');
@@ -1418,6 +1992,10 @@ NOTES
       document.getElementById('loginBtn').disabled = (isNewUser && firstPin ? confirmPinBuffer : pinBuffer).length !== 4;
     }
 
+    function setPinZoneVisible(visible) {
+      document.getElementById('pinZone').classList.toggle('visible', !!visible);
+    }
+
     function pinClear() {
       clearTimeout(autoLoginTimer);
       pinBuffer = '';
@@ -1428,6 +2006,8 @@ NOTES
       document.getElementById('loginBtn').textContent = 'دخول';
       document.getElementById('loginBtn').disabled = true;
       updatePinDots('');
+      // Two-step reveal — pinZone only shows once an employee is chosen.
+      setPinZoneVisible(!!document.getElementById('loginUsername').value);
     }
 
     function updatePinDots(value) {
@@ -1589,8 +2169,12 @@ NOTES
       state.exported = false;
       state.statusUpdated = false;
 
+      msState.orderStatus.selected.clear();
+      const searchInput = document.getElementById('orderSearchInput');
+      if (searchInput) { searchInput.value = ''; searchInput.classList.remove('has-value'); }
+      msRenderList('orderStatus'); renderChips();
+
       document.getElementById('emptyOrdersHint').style.display = 'block';
-      document.getElementById('orderListHint').textContent = 'اضغط على أحد المربعين فوق لتحميل القائمة تلقائيًا';
       closeExportDuplicateModal();
       closeStatusConfirmModal();
       clearStatus();
@@ -1704,7 +2288,7 @@ NOTES
         div.className = 'export-dup-table-row';
         div.innerHTML = `
           <div class="export-dup-order">${escapeHtml(item.name)}</div>
-          <div>${escapeHtml(formatCairo(item.lastExportAt))}</div>
+          <div>${escapeHtml(formatDateTime(item.lastExportAt))}</div>
           <div class="export-dup-count">${escapeHtml(item.exportCount)}</div>
         `;
         rows.appendChild(div);
@@ -1964,66 +2548,76 @@ NOTES
       }
     }
 
+    // Public entry point — every mutation of state.orders/selection/duplicates
+    // in the file still just calls renderOrders(); it re-derives the filtered
+    // + sorted view every time (data-table-standard.md § 7 — results are
+    // computed client-side on already-loaded data).
     function renderOrders() {
-      const rows = document.getElementById('ordersRows');
-      rows.innerHTML = '';
+      applyOrderFilters();
+    }
 
-      const list = document.getElementById('ordersList');
-      list.classList.toggle('show', state.orders.length > 0);
+    function computeOrderStatus(order, exportedIds) {
+      if (exportedIds.has(order.id)) return 'batch';
+      if (state.exportDuplicates?.[order.name]) return 'duplicate';
+      return 'ready';
+    }
 
-      const selectedCount = getSelectedOrders().length;
-      if (state.orders.length) {
-        document.getElementById('orderListHint').textContent = `${state.orders.length} أوردر — المحدد ${selectedCount}`;
+    function applyOrderFilters() {
+      updateOrderFilterIconState();
+      const exportedIds = new Set((state.exportedOrders || []).map((order) => order.id));
+      const search = orderSearchTerm().trim().toLowerCase();
+      const selectedStatus = msState.orderStatus.selected;
+
+      const filtered = state.orders.filter((order) => {
+        if (search && !String(order.name || '').toLowerCase().includes(search)) return false;
+        if (selectedStatus.size && !selectedStatus.has(computeOrderStatus(order, exportedIds))) return false;
+        return true;
+      });
+
+      const sorted = applyOrderSort(filtered);
+      document.getElementById('ordersFilteredCount').textContent = filtered.length.toLocaleString('en-US');
+      renderOrdersTable(sorted, exportedIds);
+    }
+
+    function renderOrdersTable(rows, exportedIds) {
+      const tbody = document.getElementById('ordersRows');
+      const table = document.getElementById('ordersTable');
+      const hasAnyOrders = state.orders.length > 0;
+
+      document.getElementById('emptyOrdersHint').style.display = hasAnyOrders ? 'none' : 'block';
+      table.style.display = hasAnyOrders ? 'table' : 'none';
+      tbody.innerHTML = '';
+
+      if (hasAnyOrders && !rows.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="data-empty">لا توجد أوردرات مطابقة للفلاتر</td></tr>`;
+        syncSelectAllOrders();
+        return;
       }
 
-      const exportedIds = new Set((state.exportedOrders || []).map(order => order.id));
-
-      state.orders.forEach((order) => {
+      rows.forEach((order) => {
         const addr = order.shippingAddress || {};
         const selected = state.selectedOrderIds.has(order.id);
-        const duplicate = state.exportDuplicates?.[order.name];
-        const exportedInCurrentBatch = exportedIds.has(order.id);
+        const st = computeOrderStatus(order, exportedIds);
+        const exportBadge = st === 'batch'
+          ? '<span class="badge badge-purple">Batch مصدّر</span>'
+          : st === 'duplicate'
+            ? '<span class="badge badge-warn">تصدير سابق</span>'
+            : '<span class="badge badge-ok">جاهز</span>';
 
-        const row = document.createElement('div');
-        row.className = `order-row${selected ? ' selected' : ''}`;
-
-        const selectCell = document.createElement('div');
-        selectCell.className = 'order-select-cell';
-        selectCell.innerHTML = `
-          <input
-            class="order-checkbox"
-            type="checkbox"
-            data-id="${escapeHtml(order.id)}"
-            aria-label="تحديد ${escapeHtml(order.name)}"
-            ${selected ? 'checked' : ''}
-            onchange="toggleOrderSelection(this)"
-          />
+        const tr = document.createElement('tr');
+        tr.className = selected ? 'selected' : '';
+        tr.innerHTML = `
+          <td><input class="order-checkbox" type="checkbox" data-id="${escapeHtml(order.id)}" aria-label="تحديد ${escapeHtml(order.name)}" ${selected ? 'checked' : ''} onchange="toggleOrderSelection(this)" /></td>
+          <td>${orderLink(order.name, order.orderId)}</td>
+          <td>
+            <div>${escapeHtml(addr.name || '—')}</div>
+            <div style="color:var(--text-muted);font-size:11px;">${escapeHtml([addr.city, addr.address1].filter(Boolean).join(' — ') || '—')}</div>
+          </td>
+          <td><span class="badge badge-type">${escapeHtml(order.s2Status?.value || JOB_META[state.jobType].expected)}</span></td>
+          <td><span class="badge badge-ok">${escapeHtml(order.courier?.value || 'Bosta')}</span></td>
+          <td>${exportBadge}</td>
         `;
-
-        const name = document.createElement('div');
-        name.innerHTML = `<span class="order-name">${escapeHtml(order.name)}</span>`;
-
-        const customer = document.createElement('div');
-        customer.innerHTML = `
-          <div>${escapeHtml(addr.name || '—')}</div>
-          <div style="color:var(--text-muted);font-size:11px;">${escapeHtml([addr.city, addr.address1].filter(Boolean).join(' — ') || '—')}</div>
-        `;
-
-        const status = document.createElement('div');
-        status.innerHTML = `<span class="badge badge-type">${escapeHtml(order.s2Status?.value || JOB_META[state.jobType].expected)}</span>`;
-
-        const courier = document.createElement('div');
-        courier.innerHTML = `<span class="badge badge-ok">${escapeHtml(order.courier?.value || 'Bosta')}</span>`;
-
-        const exportStatus = document.createElement('div');
-        exportStatus.innerHTML = exportedInCurrentBatch
-          ? `<span class="badge badge-purple">Batch مصدّر</span>`
-          : duplicate
-            ? `<span class="badge badge-warn">تصدير سابق</span>`
-            : `<span class="badge badge-ok">جاهز</span>`;
-
-        row.append(selectCell, name, customer, status, courier, exportStatus);
-        rows.appendChild(row);
+        tbody.appendChild(tr);
       });
 
       syncSelectAllOrders();
@@ -2208,24 +2802,40 @@ NOTES
       a.remove();
     }
 
+    // logParams() — single source for the filters sent to get_logs /
+    // get_logs_count / get_logs_export, per html-builder Log Filter Model v2.
+    function logParams() {
+      const p = {};
+      const types = [...msState.logType.selected];
+      const search = (document.getElementById('logSearch')?.value || '').trim();
+      if (types.length) p.types = types.join(',');
+      if (search) p.search = search;
+      return p;
+    }
+
     async function loadLogs(showMsg = true, resetPage = true) {
       if (!isConfigured()) return;
       if (resetPage) logOffset = 0;
+      updateLogFilterIconState();
 
       try {
-        const type = document.getElementById('logTypeFilter').value || undefined;
-        const search = document.getElementById('logSearch').value.trim() || undefined;
+        const base = logParams();
 
         const [logsData, countData] = await Promise.all([
-          apiFetch('get_logs', { method: 'GET', params: { type, search, limit: LOG_PAGE_SIZE, offset: logOffset } }),
-          apiFetch('get_logs_count', { method: 'GET', params: { search } }),
+          apiFetch('get_logs',       { method: 'GET', params: { ...base, limit: LOG_PAGE_SIZE, offset: logOffset } }),
+          apiFetch('get_logs_count', { method: 'GET', params: base }),
         ]);
 
         state.logs = logsData.entries || [];
         logHasNextPage = state.logs.length === LOG_PAGE_SIZE;
         logTotalAll = Number(countData.total || 0);
 
-        renderLogs();
+        // "النتائج" هنا = العدد الكلي من السيرفر، مش filtered.length — الأداة
+        // بتستخدم server-side pagination حقيقي فمفيش كل الصفوف عند العميل
+        // (راجع ملحوظة About). استثناء موثّق عن data-table-standard.md § 7.
+        document.getElementById('logFilteredCount').textContent = logTotalAll.toLocaleString('en-US');
+
+        renderLogTable();
         updateLogPagination();
         if (showMsg) showToast('تم تحديث السجل', 'success');
       } catch (e) {
@@ -2247,51 +2857,61 @@ NOTES
       document.getElementById('logPrevBtn').disabled = logOffset === 0;
       document.getElementById('logNextBtn').disabled = !logHasNextPage;
       document.getElementById('logStatsText').textContent =
-        `المعروض هنا: ${state.logs.length} — إجمالي كل العمليات المسجّلة (كل الأنواع): ${logTotalAll.toLocaleString('en-US')}`;
+        `المعروض هنا: ${state.logs.length} — إجمالي المطابق للفلاتر: ${logTotalAll.toLocaleString('en-US')}`;
     }
 
-    function onLogTypeFilterChange() { loadLogs(false, true); }
+    function clearExportWarn() {
+      const w = document.getElementById('logExportWarn');
+      if (w) { w.style.display = 'none'; w.innerHTML = ''; }
+    }
 
     function onLogSearchInput() {
+      const el = document.getElementById('logSearch');
+      el.classList.toggle('has-value', el.value.trim().length > 0);
+      clearExportWarn();
       clearTimeout(logSearchDebounce);
-      logSearchDebounce = setTimeout(() => loadLogs(false, true), 350);
+      logSearchDebounce = setTimeout(() => { logOffset = 0; loadLogs(false, false); }, 350);
     }
 
-    function renderLogs() {
-      const list = document.getElementById('logList');
-      const rows = state.logs || [];
+    // renderLogTable() — sorts the currently-loaded page only (§ note above),
+    // then builds real <tr> rows with التاريخ/الوقت as two independent
+    // sortable columns from the same timestamp (datetime-format.md § 4b).
+    function renderLogTable() {
+      const tbody = document.getElementById('logRows');
+      const table = document.getElementById('logTable');
+      const emptyEl = document.getElementById('logEmpty');
+      const rows = (state.logs || []).map((entry) => {
+        const d = entry.timestamp ? toCairo(entry.timestamp) : null;
+        return { ...entry, date: d, order: entry.order_name || '' };
+      });
 
       if (!rows.length) {
-        list.innerHTML = '<div class="log-empty">لا توجد عمليات مطابقة</div>';
+        table.style.display = 'none';
+        emptyEl.style.display = 'block';
+        emptyEl.textContent = 'لا توجد عمليات مطابقة';
+        tbody.innerHTML = '';
         return;
       }
 
-      list.innerHTML = '';
-      rows.forEach((entry) => {
-        const div = document.createElement('div');
-        div.className = 'log-entry';
+      table.style.display = 'table';
+      emptyEl.style.display = 'none';
 
-        const isUpdate = entry.type?.startsWith('confirm');
-        const isManual = entry.type?.startsWith('manual_confirm');
-        const dotClass = isUpdate ? 'confirm' : (isManual ? 'scan' : (entry.type === 'scan' ? 'scan' : 'export'));
-
-        div.innerHTML = `
-          <div class="log-dot ${dotClass}"></div>
-          <div class="log-content">
-            <div class="log-top">
-              <span class="badge ${isUpdate ? 'badge-ok' : (isManual || entry.type === 'scan' ? 'badge-purple' : 'badge-type')}">${escapeHtml(typeLabel(entry.type))}</span>
-              ${entry.order_name ? `<span class="order-name">${escapeHtml(entry.order_name)}</span>` : ''}
-              ${entry.employee ? `<span class="badge badge-type">${escapeHtml(entry.employee)}</span>` : ''}
-            </div>
-            <div class="log-notes">${escapeHtml(entry.notes || '—')}</div>
-            <div class="log-meta">
-              <span>${escapeHtml(formatCairo(entry.timestamp))}</span>
-              ${entry.value_before || entry.value_after ? `<span class="mono">${escapeHtml(entry.value_before || '')} → ${escapeHtml(entry.value_after || '')}</span>` : ''}
-            </div>
-          </div>
+      const sorted = applyLogSort(rows);
+      tbody.innerHTML = '';
+      sorted.forEach((entry) => {
+        const orderId = numericIdFromGid(entry.order_id);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${entry.date ? escapeHtml(formatDate(entry.timestamp)) : '—'}</td>
+          <td>${entry.date ? escapeHtml(formatTimeOnly(entry.timestamp)) : '—'}</td>
+          <td><span class="badge badge-type">${escapeHtml(typeLabel(entry.type))}</span></td>
+          <td>${entry.order_name ? orderLink(entry.order_name, orderId) : '—'}</td>
+          <td>${escapeHtml(entry.employee ? entry.employee.replace(/_/g, ' ') : '—')}</td>
+          <td class="mono">${escapeHtml(entry.value_before || '—')}</td>
+          <td class="mono">${escapeHtml(entry.value_after || '—')}</td>
+          <td>${escapeHtml(entry.notes || '—')}</td>
         `;
-
-        list.appendChild(div);
+        tbody.appendChild(tr);
       });
     }
 
@@ -2300,14 +2920,12 @@ NOTES
       const originalText = btn.textContent;
       btn.disabled = true;
       btn.textContent = '⏳ جاري التصدير...';
+      clearExportWarn();
 
       try {
-        const search = document.getElementById('logSearch').value.trim() || undefined;
-        const data = await apiFetch('get_logs_export', { method: 'GET', params: { search } });
+        const data = await apiFetch('get_logs_export', { method: 'GET', params: logParams() });
 
-        let entries = data.entries || [];
-        const typeFilter = document.getElementById('logTypeFilter').value;
-        if (typeFilter) entries = entries.filter(e => e.type === typeFilter);
+        const entries = data.entries || [];
 
         if (!entries.length) {
           showToast('لا توجد عمليات للتصدير', 'error');
@@ -2319,18 +2937,20 @@ NOTES
         const ws = wb.addWorksheet('سجل العمليات');
         ws.views = [{ state: 'frozen', ySplit: 1, rightToLeft: true }];
         ws.columns = [
-          { header: 'التاريخ والوقت', key: 'ts',    width: 22 },
-          { header: 'نوع العملية',    key: 'type',  width: 26 },
-          { header: 'الأوردر',        key: 'order', width: 14 },
-          { header: 'الموظف',         key: 'emp',   width: 18 },
-          { header: 'قبل',            key: 'before',width: 22 },
-          { header: 'بعد',            key: 'after', width: 22 },
-          { header: 'الملاحظات',      key: 'notes', width: 44 },
+          { header: 'التاريخ',    key: 'date',  width: 13 },
+          { header: 'الوقت',      key: 'time',  width: 13 },
+          { header: 'نوع العملية', key: 'type',  width: 26 },
+          { header: 'الأوردر',    key: 'order', width: 14 },
+          { header: 'الموظف',     key: 'emp',   width: 18 },
+          { header: 'قبل',        key: 'before',width: 22 },
+          { header: 'بعد',        key: 'after', width: 22 },
+          { header: 'الملاحظات',  key: 'notes', width: 44 },
         ];
 
         entries.forEach((e) => {
           ws.addRow({
-            ts:     e.timestamp ? formatCairo(e.timestamp) : null,
+            date:   e.timestamp ? formatDateForExport(e.timestamp) : null,
+            time:   e.timestamp ? formatTimeForExport(e.timestamp) : null,
             type:   typeLabel(e.type),
             order:  e.order_name || null,
             emp:    e.employee ? e.employee.replace(/_/g, ' ') : null,
@@ -2350,7 +2970,19 @@ NOTES
         URL.revokeObjectURL(a.href);
         a.remove();
 
-        showToast(`تم تصدير ${entries.length} عملية من السجل ✓`, 'success');
+        // Truth comes from the Worker, never computed on the page — see
+        // getLogsExport()/LOG_EXPORT_MAX in index.js (html-builder Standards #30).
+        const truncated = data.truncated === true;
+        if (truncated) {
+          const warn = document.getElementById('logExportWarn');
+          warn.innerHTML = `⚠️ <b>التصدير اتقص</b> — الملف فيه ${entries.length.toLocaleString('en-US')} صف`
+            + (data.total != null ? ` من أصل <b>${Number(data.total).toLocaleString('en-US')}</b> مطابقين للفلاتر` : '')
+            + `. ضيّق الفترة أو الفلاتر وصدّر على دفعات.`;
+          warn.style.display = '';
+          showToast(`⚠️ التصدير اتقص عند ${entries.length.toLocaleString('en-US')} صف — الملف مش كامل`, 'error', 7000);
+        } else {
+          showToast(`تم تصدير ${entries.length.toLocaleString('en-US')} عملية من السجل ✓`, 'success');
+        }
       } catch (e) {
         showToast('فشل تصدير السجل: ' + e.message, 'error');
       } finally {
@@ -2394,28 +3026,59 @@ NOTES
       return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`;
     }
 
-    function formatCairo(iso) {
-      if (!iso) return '—';
-      const base = new Date(iso);
-      if (Number.isNaN(base.getTime())) return iso;
+    // ── Unified date/time display — datetime-format.md ──
+    function toCairo(iso) { return new Date(new Date(iso).getTime() + 3 * 60 * 60 * 1000); }
 
-      const d = new Date(base.getTime() + 3 * 60 * 60 * 1000);
-      const pad = n => String(n).padStart(2, '0');
-      const y = d.getUTCFullYear();
-      const m = pad(d.getUTCMonth() + 1);
-      const day = pad(d.getUTCDate());
+    // Combined display (cards, "آخر عملية تصدير", not a table column)
+    function formatDateTime(iso) {
+      if (!iso) return '—';
+      const d = toCairo(iso), pad = n => String(n).padStart(2, '0');
       let h = d.getUTCHours();
-      const mins = pad(d.getUTCMinutes());
-      const ampm = h < 12 ? 'صباحاً' : 'مساءً';
+      const ampm = h >= 12 ? 'مساءً' : 'صباحاً';
       h = h % 12 || 12;
-      return `${y}-${m}-${day} ${pad(h)}:${mins} ${ampm}`;
+      return `📅 ${pad(d.getUTCDate())}/${pad(d.getUTCMonth()+1)}/${d.getUTCFullYear()} 🕐 ${pad(h)}:${pad(d.getUTCMinutes())} ${ampm}`;
+    }
+
+    // Table columns — "التاريخ" / "الوقت" independently, same source timestamp
+    function formatDate(iso) {
+      if (!iso) return '—';
+      const d = toCairo(iso), pad = n => String(n).padStart(2, '0');
+      return `📅 ${pad(d.getUTCDate())}/${pad(d.getUTCMonth()+1)}/${d.getUTCFullYear()}`;
+    }
+    function formatTimeOnly(iso) {
+      if (!iso) return '—';
+      const d = toCairo(iso), pad = n => String(n).padStart(2, '0');
+      let h = d.getUTCHours();
+      const ampm = h >= 12 ? 'مساءً' : 'صباحاً';
+      h = h % 12 || 12;
+      return `🕐 ${pad(h)}:${pad(d.getUTCMinutes())} ${ampm}`;
+    }
+
+    // XLSX cells — no emoji (breaks sort/filter inside the sheet)
+    function formatDateForExport(iso) {
+      const d = toCairo(iso), pad = n => String(n).padStart(2, '0');
+      return `${pad(d.getUTCDate())}-${pad(d.getUTCMonth()+1)}-${d.getUTCFullYear()}`;
+    }
+    function formatTimeForExport(iso) {
+      const d = toCairo(iso), pad = n => String(n).padStart(2, '0');
+      let h = d.getUTCHours();
+      const ampm = h >= 12 ? 'مساءً' : 'صباحاً';
+      h = h % 12 || 12;
+      return `${pad(h)}:${pad(d.getUTCMinutes())} ${ampm}`;
     }
 
     updateSettingsBtn();
     updateLoginSettingsBtn();
+    renderVersionUI();
     updateModeCardsUI();
+    msRenderList('orderStatus');
+    msRenderList('logType');
+    renderChips();
+    updateOrderFilterIconState();
+    updateLogFilterIconState();
     clearResults();
     loadEmployeesList();
+    checkWorkerVersion();
   </script>
 </body>
 </html>

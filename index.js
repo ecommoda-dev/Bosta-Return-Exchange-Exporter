@@ -1,8 +1,34 @@
 // ═══════════════════════════════════════════════════════════════
-// Bosta Return/Exchange Exporter — Worker v4.0.0
+// Bosta Return/Exchange Exporter — Worker v5.0.0
 // EcomModa Internal Tools
-// skills: worker-builder v1.0.0 · html-builder v1.0.0 · order-lifecycle v1.1.0 · constants v1.2.0 — 26-08-2026
+// skills: worker-builder v2.0.0 · html-builder v6.0.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026
 // ═══════════════════════════════════════════════════════════════
+//
+// v5.0.0 (paired with the HTML's full html-builder v6.0.0 UI migration —
+// 02-09-2026): get_logs / get_logs_count / get_logs_export now take CSV
+// multi-value `employees` and `types` params (?types=scan,export_return)
+// instead of single `employee`/`type` strings, via a shared
+// buildLogFilterSQL() helper — the HTML's log tab filters are now
+// multi-select (html-builder Log Filter Model v2). This is a breaking
+// query-param rename for anyone calling this Worker directly.
+//
+// v4.1.0 (skill-compliance pass — 02-09-2026):
+// - Added `?action=diag` and `?action=get_config` — mandatory for any Worker
+//   that writes (this one does metafieldsSet) per worker-builder Step 5A ⑨.
+//   Neither endpoint returns secret values — names/lengths only.
+// - Order objects returned by fetch_candidates now carry a numeric `orderId`
+//   (from `legacyResourceId`) alongside the GID `id`, per the mandatory
+//   "numeric order ID" rule — lets the HTML build a real Shopify hyperlink
+//   instead of guessing one.
+// - get_logs_export now returns `{ entries, cap, total, truncated }` instead
+//   of just `entries`, so a capped export can no longer silently claim
+//   "تم تصدير N عملية ✓" on a file that isn't the whole matching set.
+// - get_logs_count / get_logs_export now accept the same `type` filter as
+//   get_logs — previously the log tab's "total" count and the XLSX export
+//   silently ignored the type filter (count included all types; export was
+//   filtered client-side after already being capped server-side, which
+//   could report a truncated-but-wrong subset). Both endpoints — and the
+//   HTML calling them — now filter type server-side.
 //
 // v4.0.0 (UX overhaul, HTML-side — paired with this Worker):
 // - confirm_upload now accepts an optional `checklist` object from the
@@ -61,7 +87,9 @@
 // §CONSTANTS
 // ══════════════════════════════════════════════════════
 const TOOL_NAME = 'bosta_exchange_export';
+const WORKER_VERSION = '5.0.0';
 const SHOPIFY_API_VERSION = '2026-01';
+const LOG_EXPORT_MAX = 2000;
 
 const STATUS_BY_JOB = {
   return:   'Confirmed + RETURN',
@@ -116,6 +144,14 @@ function assertPost(request) {
 
 function cleanText(v) {
   return String(v ?? '').trim();
+}
+
+// Parses a CSV query param (?employees=ahmed,sara) into a clean string array.
+function csvParam(url, key) {
+  return (url.searchParams.get(key) || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
 }
 
 // Truncates to whole seconds so a value written now and re-read later
@@ -180,6 +216,14 @@ function chunks(arr, size) {
 
 function isShopifyCostError(err) {
   return /cost|exceeds the single query max cost limit|maximum cost/i.test(err?.message || String(err));
+}
+
+// Numeric order id for HTML-side Shopify hyperlinks — prefers legacyResourceId
+// (returned by the queries below), falls back to parsing the GID.
+function numericOrderId(order) {
+  const legacy = cleanText(order?.legacyResourceId);
+  if (legacy) return legacy;
+  return cleanText(order?.id).split('/').pop() || null;
 }
 
 // ══════════════════════════════════════════════════════
@@ -256,71 +300,69 @@ async function writeLog(db, entry) {
   ).run();
 }
 
-// getLogs — canonical: login/logout excluded in SQL, max 100/page.
-async function getLogs(db, {
-  tool     = null,
-  employee = null,
-  type     = null,
-  search   = null,
-  limit    = 100,
-  offset   = 0,
-} = {}) {
-  let sql = "SELECT * FROM logs WHERE type NOT IN ('login','logout')";
+// buildLogFilterSQL — shared WHERE-clause builder for getLogs/getLogsCount/
+// getLogsExport. `employees`/`types` are arrays (from CSV query params) so the
+// HTML's multi-select log filters (html-builder Log Filter Model v2) can pass
+// more than one value per filter — a single `employee`/`type` string still
+// works too (treated as a 1-element list).
+function buildLogFilterSQL({ tool = null, employees = [], types = [], search = null } = {}) {
+  let sql = "WHERE type NOT IN ('login','logout')";
   const b = [];
 
-  if (tool)     { sql += ' AND tool = ?';     b.push(tool); }
-  if (employee) { sql += ' AND employee = ?'; b.push(employee); }
-  if (type)     { sql += ' AND type = ?';     b.push(type); }
+  if (tool) { sql += ' AND tool = ?'; b.push(tool); }
+  if (employees?.length) { sql += ` AND employee IN (${employees.map(() => '?').join(',')})`; b.push(...employees); }
+  if (types?.length)     { sql += ` AND type IN (${types.map(() => '?').join(',')})`;         b.push(...types); }
   if (search) {
     sql += ' AND (order_name LIKE ? OR notes LIKE ?)';
     b.push(`%${search}%`, `%${search}%`);
   }
 
-  sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
+  return { sql, b };
+}
+
+// getLogs — canonical: login/logout excluded in SQL, max 100/page.
+async function getLogs(db, {
+  tool      = null,
+  employees = [],
+  types     = [],
+  search    = null,
+  limit     = 100,
+  offset    = 0,
+} = {}) {
+  const { sql: where, b } = buildLogFilterSQL({ tool, employees, types, search });
+  const sql = `SELECT * FROM logs ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
   b.push(Math.min(limit, 100), offset);
 
   return (await db.prepare(sql).bind(...b).all()).results;
 }
 
 // getLogsCount — call in parallel with getLogs() for pagination UI.
-async function getLogsCount(db, {
-  tool     = null,
-  employee = null,
-  search   = null,
-} = {}) {
-  let sql = "SELECT COUNT(*) as total FROM logs WHERE type NOT IN ('login','logout')";
-  const b = [];
-
-  if (tool)     { sql += ' AND tool = ?';     b.push(tool); }
-  if (employee) { sql += ' AND employee = ?'; b.push(employee); }
-  if (search) {
-    sql += ' AND (order_name LIKE ? OR notes LIKE ?)';
-    b.push(`%${search}%`, `%${search}%`);
-  }
-
-  const row = await db.prepare(sql).bind(...b).first();
+// Must accept every filter getLogs() accepts, or the displayed total silently
+// stops matching what's on screen (html-builder Standards #31).
+async function getLogsCount(db, { tool = null, employees = [], types = [], search = null } = {}) {
+  const { sql: where, b } = buildLogFilterSQL({ tool, employees, types, search });
+  const row = await db.prepare(`SELECT COUNT(*) as total FROM logs ${where}`).bind(...b).first();
   return row?.total ?? 0;
 }
 
-// getLogsExport — XLSX export only, up to 2000 rows. Never use getLogs() for this.
-async function getLogsExport(db, {
-  tool     = null,
-  employee = null,
-  search   = null,
-} = {}) {
-  let sql = "SELECT * FROM logs WHERE type NOT IN ('login','logout')";
-  const b = [];
+// getLogsExport — XLSX export only, up to LOG_EXPORT_MAX rows. Never use
+// getLogs() for this. Returns { entries, cap, total, truncated } — the caller
+// (HTML) must show `truncated` explicitly rather than reporting the export as
+// complete (html-builder Standards #30 — a capped export must never render as
+// an unconditional "تم تصدير N عملية ✓").
+async function getLogsExport(db, { tool = null, employees = [], types = [], search = null } = {}) {
+  const { sql: where, b } = buildLogFilterSQL({ tool, employees, types, search });
+  const total = await getLogsCount(db, { tool, employees, types, search });
 
-  if (tool)     { sql += ' AND tool = ?';     b.push(tool); }
-  if (employee) { sql += ' AND employee = ?'; b.push(employee); }
-  if (search) {
-    sql += ' AND (order_name LIKE ? OR notes LIKE ?)';
-    b.push(`%${search}%`, `%${search}%`);
-  }
+  const sql = `SELECT * FROM logs ${where} ORDER BY timestamp DESC LIMIT ?`;
+  const entries = (await db.prepare(sql).bind(...b, LOG_EXPORT_MAX).all()).results;
 
-  sql += ' ORDER BY timestamp DESC LIMIT 2000';
-
-  return (await db.prepare(sql).bind(...b).all()).results;
+  return {
+    entries,
+    cap: LOG_EXPORT_MAX,
+    total,
+    truncated: total > entries.length,
+  };
 }
 
 // Non-canonical helper (this tool's own addition, not part of §SHARED) —
@@ -502,6 +544,7 @@ function buildDetailsQuery(jobType) {
       nodes(ids: $ids) {
         ... on Order {
           id
+          legacyResourceId
           name
           phone
           email
@@ -548,6 +591,7 @@ async function fetchDiscoveryOrders(env, token, job) {
         edges {
           node {
             id
+            legacyResourceId
             name
             s2Status: metafield(namespace: "custom", key: "status_2_r_e") { value }
             courier: metafield(namespace: "custom", key: "courier") { value }
@@ -630,7 +674,9 @@ async function fetchCandidateOrders(env, token, job) {
       const directStatus = cleanText(order?.s2Status?.value);
       const courier = cleanText(order?.courier?.value);
       if (directStatus === job.expectedStatus && courier.toLowerCase() === 'bosta') {
-        orders.push(order);
+        // orderId: numeric legacy id, for the HTML to build a Shopify hyperlink
+        // (worker-builder Step 5 — "numeric order ID" rule).
+        orders.push({ ...order, orderId: numericOrderId(order) });
       }
     }
   }
@@ -1063,28 +1109,69 @@ export default {
       // ──────────────────────────────────────────────────────
 
       // ─── §LOG-ENDPOINTS ───────────────────────────────────
+      // CSV multi-select params, per html-builder Log Filter Model v2 —
+      // ?employees=ahmed,sara & ?types=scan,export_return
       if (action === 'get_logs') {
-        const employee = url.searchParams.get('employee') || null;
-        const type     = url.searchParams.get('type')     || null;
-        const search   = url.searchParams.get('search')   || null;
-        const limit    = Math.min(parseInt(url.searchParams.get('limit')  || '100', 10), 100);
-        const offset   = Math.max(parseInt(url.searchParams.get('offset') || '0', 10),    0);
-        const entries  = await getLogs(env.DB, { tool: TOOL_NAME, employee, type, search, limit, offset });
+        const employees = csvParam(url, 'employees');
+        const types     = csvParam(url, 'types');
+        const search    = url.searchParams.get('search') || null;
+        const limit     = Math.min(parseInt(url.searchParams.get('limit')  || '100', 10), 100);
+        const offset    = Math.max(parseInt(url.searchParams.get('offset') || '0', 10),    0);
+        const entries   = await getLogs(env.DB, { tool: TOOL_NAME, employees, types, search, limit, offset });
         return json({ ok: true, entries }, 200, request);
       }
 
       if (action === 'get_logs_count') {
-        const employee = url.searchParams.get('employee') || null;
-        const search   = url.searchParams.get('search')   || null;
-        const total    = await getLogsCount(env.DB, { tool: TOOL_NAME, employee, search });
+        const employees = csvParam(url, 'employees');
+        const types     = csvParam(url, 'types');
+        const search    = url.searchParams.get('search') || null;
+        const total     = await getLogsCount(env.DB, { tool: TOOL_NAME, employees, types, search });
         return json({ ok: true, total }, 200, request);
       }
 
       if (action === 'get_logs_export') {
-        const employee = url.searchParams.get('employee') || null;
-        const search   = url.searchParams.get('search')   || null;
-        const entries  = await getLogsExport(env.DB, { tool: TOOL_NAME, employee, search });
-        return json({ ok: true, entries }, 200, request);
+        const employees = csvParam(url, 'employees');
+        const types     = csvParam(url, 'types');
+        const search    = url.searchParams.get('search') || null;
+        const result    = await getLogsExport(env.DB, { tool: TOOL_NAME, employees, types, search });
+        return json({ ok: true, ...result }, 200, request);
+      }
+      // ──────────────────────────────────────────────────────
+
+      // ─── §DIAG — self-check + version, mandatory for a write/cache Worker ─
+      if (action === 'diag') {
+        const envKeys = Object.keys(env).map((key) => ({ key, length: String(env[key] ?? '').length }));
+
+        let shopify = { ok: false, error: null, scopes: null };
+        try {
+          const token = await getAccessToken(env);
+          const data = await shopifyGQL(env, token, `{ currentAppInstallation { accessScopes { handle } } }`);
+          shopify = { ok: true, error: null, scopes: (data?.data?.currentAppInstallation?.accessScopes || []).map((s) => s.handle) };
+        } catch (e) {
+          shopify = { ok: false, error: e.message, scopes: null };
+        }
+
+        let d1 = { ok: false, error: null };
+        try {
+          await env.DB.prepare('SELECT 1').first();
+          d1 = { ok: true, error: null };
+        } catch (e) {
+          d1 = { ok: false, error: e.message };
+        }
+
+        return json({
+          ok: true,
+          workerVersion: WORKER_VERSION,
+          envKeys,
+          shopify,
+          d1,
+          origin: request.headers.get('Origin') || null,
+          allowedOrigins: ALLOWED_ORIGINS,
+        }, 200, request);
+      }
+
+      if (action === 'get_config') {
+        return json({ ok: true, version: WORKER_VERSION }, 200, request);
       }
       // ──────────────────────────────────────────────────────
 
