@@ -2,11 +2,11 @@
 
 # Bosta Return / Exchange Exporter (`Bosta-Return-Exchange-Exporter`)
 
-![version](https://img.shields.io/badge/version-v1.4.0-blue)
+![version](https://img.shields.io/badge/version-v1.5.0-blue)
 
 **بتعمل إيه:** فحص أوردرات الاسترجاع/الاستبدال الجاهزة لبوسطة، تصديرها Excel، وتأكيد الرفع على داشبورد بوسطة — بيحدّث S2 (`custom.status_2_r_e`) على شوبيفاي أوتوماتيك.
 **مين بيستخدمها:** المخزن
-**الإصدار:** Worker `v5.2.0` · الواجهة `v5.2.0`
+**الإصدار:** Worker `v5.3.0` · الواجهة `v5.3.0`
 
 ## الروابط
 
@@ -22,8 +22,8 @@
 |---|---|
 | `check_employee` / `register_pin` / `verify_employee` / `log_logout` / `get_employees` | تسجيل الدخول |
 | `fetch_candidates` | يجيب أوردرات الاسترجاع/الاستبدال المرشّحة من شوبيفاي (`status_2_r_e` + `courier = Bosta`) — بيرجّع `currentCycle` (الدورة المفتوحة **بس**) + `cycleInfo` لكل أوردر، ومابيرجّعش `returns[]` خالص (v5.2.0) |
-| `check_export_duplicates` | يفحص لو الأوردرات دي اتصدّرت قبل كده |
-| `record_export` | يسجّل عملية تصدير Excel (بيتمنع لو فيه تكرار من غير `allowRepeat`) |
+| `check_export_duplicates` | يفحص لو **نفس دورة** الأوردر دي اتصدّرت قبل كده — المفتاح = اسم الأوردر + `cycleName` (v5.3.0) |
+| `record_export` | يسجّل عملية تصدير Excel (بيتمنع لو فيه تكرار من غير `allowRepeat`) — بيخزّن `cycleName`/`cycleCreatedAt` في `extra` (v5.3.0) |
 | `confirm_upload` | بيفحص دورات الاسترجاع من شوبيفاي الأول ويرفض بـ `409 CYCLE_BLOCKED` قبل أي كتابة (v5.2.0)، بعدين يكتب S2 الجديد (`In-Return` للاسترجاع · `Ready` للاستبدال) + وقت التحديث، ويتحقق مباشرة من شوبيفاي |
 | `record_manual_confirmation` | **غير مستخدم من الواجهة الحالية** (v4.0.0 دمجت خطوتين الاستبدال في `confirm_upload`) — الكود سايبه موجود لو احتاجوه تاني |
 | `get_logs` / `get_logs_count` / `get_logs_export` | سجل العمليات — فلاتر multi-select (`employees`/`types` CSV) + `search`، موحّدة بين التلاتة عبر `buildLogFilterSQL`. `get_logs_export` بيرجّع `cap`/`total`/`truncated` كمان (v5.0.0) |
@@ -106,7 +106,7 @@ git show 91c6027~1:3.33.html
 | ecommoda-order-lifecycle | v1.2.0 |
 | ecommoda-constants | v1.4.3 |
 
-آخر مطابقة: 02-09-2026 · `index.js` v5.2.0 · `index.html` v5.2.0
+آخر مطابقة: 02-09-2026 · `index.js` v5.3.0 · `index.html` v5.3.0
 🔴 معلّقة: — لا شيء
 
 ## مسائل مفتوحة
@@ -121,21 +121,23 @@ git show 91c6027~1:3.33.html
   `CYCLE_OVERLAP` · `TYPE_MISMATCH` · `EXCHANGE_WITHOUT_ITEMS` تحذير بس
   (flag it, never move it). عمود جديد «الدورة المفتوحة» + نافذة مراجعة في
   الواجهة.
-- 🔵 **قرار مستني أحمد: عمود «Delivery Notes» في ملف بوسطة.** كان بيقرا
-  `order.note` اللي الـ query ما بتطلبهوش أصلاً، فكان **دايمًا فاضي** من أول
-  يوم. لمّا اتفحص على `#51656` طلع محتوى الـ `note` ملاحظات داخلية لخدمة
-  العملاء («أوردر استبدال / لا يوجد مصاريف شحن / أوردر استرجاع») مش تعليمات
-  تسليم — فتحويله لشحنة حية عند بوسطة قرار شغل مش إصلاح باج. لحد ما يتقرر:
-  العمود فاضي **بقرار مكتوب في الكود** والحقل مش متسحوب.
+- ✅ **«Delivery Notes» — اتقرر 02-09-2026 (v5.3.0): يتملى من `order.note`.**
+  كان بيقرا الحقل من غير ما الـ query تطلبه، فكان **دايمًا فاضي** من أول يوم.
+  ⚠️ الـ `note` ملاحظات **داخلية** لخدمة العملاء (على `#51656`: «أوردر استبدال
+  / لا يوجد مصاريف شحن / أوردر استرجاع») — الكلام ده بقى بيوصل للمندوب فعليًا.
+  `flattenNote()` بتحوّله لسطر واحد قبل الكتابة في الملف.
 - 🔵 **رفض `confirm_upload` بسبب الدورات مش متسجّل في D1.** المهارة بتقول
   «reject + log»، والـ reject اتعمل. الـ log لأ — لأن `worker-builder` Rule 7
   بيمنع أي `writeLog` بقيمة `type` مش مسجّلة في `ecommoda-constants` §7.
   المطلوب: تسجيل `type` جديد (مقترح `cycle_block`) في الجدول هناك **الأول**،
   وبعدين يتضاف الـ `writeLog` في `findBlockedCycleOrders`.
-- 🔵 **`check_export_duplicates` بيفحص باسم الأوردر بس.** أوردر بدورة تانية
-  **شرعية** (`MULTI_CYCLE`) بيتقفل كـ«مكرر» ومحتاج `allowRepeat` — فالحماية
-  بتفقد معناها بالتدريج. المفتاح المفروض يبقى مركّب: اسم الأوردر + اسم
-  الدورة (`returns[].name`، متاح دلوقتي في `currentCycle.name`).
+- ✅ **مفتاح فحص التكرار — اتصلح 02-09-2026 (v5.3.0): اسم الأوردر + اسم
+  الدورة.** كان بالاسم بس، فأوردر بدورة تانية **شرعية** (`MULTI_CYCLE`) كان
+  بيتقفل كـ«مكرر» ويحتاج `allowRepeat` — والحماية كانت بتفقد معناها أوردر ورا
+  التاني. `record_export` بقى بيخزّن `cycleName`/`cycleCreatedAt` في `extra`.
+  **الصفوف القديمة** (قبل v5.3.0، مالهاش اسم دورة) لا بتتلغي ولا بتتحسب على
+  عماها: بتتطابق مع الدورة الحالية **بس** لو `timestamp >= cycle.createdAt` —
+  تصدير حصل قبل ما الدورة توجد مستحيل يكون تصدير ليها. مفيش migration.
 - 🔵 **`returns[].exchangeLineItems` بترجع فاضية على الدورات المقفولة.**
   ملاحظ على `#51656`: الأدمن بيعرض «Exchange item for return #51656-R2»
   والـ API بترجّع `exchangeLineItems: []` على الدورات الـ `CLOSED`، بينما
@@ -182,6 +184,6 @@ git show 91c6027~1:3.33.html
   `clearResults()` لسه موجودة داخليًا (بتتنده عند تبديل نوع العملية/الدخول/
   الخروج) رغم حذف زرار "تنظيف" اللي كان بينده عليها.
 
-آخر تحديث: 02-09-2026 — 16:40
+آخر تحديث: 02-09-2026 — 17:25
 
 </div>

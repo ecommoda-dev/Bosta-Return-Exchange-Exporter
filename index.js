@@ -1,8 +1,31 @@
 // ═══════════════════════════════════════════════════════════════
-// Bosta Return/Exchange Exporter — Worker v5.2.0
+// Bosta Return/Exchange Exporter — Worker v5.3.0
 // EcomModa Internal Tools
 // skills: worker-builder v2.0.0 · html-builder v6.2.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026
 // ═══════════════════════════════════════════════════════════════
+//
+// v5.3.0 (duplicate key + Delivery Notes — 02-09-2026, both Ahmed's call):
+// - The duplicate guard was keyed on the ORDER NAME alone, so a legitimate
+//   second cycle on an order that was exported for an earlier cycle was
+//   flagged as a repeat and needed `allowRepeat` — the guard was losing its
+//   meaning one multi-cycle order at a time. The key is now order name +
+//   cycle name (`returns[].name`), and `record_export` stores `cycleName`
+//   and `cycleCreatedAt` in `extra` so the match is exact from here on.
+//
+//   Log rows written before this version carry no cycle name. They are NOT
+//   discarded and NOT counted blindly — a row is matched to the current
+//   cycle only when it was written AFTER that cycle was created
+//   (`timestamp >= cycle.createdAt`). An export that happened before the
+//   cycle existed cannot possibly be an export OF that cycle. This keeps
+//   the whole history usable with no data migration.
+//
+// - Delivery Notes is filled from `order.note` again. It had been dead since
+//   the tool was written (the HTML read a field the query never asked for);
+//   v5.2.0 left it deliberately empty pending a decision, and the decision
+//   is to fill it. Note that `note` carries internal CS text — verified on
+//   #51656: "أوردر استبدال / لا يوجد مصاريف شحن / أوردر استرجاع" — so this
+//   text now reaches the courier. Whitespace is collapsed to one line so a
+//   multi-line note cannot break the Bosta sheet.
 //
 // v5.2.0 (R/E cycle correctness — 02-09-2026):
 // THE BUG: every export aggregated the line items of ALL return cycles on
@@ -38,15 +61,10 @@
 // - Three Bosta columns were reading fields the query never asked for, so
 //   they had been silently empty since the tool was written: Delivery Notes
 //   (`order.note`), Package Description and No. of Items (`order.lineItems`).
-//   They are now empty BY DECISION, with the reason in the code, rather than
-//   by accident — and neither field is fetched any more:
-//   · Package Description / No. of Items describe the package going OUT.
-//     Nothing goes out on a return, so they are filled for an exchange job
-//     only, from the open cycle's exchange items.
-//   · `order.note` holds internal CS bookkeeping, not delivery instructions —
-//     verified on #51656, whose note reads "أوردر استبدال / لا يوجد مصاريف
-//     شحن / أوردر استرجاع". Pushing that onto a live courier shipment is a
-//     business decision for Ahmed, not a silent side effect of a bug fix.
+//   Package Description / No. of Items describe the package going OUT, and
+//   nothing goes out on a return — so they are now filled for an exchange
+//   job only, from the open cycle's exchange items, and `lineItems` is not
+//   fetched at all. (Delivery Notes: see v5.3.0 above.)
 // - DETAILS_BATCH_SIZE 50 → 25, since each order now costs more.
 //
 // v5.0.0 (paired with the HTML's full html-builder v6.0.0 UI migration —
@@ -132,7 +150,7 @@
 // §CONSTANTS
 // ══════════════════════════════════════════════════════
 const TOOL_NAME = 'bosta_exchange_export';
-const WORKER_VERSION = '5.2.0';
+const WORKER_VERSION = '5.3.0';
 const SHOPIFY_API_VERSION = '2026-01';
 const LOG_EXPORT_MAX = 2000;
 
@@ -228,6 +246,11 @@ function normalizeOrderPayload(orders) {
       name,
       s2Status: cleanText(o?.s2Status),
       courier: cleanText(o?.courier),
+      // The open cycle this row belongs to — half of the duplicate key
+      // (v5.3.0). Null on a payload from an older page; the SQL below falls
+      // back to the timestamp rule when it is missing.
+      cycleName: cleanText(o?.cycleName) || null,
+      cycleCreatedAt: cleanText(o?.cycleCreatedAt) || null,
     });
   }
   return out;
@@ -447,15 +470,52 @@ async function writeLogsBatch(db, entries) {
   }
 }
 
-async function findExportDuplicateStats(db, orderNames) {
-  const names = [...new Set((orderNames || []).map(cleanText).filter(Boolean))];
-  if (!names.length) return {};
+// Duplicate key = order name + CYCLE name (v5.3.0 — Ahmed's call).
+// Keying on the order name alone flagged a legitimate second cycle as a
+// repeat, so `allowRepeat` was being used routinely and the guard was
+// draining of meaning.
+//
+// Rows written before v5.3.0 carry no `cycleName` in `extra`. They are not
+// thrown away and not counted blindly: such a row matches the current cycle
+// only if it was written AFTER that cycle was created. An export that
+// happened before the cycle existed cannot be an export of it. No migration.
+async function findExportDuplicateStats(db, orders) {
+  const byName = new Map();
+  for (const order of orders || []) {
+    const name = cleanText(order?.name);
+    if (!name || byName.has(name)) continue;
+    byName.set(name, {
+      name,
+      cycleName: cleanText(order?.cycleName) || null,
+      cycleCreatedAt: cleanText(order?.cycleCreatedAt) || null,
+    });
+  }
+  if (!byName.size) return {};
 
   const out = {};
   const exportTypePlaceholders = EXPORT_TYPES.map(() => '?').join(',');
 
-  for (const group of chunks(names, 80)) {
-    const namePlaceholders = group.map(() => '?').join(',');
+  // 20 orders/query keeps the bound-parameter count well under D1's limit
+  // (at most 20 × 3 + 1 + EXPORT_TYPES).
+  for (const group of chunks([...byName.values()], 20)) {
+    const clauses = [];
+    const params = [];
+
+    for (const order of group) {
+      if (order.cycleName && order.cycleCreatedAt) {
+        clauses.push(`(order_name = ? AND (
+          json_extract(extra, '$.cycleName') = ?
+          OR (json_extract(extra, '$.cycleName') IS NULL AND timestamp >= ?)
+        ))`);
+        params.push(order.name, order.cycleName, order.cycleCreatedAt);
+      } else {
+        // No cycle identity on the payload — fall back to the pre-v5.3.0
+        // behaviour rather than silently reporting "never exported".
+        clauses.push('(order_name = ?)');
+        params.push(order.name);
+      }
+    }
+
     const sql = `
       SELECT
         order_name,
@@ -463,17 +523,18 @@ async function findExportDuplicateStats(db, orderNames) {
         MAX(timestamp) AS last_export_at
       FROM logs
       WHERE tool = ?
-        AND order_name IN (${namePlaceholders})
         AND type IN (${exportTypePlaceholders})
+        AND (${clauses.join(' OR ')})
       GROUP BY order_name
       ORDER BY last_export_at DESC
     `;
 
-    const rows = (await db.prepare(sql).bind(TOOL_NAME, ...group, ...EXPORT_TYPES).all()).results || [];
+    const rows = (await db.prepare(sql).bind(TOOL_NAME, ...EXPORT_TYPES, ...params).all()).results || [];
     for (const row of rows) {
       if (!row.order_name) continue;
       out[row.order_name] = {
         orderName: row.order_name,
+        cycleName: byName.get(row.order_name)?.cycleName || null,
         exportCount: Number(row.export_count || 0),
         lastExportAt: row.last_export_at || null,
       };
@@ -646,6 +707,7 @@ function buildDetailsQuery() {
           name
           phone
           email
+          note
           createdAt
           displayFinancialStatus
           displayFulfillmentStatus
@@ -1182,7 +1244,7 @@ export default {
 
         if (!orders.length) return json({ ok: false, error: 'لا توجد أوردرات لفحص التكرار' }, 400, request);
 
-        const duplicates = await findExportDuplicateStats(env.DB, orders.map(o => o.name));
+        const duplicates = await findExportDuplicateStats(env.DB, orders);
 
         return json({
           ok: true,
@@ -1203,13 +1265,13 @@ export default {
         if (!employee) return json({ ok: false, error: 'employee مطلوب' }, 400, request);
         if (!orders.length) return json({ ok: false, error: 'لا توجد أوردرات للتسجيل' }, 400, request);
 
-        const duplicateMap = await findExportDuplicateStats(env.DB, orders.map(o => o.name));
+        const duplicateMap = await findExportDuplicateStats(env.DB, orders);
         const blocked = Object.keys(duplicateMap);
         if (blocked.length && !allowRepeat) {
           return json({
             ok: false,
             code: 'DUPLICATES_FOUND',
-            error: 'يوجد أوردرات تم تصديرها Excel قبل كده — راجع نافذة التكرار واسمح بالتصدير لو عايز تكمل',
+            error: 'يوجد أوردرات تم تصدير نفس دورتها Excel قبل كده — راجع نافذة التكرار واسمح بالتصدير لو عايز تكمل',
             duplicates: duplicateMap,
           }, 409, request);
         }
@@ -1229,6 +1291,10 @@ export default {
             jobType: job.jobType,
             expectedStatus: job.expectedStatus,
             courier: order.courier || 'Bosta',
+            // Half of the duplicate key — read back by findExportDuplicateStats
+            // on every later export of this order (v5.3.0).
+            cycleName: order.cycleName,
+            cycleCreatedAt: order.cycleCreatedAt,
             duplicateBeforeExport: !!duplicateMap[order.name],
             exportHistoryBefore: duplicateMap[order.name] || null,
           },

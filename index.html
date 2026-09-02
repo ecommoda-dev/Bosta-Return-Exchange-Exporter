@@ -1126,7 +1126,7 @@
             <table>
               <tr><th>action</th><th>الوصف</th></tr>
               <tr><td><code>fetch_candidates</code></td><td>جلب الأوردرات المطابقة من Shopify (بيتنده تلقائي عند الضغط على المربع) — بيرجّع <code>currentCycle</code> (الدورة المفتوحة بس) + <code>cycleInfo</code> لكل أوردر</td></tr>
-              <tr><td><code>check_export_duplicates</code></td><td>فحص تصدير سابق قبل بناء ملف Excel</td></tr>
+              <tr><td><code>check_export_duplicates</code></td><td>فحص تصدير سابق قبل بناء ملف Excel — المفتاح = اسم الأوردر + اسم الدورة (v5.3.0)</td></tr>
               <tr><td><code>record_export</code></td><td>تسجيل عملية التصدير في السجل</td></tr>
               <tr><td><code>confirm_upload</code></td><td>فحص دورات الاسترجاع من شوبيفاي (بيرفض بـ <code>409 CYCLE_BLOCKED</code> قبل أي كتابة) ← كتابة S2 + وقت التحديث + تحقق مباشر — نفس الـ endpoint لكل من الاسترجاع والاستبدال</td></tr>
               <tr><td><code>get_logs</code> / <code>get_logs_count</code></td><td>سجل العمليات — فلاتر multi-select (<code>employees</code>/<code>types</code> CSV) + pagination</td></tr>
@@ -1186,7 +1186,8 @@
               <li>⚠️ <b>أكواد للعلم بس (بتتصدّر عادي — flag it, never move it):</b> <code>MULTI_CYCLE</code> (دورات متتابعة، قانونية) · <code>CYCLE_OVERLAP</code> (تداخل تاريخي اتحل) · <code>TYPE_MISMATCH</code> (S2 بيقول استرجاع والدورة فيها قطع استبدال — <code>ecommoda-order-lifecycle</code> Rule 8: الـ API هي المرجع مش الميتافيلد) · <code>EXCHANGE_WITHOUT_ITEMS</code>. الكودين <code>CYCLE_OVERLAP</code> و<code>MULTI_CYCLE</code> مفصولين عمدًا — الأول شغل خدمة عملاء والتاني حد في الكود (<code>state-machines.md</code> §2.4).</li>
               <li>رفض <code>confirm_upload</code> بسبب الدورات <b>مش متسجّل في D1</b> — قيمة <code>type</code> لسه مش مسجّلة في <code>ecommoda-constants</code> §7، و<code>worker-builder</code> Rule 7 بيمنع أي <code>writeLog</code> بقيمة غير مسجّلة. تتسجّل هناك الأول ثم يتضاف الـ log.</li>
               <li>عمودا "Package Description" و"No. of Items" في ملف بوسطة بيتملوا في <b>الاستبدال بس</b> (قطع الدورة المفتوحة الخارجة). في الاسترجاع مفيش حاجة خارجة من المخزن فبيفضلوا فاضيين — بقرار صريح، مش لأن الحقل مش متسحوب (قبل v5.2.0 كانوا بيقروا <code>order.lineItems</code> اللي الـ query ما طلبتوش أصلاً).</li>
-              <li>عمود "Delivery Notes" فاضي <b>بقرار</b> مش بالصدفة. كان بيقرا <code>order.note</code> اللي الـ query ما طلبتوش أصلاً، ولمّا اتفحص على أوردر حقيقي (<span class="mono">#51656</span>) طلع محتواه ملاحظات داخلية لخدمة العملاء («أوردر استبدال / لا يوجد مصاريف شحن / أوردر استرجاع») مش تعليمات تسليم. تحويل الكلام ده لشحنة حية عند بوسطة قرار شغل يخص أحمد — لحد ما يتقرر، العمود فاضي والحقل مش متسحوب.</li>
+              <li>عمود "Delivery Notes" بقى بيتملى من <code>order.note</code> (قرار أحمد — v5.3.0). كان بيقرا الحقل ده من غير ما الـ query تطلبه، فكان <b>دايمًا فاضي</b> من أول يوم. ⚠️ خلي بالك: الـ <code>note</code> ده ملاحظات <b>داخلية</b> لخدمة العملاء (على <span class="mono">#51656</span>: «أوردر استبدال / لا يوجد مصاريف شحن / أوردر استرجاع») — الكلام ده بقى بيوصل للمندوب. <code>flattenNote()</code> بتحوّله لسطر واحد عشان الملاحظة متعددة السطور ماتكسرش ملف بوسطة.</li>
+              <li>🔑 <b>مفتاح فحص التكرار = اسم الأوردر + اسم الدورة</b> (v5.3.0). قبل كده كان الاسم بس، فأوردر بدورة تانية <b>شرعية</b> كان بيتقفل كـ«مكرر» ويحتاج <code>allowRepeat</code> — والحماية كانت بتفقد معناها أوردر ورا التاني. <code>record_export</code> بقى بيخزّن <code>cycleName</code>/<code>cycleCreatedAt</code> في <code>extra</code>. الصفوف القديمة (قبل v5.3.0) مالهاش اسم دورة — مش بتتلغي ولا بتتحسب على عماها: بتتطابق مع الدورة الحالية <b>بس</b> لو اتكتبت <b>بعد</b> ما الدورة دي اتفتحت (<code>timestamp >= cycle.createdAt</code>)، لأن تصدير حصل قبل ما الدورة توجد أصلاً مستحيل يكون تصدير ليها. مفيش أي migration للبيانات.</li>
               <li>S2 = "In-Return" بيتكتب يدوي في الاسترجاع فور تأكيد الرفع — استثناء مقصود ومؤكد مع Ahmed (06-08-2026). راجع تعليق أعلى ملف الـ Worker.</li>
               <li>كل كتابة لـ S2 بتتسجل مرتين في D1: مرة تحت tool الأداة نفسها، ومرة تحت <code>tool = 'metafields_change'</code> (للـ KPIs المشتركة بين كل الأدوات).</li>
               <li>الأداة مبتكلمش Bosta API مباشرة — الرفع الفعلي على داشبورد بوسطة لسه بيدوي بره الأداة تماماً؛ الأداة بس بتفتح صفحة الرفع لتسهيل الخطوة.</li>
@@ -1208,11 +1209,15 @@
   <div class="eco-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="eco-modal">
       <div class="eco-modal-hdr">
-        <span id="changelogTitle">V5.2.0 — Changelog</span>
+        <span id="changelogTitle">V5.3.0 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">✕</button>
       </div>
       <div class="eco-modal-body">
         <div class="hint">
+          <b>V5.3.0</b><br>
+          - فحص التكرار بقى على <b>اسم الأوردر + اسم الدورة</b> بدل اسم الأوردر لوحده — أوردر بدورة استرجاع/استبدال تانية شرعية مابقاش يتقفل كـ«مكرر». الصفوف القديمة في السجل (مالهاش اسم دورة) بتتطابق مع الدورة الحالية بس لو اتكتبت <b>بعد</b> ما الدورة اتفتحت — من غير أي migration.<br>
+          - عمود "Delivery Notes" في ملف بوسطة بقى بيتملى من ملاحظة الأوردر (<span class="mono">note</span>) فعليًا — كان مقروء في الكود ومش متسحوب من الـ query، يعني فاضي من أول يوم. الملاحظة بتتحوّل لسطر واحد قبل ما تتكتب في الملف.<br>
+          <br>
           <b>V5.2.0</b><br>
           - 🔴 <b>إصلاح دورات الاسترجاع.</b> الملف كان بيتبني من قطع <b>كل</b> دورات الاسترجاع على الأوردر — بما فيها الدورات المقفولة من زمان. مقيس على أوردر <span class="mono">#51656</span> (تلات دورات: R1 مقفولة، R2 مقفولة، R3 مفتوحة): الملف طلع 3 قطع و<span class="mono">Goods Value = 6300</span> بدل قطعة واحدة و<span class="mono">1750</span>. دلوقتي بيتبني من <b>الدورة المفتوحة الحالية بس</b>.<br>
           - الـ Worker بقى يرتّب الدورات بـ <span class="mono">createdAt</span> (مش بترتيب المصفوفة)، بيشيل <span class="mono">CANCELED</span>/<span class="mono">DECLINED</span> قبل الترتيب، وبيرجّع <span class="mono">currentCycle</span> واحدة بدل <span class="mono">returns[]</span> كلها — فالتجميع القديم بقى مستحيل من الواجهة.<br>
@@ -1286,7 +1291,7 @@
       </div>
       <div class="modal-body">
         <div class="export-dup-note">
-          الأوردرات التالية تم تصديرها في ملف Excel بنجاح قبل كده.
+          الأوردرات التالية تم تصدير <b>نفس دورة الاسترجاع/الاستبدال دي</b> في ملف Excel بنجاح قبل كده.
           راجع العدد وآخر وقت تصدير قبل ما تسمح بتصديرها مرة تانية.
         </div>
         <div class="export-dup-summary" id="exportDuplicateSummary"></div>
@@ -1380,8 +1385,8 @@
     </div>
   </div>
   <script>
-    const TOOL_VERSION = '5.2.0';
-    const MIN_WORKER_VERSION = '5.2.0'; // lowest Worker version this page relies on (order.currentCycle + order.cycleInfo)
+    const TOOL_VERSION = '5.3.0';
+    const MIN_WORKER_VERSION = '5.3.0'; // lowest Worker version this page relies on (per-cycle duplicate key)
     const SHOP_DOMAIN = '6c7e1a-53.myshopify.com';
     const CFG_KEY = 'bosta_exchange_export_config_v3';
     const LOG_PAGE_SIZE = 100;
@@ -2233,6 +2238,10 @@
         name: order.name,
         s2Status: order.s2Status?.value || JOB_META[state.jobType].expected,
         courier: order.courier?.value || 'Bosta',
+        // Half of the duplicate key — a second, legitimate cycle on the same
+        // order is no longer reported as a repeat export (v5.3.0).
+        cycleName: order.currentCycle?.name || order.cycleInfo?.currentCycleName || null,
+        cycleCreatedAt: order.currentCycle?.createdAt || null,
       }));
     }
 
@@ -2320,6 +2329,7 @@
       const list = Object.entries(duplicates || {})
         .map(([name, row]) => ({
           name,
+          cycleName: row?.cycleName || null,
           exportCount: Number(row?.exportCount || 0),
           lastExportAt: row?.lastExportAt || null,
         }))
@@ -2335,7 +2345,7 @@
         const div = document.createElement('div');
         div.className = 'export-dup-table-row';
         div.innerHTML = `
-          <div class="export-dup-order">${escapeHtml(item.name)}</div>
+          <div class="export-dup-order">${escapeHtml(item.name)}${item.cycleName ? `<div class="cycle-sub">${escapeHtml(item.cycleName)}</div>` : ''}</div>
           <div>${escapeHtml(formatDateTime(item.lastExportAt))}</div>
           <div class="export-dup-count">${escapeHtml(item.exportCount)}</div>
         `;
@@ -2797,6 +2807,13 @@
       syncSelectAllOrders();
     }
 
+    // Bosta reads one cell per column; an order note is free text and often
+    // multi-line ("أوردر استبدال \n لا يوجد مصاريف شحن \n أوردر استرجاع").
+    function flattenNote(note) {
+      const text = String(note ?? '').replace(/\s+/g, ' ').trim();
+      return text || null;
+    }
+
     async function buildExcelExportFile(orders, jobType) {
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Sheet1');
@@ -2945,12 +2962,10 @@
           packageType:   null,
           itemCount:     packageItemCountForExport !== 1 ? packageItemCountForExport : null,
           description:   packageDescriptionForExport,
-          // Empty by decision, not by accident. This used to read `order.note`,
-          // a field the Worker's query never asked for — and `note` turns out to
-          // hold internal CS bookkeeping ("أوردر استبدال / لا يوجد مصاريف شحن"),
-          // not delivery instructions. Sending that to a live courier shipment
-          // is Ahmed's call; until he makes it, the column stays empty.
-          deliveryNotes: null,
+          // Ahmed's call (v5.3.0): fill it. `note` is the order's internal CS
+          // note, so that text now reaches the courier — collapsed to a single
+          // line so a multi-line note cannot break the Bosta sheet.
+          deliveryNotes: flattenNote(order.note),
           orderRef:      order.name    || null,
           returnItems:   returnItemsCount,
           returnDesc,
