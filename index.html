@@ -1209,11 +1209,14 @@
   <div class="eco-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="eco-modal">
       <div class="eco-modal-hdr">
-        <span id="changelogTitle">V5.4.0 — Changelog</span>
+        <span id="changelogTitle">V5.5.0 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">✕</button>
       </div>
       <div class="eco-modal-body">
         <div class="hint">
+          <b>V5.5.0</b><br>
+          - اتشال آخر عمود من ملف بوسطة: العمود U «Brand Name» (كان بيتكتب فيه <span class="mono">Ecommoda</span> ثابت لكل صف) — بطلب مباشر من أحمد. الملف بقى 20 عمود بدل 21، من "Full Name" لحد "Pay With Bosta Credits?"، وباقي الأعمدة مكانها ما اتغيّرش.<br>
+          <br>
           <b>V5.4.0</b><br>
           - رفض تحديث الحالة بسبب دورات الاسترجاع بقى <b>يتسجّل في D1</b> — صف لكل أوردر متمنوع (<span class="mono">type = 'cycle_block'</span>) شايل سبب المنع والحالة اللي ما اتكتبتش. القاعدة «reject + log» بقت مكتملة (الرفض كان شغال من v5.2.0، الناقص كان السجل).<br>
           - فلتر جديد في سجل العمليات: «منع — دورات الاسترجاع».<br>
@@ -1390,7 +1393,7 @@
     </div>
   </div>
   <script>
-    const TOOL_VERSION = '5.4.0';
+    const TOOL_VERSION = '5.5.0';
     const MIN_WORKER_VERSION = '5.4.0'; // lowest Worker version this page relies on (cycle_block log rows)
     const SHOP_DOMAIN = '6c7e1a-53.myshopify.com';
     const CFG_KEY = 'bosta_exchange_export_config_v3';
@@ -2851,7 +2854,6 @@
         { key:'returnDesc' },
         { key:'goodsValue' },
         { key:'bostaCredits' },
-        { key:'brandName' },
       ];
 
       ws.addRow([
@@ -2875,7 +2877,6 @@
         'Return Package\nDescription',
         'Goods Value\nAmount',
         'Pay With Bosta\nCredits?',
-        'Brand Name',
       ]);
 
       orders.forEach(order => {
@@ -2983,7 +2984,6 @@
           returnDesc,
           goodsValue:    goodsValueFinal,
           bostaCredits:  null,
-          brandName:     'Ecommoda',
         });
       });
 
