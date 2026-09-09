@@ -2,11 +2,11 @@
 
 # Bosta Return / Exchange Exporter (`Bosta-Return-Exchange-Exporter`)
 
-![version](https://img.shields.io/badge/version-v1.6.0-blue)
+![version](https://img.shields.io/badge/version-v1.7.0-blue)
 
 **بتعمل إيه:** فحص أوردرات الاسترجاع/الاستبدال الجاهزة لبوسطة، تصديرها Excel، وتأكيد الرفع على داشبورد بوسطة — بيحدّث S2 (`custom.status_2_r_e`) على شوبيفاي أوتوماتيك.
 **مين بيستخدمها:** المخزن
-**الإصدار:** Worker `v5.4.0` · الواجهة `v5.5.0`
+**الإصدار:** Worker `v5.5.0` · الواجهة `v5.6.0`
 
 ## الروابط
 
@@ -21,7 +21,7 @@
 | `?action=` | بيعمل إيه |
 |---|---|
 | `check_employee` / `register_pin` / `verify_employee` / `log_logout` / `get_employees` | تسجيل الدخول |
-| `fetch_candidates` | يجيب أوردرات الاسترجاع/الاستبدال المرشّحة من شوبيفاي (`status_2_r_e` + `courier = Bosta`) — بيرجّع `currentCycle` (الدورة المفتوحة **بس**) + `cycleInfo` لكل أوردر، ومابيرجّعش `returns[]` خالص (v5.2.0) |
+| `fetch_candidates` | يجيب أوردرات الاسترجاع/الاستبدال المرشّحة من شوبيفاي (`status_2_r_e` + `courier = Bosta`) — بيرجّع `currentCycle` (الدورة المفتوحة **بس**) + `cycleInfo` + `outgoingItems` لكل أوردر، ومابيرجّعش `returns[]` ولا `lineItems[]` خالص (v5.2.0 · v5.5.0) |
 | `check_export_duplicates` | يفحص لو **نفس دورة** الأوردر دي اتصدّرت قبل كده — المفتاح = اسم الأوردر + `cycleName` (v5.3.0) |
 | `record_export` | يسجّل عملية تصدير Excel (بيتمنع لو فيه تكرار من غير `allowRepeat`) — بيخزّن `cycleName`/`cycleCreatedAt` في `extra` (v5.3.0) |
 | `confirm_upload` | بيفحص دورات الاسترجاع من شوبيفاي الأول ويرفض بـ `409 CYCLE_BLOCKED` قبل أي كتابة (v5.2.0) — والرفض بيتسجّل في D1 كـ `cycle_block` مع `logged` في الرد (v5.4.0). بعدين يكتب S2 الجديد (`In-Return` للاسترجاع · `Ready` للاستبدال) + وقت التحديث، ويتحقق مباشرة من شوبيفاي |
@@ -78,6 +78,19 @@ Build watch paths : * (الافتراضي — لسه ما اتضيّقتش)
   — البوابة الحقيقية هي مودال الواجهة، مش الـ Worker. (⚠️ ده **مابينطبقش**
   على حارس الدورات المضاف في v5.2.0 — ده بيتفحص سيرفر-سايد فعليًا من شوبيفاي
   وبيرفض قبل الكتابة.)
+- 🔴 **`exchangeLineItems` الفاضية مش معناها استرجاع.** تعديل أوردر بيشيل
+  قطعة الاستبدال اللي شوبيفاي عملها ويحط واحدة بالإيد بيفضّي الـ connection
+  **نهائيًا** على استبدال حي — وشوبيفاي في الـ Admin لسه بتطبع «Exchange item
+  for return #X» على السطر المشال، يعني الشاشة والـ API بيتناقضوا. مقيس حيًا
+  على `#53531` و`#53701` (09-09-2026): الملف طلع من غير `Package Description`
+  ولا `No. of Items`، و`Goods Value` رجع لسعر القطعة **الراجعة**
+  (`#53701`: 2600 بدل 2400 — غلط في الفلوس راح للكوريير).
+  القطع الخارجة بقت تتحسب في `§SHOPIFY::outgoingItems` — الدورة أولاً، وبعدين
+  سطور الأوردر اللي `currentQuantity > 0 && unfulfilledQuantity > 0`.
+  **fallback مش merge** (الدمج بيعدّ القطعة مرتين على استبدال سليم)، و**مابيعيدش
+  التصنيف** (Rule 8 لسه بتتقرا من الدورة لوحدها). القاعدة →
+  `ecommoda-order-lifecycle` Rule 8، والتحديث المقترح في
+  `skillsupdates20260909.md`.
 - **الأوردر ممكن يكون عدّى بأكتر من دورة استرجاع/استبدال، والـ S2 بيقول على
   الأخيرة بس.** أي حساب هنا (وصف الشحنة · العدد · `Goods Value`) لازم يتبني
   من `order.currentCycle` — الدورة المفتوحة الوحيدة — مش من `returns[]` كلها.
@@ -110,9 +123,34 @@ git show 91c6027~1:3.33.html
 | ecommoda-constants | v1.4.3 |
 
 آخر مطابقة: 02-09-2026 · `index.js` v5.4.0 · `index.html` v5.5.0
+🔴 البصمة دي **ما اتحدّثتش** في v5.5.0/v5.6.0 — راجع «مسائل مفتوحة».
 🔴 معلّقة: — `cycle_block` مستني التسجيل في `ecommoda-constants` §7
 
 ## مسائل مفتوحة
+
+- ✅ **قطع الاستبدال بعد تعديل الأوردر — اتصلحت 09-09-2026 (Worker v5.5.0 ·
+  الواجهة v5.6.0).** التفاصيل والقياس في «فخاخ الأداة دي» فوق. اللي اتعمل:
+  بلوك `§SHOPIFY::outgoingItems` جديد في الـ Worker
+  (`itemsFromCycle` / `itemsFromUnfulfilledLines` / `resolveOutgoingItems`)،
+  و`fetch_candidates` بقى يرجّع `outgoingItems` محسوبة سيرفر-سايد — الواجهة
+  مابقتش تشوف `exchangeLineItems` ولا `lineItems` خام، فالتجميع الغلط بقى
+  **مستحيل** منها (نفس حماية `returns` من v5.2.0). كود تحذير جديد
+  `EXCHANGE_ITEMS_RECOVERED` (الصف بيتصدّر + الموظف بيتنبّه)، و
+  `EXCHANGE_WITHOUT_ITEMS` بقى **حاجب** بدل تحذير بقرار أحمد — صف بوسطة من غير
+  ولا قطعة خارجة مش شحنة أصلاً. الحجب متطبّق سيرفر-سايد في `confirm_upload`
+  كمان، فحارس الدورات مابقاش استعلام scalars بس (batch 50 → 20 + نفس
+  halve-and-retry بتاع الـ query cost). `MIN_WORKER_VERSION` في الواجهة بقى
+  `5.5.0` — Worker أقدم مابيرجّعش `outgoingItems` وكان هيفضّي الأعمدة بصمت.
+  🔴 **باقي:** تطبيق `skillsupdates20260909.md` على المهارات (أحمد، جلسة منفصلة).
+
+- 🔴 **بصمة المهارات في الريبو ده متأخرة — مافيش جرد اتعمل.** الجدول فوق بيقول
+  `worker-builder v2.0.0` · `html-builder v6.2.0` · `order-lifecycle v1.2.0` ·
+  `constants v1.4.3`، والموجود فعليًا وقت الكتابة:
+  **worker-builder v3.0.0 · html-builder v7.0.0 · order-lifecycle v1.4.0 ·
+  constants v2.0.0 · shopify-graphql-helper v2.0.0**. تعديل v5.5.0/v5.6.0
+  راجع **Rules 8 / 13 / 14 / 15** من `order-lifecycle` بس — مافيش مراجعة
+  امتثال كاملة، والبصمة **متسابة زي ما هي عن قصد** بدل ما تدّعي مراجعة ما
+  حصلتش. محتاج `skills-sweep` على الأداة دي.
 
 - ✅ **دورات الاسترجاع — اتصلحت 02-09-2026 (v5.2.0).** التفاصيل في «فخاخ
   الأداة دي» فوق. اللي اتعمل: الـ Worker بيرتّب `returns[]` بـ `createdAt`
@@ -186,6 +224,6 @@ git show 91c6027~1:3.33.html
   `clearResults()` لسه موجودة داخليًا (بتتنده عند تبديل نوع العملية/الدخول/
   الخروج) رغم حذف زرار "تنظيف" اللي كان بينده عليها.
 
-آخر تحديث: 02-09-2026 — 19:30
+آخر تحديث: 09-09-2026
 
 </div>
