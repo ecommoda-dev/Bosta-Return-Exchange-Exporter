@@ -1125,7 +1125,7 @@
             <h4>الـ Endpoints الرئيسية</h4>
             <table>
               <tr><th>action</th><th>الوصف</th></tr>
-              <tr><td><code>fetch_candidates</code></td><td>جلب الأوردرات المطابقة من Shopify (بيتنده تلقائي عند الضغط على المربع) — بيرجّع <code>currentCycle</code> (الدورة المفتوحة بس) + <code>cycleInfo</code> لكل أوردر</td></tr>
+              <tr><td><code>fetch_candidates</code></td><td>جلب الأوردرات المطابقة من Shopify (بيتنده تلقائي عند الضغط على المربع) — بيرجّع <code>currentCycle</code> (الدورة المفتوحة بس) + <code>cycleInfo</code> + <code>outgoingItems</code> لكل أوردر</td></tr>
               <tr><td><code>check_export_duplicates</code></td><td>فحص تصدير سابق قبل بناء ملف Excel — المفتاح = اسم الأوردر + اسم الدورة (v5.3.0)</td></tr>
               <tr><td><code>record_export</code></td><td>تسجيل عملية التصدير في السجل</td></tr>
               <tr><td><code>confirm_upload</code></td><td>فحص دورات الاسترجاع من شوبيفاي (بيرفض بـ <code>409 CYCLE_BLOCKED</code> قبل أي كتابة) ← كتابة S2 + وقت التحديث + تحقق مباشر — نفس الـ endpoint لكل من الاسترجاع والاستبدال</td></tr>
@@ -1153,6 +1153,7 @@
               <li><code>§LOG-ENDPOINTS</code> (Worker) — <code>get_logs</code> / <code>get_logs_count</code> / <code>get_logs_export</code></li>
               <li><code>§DIAG</code> (Worker) — <code>diag</code> / <code>get_config</code></li>
               <li><code>§SHOPIFY::returnCycles</code> (Worker) — <code>sortedReturnCycles</code> / <code>hasHistoricalOverlap</code> / <code>analyzeReturnCycles</code> — بتختار الدورة المفتوحة وبتطلّع أكواد المنع والتحذير</li>
+              <li><code>§SHOPIFY::outgoingItems</code> (Worker) — <code>itemsFromCycle</code> / <code>itemsFromUnfulfilledLines</code> / <code>resolveOutgoingItems</code> — بتحدد القطع الخارجة فعليًا للعميل (الدورة أولاً، وبعدين سطور الأوردر غير المشحونة)</li>
               <li><code>§SHOPIFY::assertCyclesConfirmable</code> (Worker) — <code>findBlockedCycleOrders</code> / <code>logCycleBlocks</code> — بوابة سيرفر-سايد قبل كتابة S2 + تسجيل الرفض في D1</li>
               <li><code>§CYCLES</code> (HTML) — <code>isCycleBlocked</code> / <code>cycleCellHtml</code> / <code>openCycleReviewModal</code> — عمود الدورة + نافذة المراجعة</li>
               <li><code>selectJobType</code> / <code>setModeCardsLoading</code> (HTML) — مربعات ملوّنة + تحميل تلقائي</li>
@@ -1183,9 +1184,9 @@
               <li>بعد نجاح التصدير: <code>window.open(...)</code> بيفتح رابط رفع الملف على بوسطة (<code>business.bosta.co/orders/upload/smart-upload</code>) في تاب جديد، وفي نفس الوقت بتتفتح نافذة تأكيد تحديث الحالة — الاتنين تلقائي، من غير أي زرار وسيط.</li>
               <li>🔁 <b>دورة واحدة مفتوحة بس (v5.2.0).</b> الأوردر ممكن يكون عدّى بأكتر من دورة استرجاع/استبدال. الملف بيتبنى من <b>الدورة المفتوحة الحالية بس</b> (<code>order.currentCycle</code> — الـ Worker بيرتّب <code>returns[]</code> بـ <code>createdAt</code>، بيشيل <code>CANCELED</code>/<code>DECLINED</code>، وبياخد أحدث دورة مفتوحة). قبل كده كان بيجمّع قطع <b>كل</b> الدورات — بما فيها المقفولة من شهور — فكان بيطلع في الملف قطع رجعت للمخزن خلاص. الـ Worker مابيرجّعش <code>returns</code> للصفحة أصلاً دلوقتي، فالتجميع القديم بقى مستحيل. القاعدة → <code>ecommoda-order-lifecycle</code> Rule 15 ②.</li>
               <li>⛔ <b>أكواد المنع:</b> <code>CYCLE_OVERLAP_OPEN</code> (أكتر من دورة مفتوحة — مش عارفين أنهي واحدة هتتشحن) · <code>NO_OPEN_CYCLE</code> (S2 بيقول فيه طلب ومفيش دورة مفتوحة) · <code>CYCLES_TRUNCATED</code> (أكتر من 10 دورات) · <code>ORDER_NOT_READABLE</code> (شوبيفاي ما رجّعتش الأوردر وقت الفحص). الأوردر المتوقّف مش بيتحدد، الـ checkbox بتاعه disabled، و<code>confirm_upload</code> بيرفضه سيرفر-سايد كمان بـ 409.</li>
-              <li>⚠️ <b>أكواد للعلم بس (بتتصدّر عادي — flag it, never move it):</b> <code>MULTI_CYCLE</code> (دورات متتابعة، قانونية) · <code>CYCLE_OVERLAP</code> (تداخل تاريخي اتحل) · <code>TYPE_MISMATCH</code> (S2 بيقول استرجاع والدورة فيها قطع استبدال — <code>ecommoda-order-lifecycle</code> Rule 8: الـ API هي المرجع مش الميتافيلد) · <code>EXCHANGE_WITHOUT_ITEMS</code>. الكودين <code>CYCLE_OVERLAP</code> و<code>MULTI_CYCLE</code> مفصولين عمدًا — الأول شغل خدمة عملاء والتاني حد في الكود (<code>state-machines.md</code> §2.4).</li>
+              <li>⚠️ <b>أكواد للعلم بس (بتتصدّر عادي — flag it, never move it):</b> <code>MULTI_CYCLE</code> (دورات متتابعة، قانونية) · <code>CYCLE_OVERLAP</code> (تداخل تاريخي اتحل) · <code>TYPE_MISMATCH</code> (S2 بيقول استرجاع والدورة فيها قطع استبدال — <code>ecommoda-order-lifecycle</code> Rule 8: الـ API هي المرجع مش الميتافيلد) · <code>EXCHANGE_ITEMS_RECOVERED</code> (قطع الاستبدال اتقروا من سطور الأوردر مش من الدورة — v5.6.0). أما <code>EXCHANGE_WITHOUT_ITEMS</code> فبقى <b>حاجب</b> من v5.6.0، مش تحذير. الكودين <code>CYCLE_OVERLAP</code> و<code>MULTI_CYCLE</code> مفصولين عمدًا — الأول شغل خدمة عملاء والتاني حد في الكود (<code>state-machines.md</code> §2.4).</li>
               <li>رفض <code>confirm_upload</code> بسبب الدورات <b>بيتسجّل في D1</b> (v5.4.0) — صف لكل أوردر متمنوع بـ <code>type = 'cycle_block'</code>، شايل الكود والقيمة والإجراء والحالة اللي <b>ما اتكتبتش</b>. ظاهر في تاب سجل العمليات تحت فلتر «منع — دورات الاسترجاع». لو الكتابة في D1 نفسها فشلت، الرد بيرجّع <code>logged: false</code> والواجهة بتقول كده صراحة — الرفض بيفضل قايم، اللي بيضيع هو السجل بس.</li>
-              <li>عمودا "Package Description" و"No. of Items" في ملف بوسطة بيتملوا في <b>الاستبدال بس</b> (قطع الدورة المفتوحة الخارجة). في الاسترجاع مفيش حاجة خارجة من المخزن فبيفضلوا فاضيين — بقرار صريح، مش لأن الحقل مش متسحوب (قبل v5.2.0 كانوا بيقروا <code>order.lineItems</code> اللي الـ query ما طلبتوش أصلاً).</li>
+              <li>عمودا "Package Description" و"No. of Items" في ملف بوسطة بيتملوا في <b>الاستبدال بس</b> — من <code>order.outgoingItems</code>، القايمة اللي الـ Worker بيحسبها (<code>§SHOPIFY::outgoingItems</code>). مصدرها الأساسي قطع الدورة المفتوحة الخارجة، ولو الدورة اتفضّت بتعديل أوردر بيرجع لسطور الأوردر اللي لسه ما اتشحنتش مع تحذير <code>EXCHANGE_ITEMS_RECOVERED</code> (v5.6.0). في الاسترجاع مفيش حاجة خارجة من المخزن فبيفضلوا فاضيين — بقرار صريح، مش لأن الحقل مش متسحوب (قبل v5.2.0 كانوا بيقروا <code>order.lineItems</code> اللي الـ query ما طلبتوش أصلاً).</li>
               <li>عمود "Delivery Notes" بقى بيتملى من <code>order.note</code> (قرار أحمد — v5.3.0). كان بيقرا الحقل ده من غير ما الـ query تطلبه، فكان <b>دايمًا فاضي</b> من أول يوم. ⚠️ خلي بالك: الـ <code>note</code> ده ملاحظات <b>داخلية</b> لخدمة العملاء (على <span class="mono">#51656</span>: «أوردر استبدال / لا يوجد مصاريف شحن / أوردر استرجاع») — الكلام ده بقى بيوصل للمندوب. <code>flattenNote()</code> بتحوّله لسطر واحد عشان الملاحظة متعددة السطور ماتكسرش ملف بوسطة.</li>
               <li>🔑 <b>مفتاح فحص التكرار = اسم الأوردر + اسم الدورة</b> (v5.3.0). قبل كده كان الاسم بس، فأوردر بدورة تانية <b>شرعية</b> كان بيتقفل كـ«مكرر» ويحتاج <code>allowRepeat</code> — والحماية كانت بتفقد معناها أوردر ورا التاني. <code>record_export</code> بقى بيخزّن <code>cycleName</code>/<code>cycleCreatedAt</code> في <code>extra</code>. الصفوف القديمة (قبل v5.3.0) مالهاش اسم دورة — مش بتتلغي ولا بتتحسب على عماها: بتتطابق مع الدورة الحالية <b>بس</b> لو اتكتبت <b>بعد</b> ما الدورة دي اتفتحت (<code>timestamp >= cycle.createdAt</code>)، لأن تصدير حصل قبل ما الدورة توجد أصلاً مستحيل يكون تصدير ليها. مفيش أي migration للبيانات.</li>
               <li>S2 = "In-Return" بيتكتب يدوي في الاسترجاع فور تأكيد الرفع — استثناء مقصود ومؤكد مع Ahmed (06-08-2026). راجع تعليق أعلى ملف الـ Worker.</li>
@@ -1209,11 +1210,18 @@
   <div class="eco-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="eco-modal">
       <div class="eco-modal-hdr">
-        <span id="changelogTitle">V5.5.0 — Changelog</span>
+        <span id="changelogTitle">V5.6.0 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">✕</button>
       </div>
       <div class="eco-modal-body">
         <div class="hint">
+          <b>V5.6.0</b><br>
+          - 🔴 <b>إصلاح قطع الاستبدال بعد تعديل الأوردر.</b> لما قطعة الاستبدال اللي شوبيفاي عملها تتشال بتعديل أوردر وتتحط قطعة تانية بالإيد (بيحصل لما المقاس/اللون يتغيّر بعد ما الاستبدال اتعمل رسمي)، <span class="mono">exchangeLineItems</span> بتاعة الدورة بتفضى <b>خالص</b> — وشوبيفاي في الـ Admin لسه بتقول «Exchange item for return #X» على السطر المشال، يعني الشاشة والـ API بيقولوا حاجتين مختلفين. النتيجة كانت: بادج ⚠️ «من غير قطع استبدال»، و"Package Description" و"No. of Items" فاضيين في ملف بوسطة، و<span class="mono">Goods Value</span> بيرجع لسعر <b>القطعة الراجعة</b> بدل الخارجة. مقيس حيًا على <span class="mono">#53531</span> و<span class="mono">#53701</span> (الأخير: 2600 بدل 2400 — غلط في الفلوس فعلي).<br>
+          - المصدر البديل: سطور الأوردر اللي <span class="mono">currentQuantity &gt; 0</span> و<span class="mono">unfulfilledQuantity &gt; 0</span> — دي بالظبط القطعة المستنية تتشحن. متأكد عليها على 25 أوردر بدورة مفتوحة: فاضية في كل استرجاع صافي، ومطابقة 1:1 لـ <span class="mono">exchangeLineItems</span> في الاستبدال السليم (<span class="mono">#53227</span>). الدورة فضلت <b>المصدر الأساسي</b> والبديل fallback مش دمج — الدمج كان هيعدّ القطعة مرتين.<br>
+          - كود تحذير جديد <span class="mono">EXCHANGE_ITEMS_RECOVERED</span> («قطع اتقروا من الأوردر») — الصف بيتصدّر عادي بس الموظف بيشوف إن القطع مجّاش من الدورة، عشان خدمة العملاء تظبّط الاستبدال في شوبيفاي.<br>
+          - <span class="mono">EXCHANGE_WITHOUT_ITEMS</span> بقى <b>حاجب</b> بدل تحذير (بقرار أحمد): صف بوسطة من غير ولا قطعة خارجة مش شحنة أصلاً — لا وصف ولا عدد ولا قيمة. الحجب متطبّق سيرفر-سايد كمان في <span class="mono">confirm_upload</span>.<br>
+          - الواجهة بقت تاخد قايمة <span class="mono">outgoingItems</span> جاهزة من الـ Worker — مابتشوفش <span class="mono">exchangeLineItems</span> ولا <span class="mono">lineItems</span> خام، فمابتقدرش تجمّعهم غلط (نفس حماية <span class="mono">returns</span> من v5.2.0).<br>
+          <br>
           <b>V5.5.0</b><br>
           - اتشال آخر عمود من ملف بوسطة: العمود U «Brand Name» (كان بيتكتب فيه <span class="mono">Ecommoda</span> ثابت لكل صف) — بطلب مباشر من أحمد. الملف بقى 20 عمود بدل 21، من "Full Name" لحد "Pay With Bosta Credits?"، وباقي الأعمدة مكانها ما اتغيّرش.<br>
           <br>
@@ -1393,8 +1401,8 @@
     </div>
   </div>
   <script>
-    const TOOL_VERSION = '5.5.0';
-    const MIN_WORKER_VERSION = '5.4.0'; // lowest Worker version this page relies on (cycle_block log rows)
+    const TOOL_VERSION = '5.6.0';
+    const MIN_WORKER_VERSION = '5.5.0'; // lowest Worker version this page relies on (order.outgoingItems — an older Worker omits it and the file silently loses Package Description / No. of Items)
     const SHOP_DOMAIN = '6c7e1a-53.myshopify.com';
     const CFG_KEY = 'bosta_exchange_export_config_v3';
     const LOG_PAGE_SIZE = 100;
@@ -2731,6 +2739,7 @@
       MULTI_CYCLE:            'دورات متتابعة',
       TYPE_MISMATCH:          'نوع مختلف',
       EXCHANGE_WITHOUT_ITEMS: 'من غير قطع استبدال',
+      EXCHANGE_ITEMS_RECOVERED: 'قطع اتقروا من الأوردر',
     };
 
     function cycleCodeLabel(code) {
@@ -2896,7 +2905,16 @@
         // closed cycle from last month shipped again in today's Bosta file.
         const cycle = order.currentCycle || null;
         const returnEdges   = cycle?.returnLineItems?.edges   || [];
-        const exchangeEdges = cycle?.exchangeLineItems?.edges || [];
+
+        // ⚠️ The outgoing package is resolved by the WORKER, not here
+        // (v5.6.0 / Worker §SHOPIFY::outgoingItems). The page never sees the
+        // raw `exchangeLineItems` or `lineItems` any more, so it cannot
+        // re-total them the wrong way — same protection as `returns`.
+        // Normally these are the open cycle's exchange items; when an order
+        // edit has emptied that connection they are the order's still-
+        // unshipped lines, and `cycleInfo.warnings` carries
+        // EXCHANGE_ITEMS_RECOVERED so the employee knows which happened.
+        const outgoingRows = Array.isArray(order.outgoingItems) ? order.outgoingItems : [];
 
         const returnLineItemsList = returnEdges
           .map(e => {
@@ -2910,22 +2928,11 @@
           .reduce((s, e) => s + (e.node.quantity || 1), 0);
         const returnItemsCount = returnQtyTotal > 1 ? returnQtyTotal : null;
 
-        const exchangePackageRows = exchangeEdges
-          .flatMap(e => {
-            const qty = e.node.quantity || 1;
-            return (e.node.lineItems || [])
-              .map(li => ({
-                label: li?.sku || li?.name || null,
-                qty,
-              }))
-              .filter(row => !!row.label);
-          });
-
-        const exchangePackageDescription = exchangePackageRows
+        const outgoingDescription = outgoingRows
           .map(row => `${row.label} x${row.qty}`)
           .join(' | ') || null;
 
-        const exchangePackageCount = exchangePackageRows
+        const outgoingCount = outgoingRows
           .reduce((s, row) => s + (row.qty || 1), 0) || null;
 
         // Package Description / No. of Items describe the package going OUT.
@@ -2934,22 +2941,23 @@
         // `order.lineItems`, a field the Worker's query never asked for: the
         // columns were empty by accident, not by decision.)
         const packageDescriptionForExport = jobType === 'exchange'
-          ? exchangePackageDescription
+          ? outgoingDescription
           : null;
 
         const packageItemCountForExport = jobType === 'exchange'
-          ? exchangePackageCount
+          ? outgoingCount
           : null;
 
-        // Rule 8 — return vs exchange is answered by the cycle, not by S2.
-        const hasExchange = exchangeEdges.length > 0;
+        // Goods Value is the value of what is TRAVELLING. On an exchange that
+        // is the outgoing package; with nothing going out it falls back to the
+        // returned pieces. Before v5.6.0 the fallback also fired whenever the
+        // cycle's exchange items had been wiped by an order edit, so the file
+        // quoted the RETURNED piece's price for a live exchange (#53701:
+        // 2600 instead of 2400).
         let goodsValue = 0;
-        if (hasExchange) {
-          exchangeEdges.forEach(e => {
-            const qty = e.node.quantity || 1;
-            (e.node.lineItems || []).forEach(li => {
-              goodsValue += parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) * qty;
-            });
+        if (outgoingRows.length) {
+          outgoingRows.forEach(row => {
+            goodsValue += (parseFloat(row.unitPrice) || 0) * (row.qty || 1);
           });
         } else {
           returnEdges.forEach(e => {

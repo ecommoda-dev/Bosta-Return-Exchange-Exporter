@@ -1,8 +1,53 @@
 // ═══════════════════════════════════════════════════════════════
-// Bosta Return/Exchange Exporter — Worker v5.4.0
+// Bosta Return/Exchange Exporter — Worker v5.5.0
 // EcomModa Internal Tools
 // skills: worker-builder v2.0.0 · html-builder v6.2.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026
+// ⚠️ The stamp above is deliberately NOT bumped by v5.5.0. Only Rules 8 /
+// 13 / 14 / 15 of order-lifecycle were re-read for this change; the skills
+// have since moved on (worker-builder v3.0.0 · html-builder v7.0.0 ·
+// order-lifecycle v1.4.0 · constants v2.0.0 · graphql-helper v2.0.0) and no
+// full compliance pass was done. See CLAUDE.md → «مسائل مفتوحة».
 // ═══════════════════════════════════════════════════════════════
+//
+// v5.5.0 (the outgoing exchange package survives an order edit — 09-09-2026):
+// `return.exchangeLineItems` is the correct source for what leaves the
+// warehouse on an exchange, but it is NOT a complete one. When the exchange
+// line item Shopify created is removed by an order edit and a replacement is
+// added by hand — routine when the size or colour changes after the exchange
+// was already booked — the connection goes empty and stays empty, while the
+// Shopify Admin still prints "Exchange item for return #X" on the removed
+// line. The UI and the API disagree, and only the API mattered here.
+//
+// Symptom, measured live on #53531 and #53701: the exchange row exported with
+// an empty "Package Description", an empty "No. of Items", and a Goods Value
+// that silently fell back to the RETURNED piece's price (#53701 quoted 2600
+// instead of 2400 — a real money error in a Bosta file).
+//
+// - New §SHOPIFY::outgoingItems block. The cycle stays PRIMARY; when it is
+//   empty on an exchange job the outgoing package is recovered from the
+//   order's own lines with `currentQuantity > 0 && unfulfilledQuantity > 0`
+//   — exactly the piece waiting to ship. Validated on 25 live orders with an
+//   open cycle: empty on every pure return, 1:1 with `exchangeLineItems` on a
+//   healthy exchange (#53227), and the only place the hand-added replacement
+//   appears. It is a fallback, never a merge — merging double-counts.
+// - Rule 8 is untouched: return-vs-exchange (and therefore TYPE_MISMATCH) is
+//   still answered by the cycle alone. The recovery only fills the package of
+//   a job already known to be an exchange, so it can never reclassify an
+//   order. It also never runs on a return job, where an unfulfilled line is
+//   far more likely to be a never-shipped piece of the original order.
+// - New non-blocking code EXCHANGE_ITEMS_RECOVERED (Rule 13/14 — flag it,
+//   never move it): the row exports, and the employee is told the pieces did
+//   not come from the cycle so CS can repair the exchange in Shopify.
+// - EXCHANGE_WITHOUT_ITEMS is now BLOCKING (was a warning) — Ahmed's call
+//   09-09-2026. A Bosta row with nothing going out is not a shipment: no
+//   description, no count, and a value borrowed from the returned piece.
+// - The page is handed a resolved `outgoingItems` list and never sees raw
+//   `exchangeLineItems` or `lineItems`, so it cannot re-total them the wrong
+//   way — the same structural protection `returns` got in v5.2.0.
+// - Because EXCHANGE_WITHOUT_ITEMS blocks, the confirm_upload cycle guard can
+//   no longer be a scalars-only query: it now reads both outgoing sources too
+//   (batch 50 → 20, plus the same halve-and-retry on a query-cost rejection),
+//   or every healthy exchange would be refused for pieces it never asked for.
 //
 // v5.4.0 (the cycle rejection is now logged — 02-09-2026):
 // order-lifecycle Rule 15 ① and Rule 10 both say "reject + log, never
@@ -83,6 +128,9 @@
 //   nothing goes out on a return — so they are now filled for an exchange
 //   job only, from the open cycle's exchange items, and `lineItems` is not
 //   fetched at all. (Delivery Notes: see v5.3.0 above.)
+//   ⚠️ SUPERSEDED by v5.5.0 on the last point: `lineItems` IS fetched now,
+//   as the recovery source for an exchange the cycle no longer records.
+//   The columns themselves are still exchange-only. See §SHOPIFY::outgoingItems.
 // - DETAILS_BATCH_SIZE 50 → 25, since each order now costs more.
 //
 // v5.0.0 (paired with the HTML's full html-builder v6.0.0 UI migration —
@@ -168,7 +216,7 @@
 // §CONSTANTS
 // ══════════════════════════════════════════════════════
 const TOOL_NAME = 'bosta_exchange_export';
-const WORKER_VERSION = '5.4.0';
+const WORKER_VERSION = '5.5.0';
 const SHOPIFY_API_VERSION = '2026-01';
 const LOG_EXPORT_MAX = 2000;
 
@@ -200,6 +248,11 @@ const DETAILS_BATCH_SIZE = 25;
 // leaving them in fabricates an overlap that never happened.
 const RETURNS_PAGE_SIZE = 10;
 const IGNORED_RETURN_STATUSES = ['CANCELED', 'DECLINED'];
+
+// v5.5.0 — the order's own line items, needed ONLY to recover the outgoing
+// exchange package when an order edit has severed `return.exchangeLineItems`.
+// See the §SHOPIFY::outgoingItems block for why this is not the primary source.
+const ORDER_LINE_ITEMS_PAGE_SIZE = 25;
 
 // ══════════════════════════════════════════════════════
 // §CORS — Option B (strict) — this Worker writes order metafields
@@ -635,6 +688,71 @@ function hasHistoricalOverlap(cycles) {
   ));
 }
 
+// ─── §SHOPIFY::outgoingItems ───
+// What physically LEAVES the warehouse on an exchange.
+//
+// ⚠️ `return.exchangeLineItems` is the right source but NOT a complete one.
+// Measured live on #53531 and #53701 (09-09-2026): when the exchange line
+// item Shopify created is removed by an order edit and a replacement is added
+// by hand — routine when the size/colour changes after the exchange was
+// already booked — the connection goes **empty** and stays empty. Shopify
+// Admin still shows "Exchange item for return #X" on the removed line, so the
+// UI and the API disagree; only the API is wrong for our purpose. The result
+// was an exchange row exported with no Package Description, no No. of Items,
+// and a Goods Value silently falling back to the RETURNED piece's price
+// (#53701: 2600 instead of 2400 — a real money error in the Bosta file).
+//
+// Recovery source, validated against 25 live orders with an open cycle:
+// a line item with `currentQuantity > 0 && unfulfilledQuantity > 0` is
+// exactly the piece waiting to ship. It is empty on every pure return
+// (nothing is waiting), it matches `exchangeLineItems` one-for-one on a
+// healthy exchange (#53227), and it is the only place the hand-added
+// replacement shows up (#53531, #53701).
+//
+// The cycle stays PRIMARY and the recovery is a fallback, never a merge:
+// merging would double-count a healthy exchange. The fallback also only runs
+// for an exchange job — on a return job an unfulfilled line is far more
+// likely to be a never-shipped piece of the original order than anything
+// going out, and Rule 8's TYPE_MISMATCH must keep reading the cycle alone.
+function itemsFromCycle(cycle) {
+  return (cycle?.exchangeLineItems?.edges || [])
+    .flatMap((edge) => {
+      const qty = edge?.node?.quantity || 1;
+      return (edge?.node?.lineItems || []).map((li) => ({
+        label: cleanText(li?.sku) || cleanText(li?.name) || null,
+        qty,
+        unitPrice: parseFloat(li?.originalUnitPriceSet?.shopMoney?.amount || 0) || 0,
+      }));
+    })
+    .filter((row) => !!row.label);
+}
+
+function itemsFromUnfulfilledLines(order) {
+  return (order?.lineItems?.edges || [])
+    .map((edge) => edge?.node)
+    .filter(Boolean)
+    // currentQuantity > 0 drops the line the edit removed; unfulfilledQuantity
+    // > 0 drops everything already delivered. Both are required: the removed
+    // exchange line keeps its original `quantity`, only these two go to zero.
+    .filter((node) => (node.currentQuantity || 0) > 0 && (node.unfulfilledQuantity || 0) > 0)
+    .map((node) => ({
+      label: cleanText(node.sku) || cleanText(node.name) || null,
+      qty: node.unfulfilledQuantity,
+      unitPrice: parseFloat(node.originalUnitPriceSet?.shopMoney?.amount || 0) || 0,
+    }))
+    .filter((row) => !!row.label);
+}
+
+function resolveOutgoingItems(order, cycle, jobType) {
+  const fromCycle = itemsFromCycle(cycle);
+  if (fromCycle.length) return { items: fromCycle, source: 'cycle' };
+  if (jobType !== 'exchange') return { items: [], source: 'none' };
+
+  const recovered = itemsFromUnfulfilledLines(order);
+  if (recovered.length) return { items: recovered, source: 'order_unfulfilled' };
+  return { items: [], source: 'none' };
+}
+
 // Rule 13 / Rule 14 — every code carries what is wrong, the offending value,
 // and the action that resolves it. Blocking codes stop the export; the rest
 // are flags: they move zero rows and change zero numbers.
@@ -682,6 +800,12 @@ function analyzeReturnCycles(order, jobType) {
     });
   }
 
+  // Rule 8 stays anchored to the CYCLE: return-vs-exchange is answered by
+  // `exchangeLineItems`, and the v5.5.0 recovery source must not be allowed to
+  // reclassify an order. It only fills the outgoing package once the job is
+  // already known to be an exchange.
+  const outgoing = resolveOutgoingItems(order, current, jobType);
+
   if (current) {
     const exchangeCount = (current.exchangeLineItems?.edges || []).length;
     // Rule 8 — the API answers return-vs-exchange, not the metafield.
@@ -692,17 +816,34 @@ function analyzeReturnCycles(order, jobType) {
         action: 'الـ S2 بيقول استرجاع لكن الدورة المفتوحة فيها قطع استبدال — راجع نوع العملية قبل الرفع على بوسطة.',
       });
     }
-    if (jobType === 'exchange' && exchangeCount === 0) {
+
+    if (jobType === 'exchange' && outgoing.source === 'order_unfulfilled') {
+      // Not blocking: we DO know what is going out, we just did not learn it
+      // from the cycle. The employee is told so the mismatch reaches CS
+      // instead of dying in the file (Rule 13/14 — flag it, never move it).
       warnings.push({
-        code: 'EXCHANGE_WITHOUT_ITEMS',
-        value: `S2 = ${cleanText(order?.s2Status?.value)} · الدورة من غير قطع استبدال`,
-        action: 'الـ S2 بيقول استبدال لكن الدورة المفتوحة مالهاش قطع استبدال — وصف الشحنة الخارجة هيطلع فاضي في ملف بوسطة.',
+        code: 'EXCHANGE_ITEMS_RECOVERED',
+        value: outgoing.items.map((row) => `${row.label} x${row.qty}`).join(' | '),
+        action: 'الدورة المفتوحة مالهاش قطع استبدال في شوبيفاي — القطع الخارجة اتقروا من سطور الأوردر اللي لسه ما اتشحنتش (غالبًا اتعدّلت بالإيد بعد فتح الاستبدال). راجع الوصف قبل الرفع، وخدمة العملاء تظبّط الاستبدال في شوبيفاي.',
       });
+    }
+
+    // v5.5.0 — BLOCKING (was a warning). A Bosta row with no outgoing package
+    // is not a usable shipment: the courier gets no description, no item count
+    // and a Goods Value borrowed from the returned piece. Ahmed's call
+    // 09-09-2026: refuse it rather than ship a row nobody can act on.
+    if (jobType === 'exchange' && !outgoing.items.length && !blockReason) {
+      blockReason = {
+        code: 'EXCHANGE_WITHOUT_ITEMS',
+        value: `S2 = ${cleanText(order?.s2Status?.value)} · مفيش ولا قطعة خارجة`,
+        action: 'الـ S2 بيقول استبدال لكن مفيش قطع استبدال في الدورة ولا سطر لسه ما اتشحنش في الأوردر — مش عارفين هيتشحن للعميل إيه. خدمة العملاء تضيف قطعة الاستبدال في شوبيفاي أو تصلّح الـ S2.',
+      };
     }
   }
 
   return {
     current,
+    outgoing,
     info: {
       totalCycles: cycles.length,
       openCycles: openCycles.length,
@@ -711,6 +852,7 @@ function analyzeReturnCycles(order, jobType) {
       blocked: !!blockReason,
       blockReason,
       warnings,
+      outgoingSource: outgoing.source,
     },
   };
 }
@@ -751,6 +893,19 @@ function buildDetailsQuery() {
           }
           s2Status: metafield(namespace: "custom", key: "status_2_r_e") { value }
           courier: metafield(namespace: "custom", key: "courier") { value }
+          # v5.5.0 — recovery source for the outgoing exchange package when an
+          # order edit has emptied exchangeLineItems. See §SHOPIFY::outgoingItems.
+          lineItems(first: ${ORDER_LINE_ITEMS_PAGE_SIZE}) {
+            edges {
+              node {
+                sku
+                name
+                currentQuantity
+                unfulfilledQuantity
+                originalUnitPriceSet { shopMoney { amount } }
+              }
+            }
+          }
           returns(first: ${RETURNS_PAGE_SIZE}) {
             pageInfo { hasNextPage }
             edges {
@@ -858,25 +1013,28 @@ async function fetchDiscoveryOrders(env, token, job) {
   };
 }
 
-async function fetchDetailsGroup(env, token, ids) {
-  const query = buildDetailsQuery();
-  const data = await shopifyGQL(env, token, query, { ids });
-  return (data?.data?.nodes || []).filter(Boolean);
-}
-
-async function fetchDetailsGroupWithFallback(env, token, ids) {
+// Generalised in v5.5.0 — the cycle guard now carries the same per-order cost
+// shape as the details fetch (it has to read `exchangeLineItems` and the
+// unfulfilled lines to answer EXCHANGE_WITHOUT_ITEMS), so it needs the same
+// halve-and-retry on a Shopify query-cost rejection.
+async function fetchNodesWithCostFallback(env, token, query, ids) {
   if (!ids.length) return [];
 
   try {
-    return await fetchDetailsGroup(env, token, ids);
+    const data = await shopifyGQL(env, token, query, { ids });
+    return (data?.data?.nodes || []).filter(Boolean);
   } catch (err) {
     if (!isShopifyCostError(err) || ids.length === 1) throw err;
 
     const mid = Math.ceil(ids.length / 2);
-    const left = await fetchDetailsGroupWithFallback(env, token, ids.slice(0, mid));
-    const right = await fetchDetailsGroupWithFallback(env, token, ids.slice(mid));
+    const left = await fetchNodesWithCostFallback(env, token, query, ids.slice(0, mid));
+    const right = await fetchNodesWithCostFallback(env, token, query, ids.slice(mid));
     return [...left, ...right];
   }
+}
+
+async function fetchDetailsGroupWithFallback(env, token, ids) {
+  return fetchNodesWithCostFallback(env, token, buildDetailsQuery(), ids);
 }
 
 async function fetchCandidateOrders(env, token, job) {
@@ -897,16 +1055,23 @@ async function fetchCandidateOrders(env, token, job) {
       const courier = cleanText(order?.courier?.value);
       if (directStatus !== job.expectedStatus || courier.toLowerCase() !== 'bosta') continue;
 
-      const { current, info } = analyzeReturnCycles(order, job.jobType);
+      const { current, outgoing, info } = analyzeReturnCycles(order, job.jobType);
       if (info.blocked) blockedCount += 1;
       else if (info.warnings.length) warnedCount += 1;
 
       // `returns` is deliberately dropped from the payload: the page gets the
       // ONE open cycle and nothing else, so the pre-v5.2.0 "flatMap over every
       // cycle" bug cannot come back through the frontend (Rule 15 ②).
-      const { returns, ...rest } = order;
+      // `lineItems` is dropped for the same reason (v5.5.0): the page gets the
+      // resolved `outgoingItems` list, never the raw lines it could re-total.
+      const { returns, lineItems, ...rest } = order;
       orders.push({
         ...rest,
+        // The ONE list of pieces leaving the warehouse, already resolved
+        // server-side from the cycle or, failing that, from the unfulfilled
+        // lines — §SHOPIFY::outgoingItems.
+        outgoingItems: outgoing.items,
+        outgoingSource: outgoing.source,
         // orderId: numeric legacy id, for the HTML to build a Shopify hyperlink
         // (worker-builder Step 5 — "numeric order ID" rule).
         orderId: numericOrderId(order),
@@ -938,7 +1103,12 @@ async function fetchCandidateOrders(env, token, job) {
 // open-cycle state is ambiguous. The HTML modal is no longer the only gate.
 //
 // The rejection IS logged, as of v5.4.0 — see `logCycleBlocks` below.
-const CYCLE_GUARD_BATCH_SIZE = 50;
+// Lowered from 50 in v5.5.0: EXCHANGE_WITHOUT_ITEMS became a blocking code,
+// so this query can no longer be scalars-only — it has to read the same two
+// outgoing-package sources the export reads, or every healthy exchange order
+// would be refused for "no exchange items" simply because the guard never
+// asked for them.
+const CYCLE_GUARD_BATCH_SIZE = 20;
 
 async function findBlockedCycleOrders(env, token, orders, jobType) {
   const query = `
@@ -948,9 +1118,25 @@ async function findBlockedCycleOrders(env, token, orders, jobType) {
           id
           name
           s2Status: metafield(namespace: "custom", key: "status_2_r_e") { value }
+          # Prices are deliberately NOT fetched here: the guard only asks
+          # whether anything is going out, never what it is worth. Its
+          # resolveOutgoingItems() result is read for .length and discarded.
+          lineItems(first: ${ORDER_LINE_ITEMS_PAGE_SIZE}) {
+            edges { node { sku name currentQuantity unfulfilledQuantity } }
+          }
           returns(first: ${RETURNS_PAGE_SIZE}) {
             pageInfo { hasNextPage }
-            edges { node { name status createdAt closedAt } }
+            edges {
+              node {
+                name
+                status
+                createdAt
+                closedAt
+                exchangeLineItems(first: 25) {
+                  edges { node { quantity lineItems { sku name } } }
+                }
+              }
+            }
           }
         }
       }
@@ -961,8 +1147,7 @@ async function findBlockedCycleOrders(env, token, orders, jobType) {
   const seen = new Set();
 
   for (const group of chunks(orders.map((o) => o.id), CYCLE_GUARD_BATCH_SIZE)) {
-    const data = await shopifyGQL(env, token, query, { ids: group });
-    for (const order of (data?.data?.nodes || []).filter(Boolean)) {
+    for (const order of await fetchNodesWithCostFallback(env, token, query, group)) {
       seen.add(order.id);
       const { info } = analyzeReturnCycles(order, jobType);
       if (info.blocked) {
