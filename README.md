@@ -22,6 +22,7 @@ wrangler.toml           إعدادات الـ Worker (bindings + vars)
 index.html              الواجهة (GitHub Pages)
 CLAUDE.md               قواعد الأداة وسياق الصيانة
 PHASE2-LIVE-CHECKS.md   الفحوصات الحية اللي عقد الرفع اتبنى عليها
+skillsupdates*.md       تصحيحات المهارات الناتجة من الفحص (بتتطبّق في جلسة منفصلة)
 tests/                  اختبارات Node عادي، من غير أي تنصيب
 ```
 
