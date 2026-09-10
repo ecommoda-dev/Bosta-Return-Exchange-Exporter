@@ -1,13 +1,72 @@
 // ═══════════════════════════════════════════════════════════════
-// Bosta Return/Exchange Exporter — Worker v5.5.0
+// Bosta Return/Exchange Exporter — Worker v6.0.0
 // EcomModa Internal Tools
 // skills: worker-builder v2.0.0 · html-builder v6.2.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026
-// ⚠️ The stamp above is deliberately NOT bumped by v5.5.0. Only Rules 8 /
-// 13 / 14 / 15 of order-lifecycle were re-read for this change; the skills
-// have since moved on (worker-builder v3.0.0 · html-builder v7.0.0 ·
-// order-lifecycle v1.4.0 · constants v2.0.0 · graphql-helper v2.0.0) and no
-// full compliance pass was done. See CLAUDE.md → «مسائل مفتوحة».
+// ⚠️ The stamp above is STILL deliberately not bumped. v6.0.0 was written
+// against worker-builder v3.0.0 for the parts it touches (Step 5A ④ four
+// result states · ⑩ ordering around an irreversible action · ⑪ the three-cap
+// chain · ⑫ the entity-level duplicate guard · ⑬ the results ordering
+// contract · ⑭ type-splits-by-external-effect) and bosta-api-helper v1.1.0
+// Step 8 in full — but the rest of the file has still had no full compliance
+// pass, and claiming one in the stamp would be a lie. See CLAUDE.md →
+// «مسائل مفتوحة» and run `skills-sweep`.
 // ═══════════════════════════════════════════════════════════════
+//
+// v6.0.0 (BREAKING — the tool now creates Bosta shipments itself, 10-09-2026):
+// Until now this tool produced an Excel file that a human uploaded to the
+// Bosta dashboard by hand. The upload and the status update were therefore two
+// disconnected steps, and the D1 log shows what that costs: across June and
+// July 2026, 30 orders were exported and ZERO were confirmed — the shipment
+// went to Bosta while S2 stayed on `Confirmed + RETURN/EXCHANGE` for two
+// months. Creating the shipment and writing the status in one call removes the
+// gap by construction.
+//
+// The create contract for types 25 / 30 did not exist anywhere in this stack
+// (bosta-api-helper Step 8 documents type 10 only). Everything below was
+// measured live on the EcomModa account on 10-09-2026 and is recorded in
+// PHASE2-LIVE-CHECKS.md §٢. The four findings that decide the code:
+//
+//   ① THE DIRECTION FLIPS. On a CRP (25) the customer address is
+//      `pickupAddress`; on an Exchange (30) it is `dropOffAddress`. Bosta
+//      fills the warehouse side itself from `businessLocationId`. Getting it
+//      backwards on a CRP returns HTTP 500 with no errorCode — not a 400.
+//   ② `cod` KEEPS ITS SIGN. Negative means Bosta hands money back at the door,
+//      and three of four sampled R/E orders are negative. Below -2000 Bosta
+//      refuses outright (400 · errorCode "3008"), so the value is clamped —
+//      but the clamp is DECLARED on the row, never silent.
+//   ③ `uniqueBusinessReference` really is a duplicate guard (400 · "11000"),
+//      it is unique account-wide across delivery types, and `terminate` FREES
+//      it. So it cannot be the bare order number — that is what the S1 tool
+//      sends — and it becomes `#12345-R{n}` / `#12345-EX{n}` from the cycle
+//      name. `businessReference` stays `order.name` verbatim, because every
+//      scanner in the stack searches by it.
+//   ④ The returning package lives in `returnSpecs` on BOTH types.
+//
+// - New §BOSTA block: the address engine (catalogue, zone index, ranking,
+//   cross-city detector, resolveAddress) copied VERBATIM from
+//   `Bosta-Orders-Upload` v1.3.0, with its test suite copied alongside it —
+//   a copy without its tests is how two copies drift apart in silence.
+// - New §RE-UPLOAD block: the S2-specific contract, validation, the create
+//   and terminate calls, and the batch runner.
+// - New endpoints: `get_districts` · `upload_re` · `cancel_re`.
+// - `fetch_candidates` now also returns `addressPlan` and `bostaPreview` per
+//   order. The catalogue is best-effort: when Bosta is unreachable the rows
+//   still come back, `catalogError` says why, and the Excel path is untouched.
+// - The details query finally asks for `firstName` / `lastName` /
+//   `provinceCode`. `receiver.firstName` is the only name field Bosta
+//   requires, and `provinceCode` is the primary key into the province table.
+// - The cycle guard now stands in front of a PAID shipment rather than a
+//   metafield write, so it runs before the first Bosta call, not after.
+// - S2 is written only for rows whose shipment actually exists, reusing
+//   confirm_upload's write+verify pair. A failure there downgrades the row to
+//   `warning` and never to `error`: red makes the employee upload again, and
+//   uploading again buys a second shipment with real money.
+//
+// KNOWN OPEN ITEM (Ahmed, PHASE2 ق-٥): the tracking number is NOT written to
+// any Shopify metafield. `custom.bosta_tracking_number` is single-valued and
+// belongs to the S1 shipment; there is no S2 counterpart and Ahmed deferred
+// creating one. The number lives in the D1 log and at Bosta under
+// `businessReference` until that decision is revisited.
 //
 // v5.5.0 (the outgoing exchange package survives an order edit — 09-09-2026):
 // `return.exchangeLineItems` is the correct source for what leaves the
@@ -216,7 +275,7 @@
 // §CONSTANTS
 // ══════════════════════════════════════════════════════
 const TOOL_NAME = 'bosta_exchange_export';
-const WORKER_VERSION = '5.5.0';
+const WORKER_VERSION = '6.0.0';
 const SHOPIFY_API_VERSION = '2026-01';
 const LOG_EXPORT_MAX = 2000;
 
@@ -235,6 +294,89 @@ const EXPORT_TYPES = ['export_return', 'export_exchange'];
 // ⚠️ NEW in v5.4.0 — must exist in `ecommoda-constants` §7 for this tool
 // (worker-builder Rule 7). Written only when the cycle guard refuses a write.
 const CYCLE_BLOCK_TYPE = 'cycle_block';
+
+// ═══ v6.0.0 — direct Bosta upload (types 25 / 30) ═══
+// Every value below is either measured live (PHASE2-LIVE-CHECKS results,
+// 10-09-2026) or copied verbatim from `ecommoda-constants` §3. None is guessed.
+// ⚠️ NEW in v6.0.0 — must exist in `ecommoda-constants` §7 before the first
+// live writeLog (worker-builder Rule 7).
+const UPLOAD_TYPE_BY_JOB = {
+  return:   'upload_re_return',
+  exchange: 'upload_re_exchange',
+};
+// 🔴 The split is NOT cosmetic. `re_upload_failed` = no shipment exists, so a
+// retry is safe. `re_shopify_write_failed` = the shipment EXISTS at Bosta with
+// a tracking number and only the write-back failed — retrying the upload buys
+// a second shipment with real money. Same reasoning as S1's
+// upload_failed / shopify_write_failed pair.
+const UPLOAD_FAILED_TYPE  = 're_upload_failed';
+const WRITE_FAILED_TYPE   = 're_shopify_write_failed';
+const CANCEL_TYPE         = 're_cancelled';
+
+// ─── §CONSTANTS::bosta ───
+const BOSTA_BASE        = 'https://app.bosta.co/api/v2';
+const BOSTA_LOCATION_ID = 'GeZMkbD7o';                        // كلية البنات - مصر الجديدة (ق-٤)
+const BOSTA_COUNTRY_ID  = '60e4482c7cb7d4bc4849c4d5';         // مصر
+// `ecommoda-constants` §3.2 — from Bosta's own SDK.
+const BOSTA_TYPE_BY_JOB = { return: 25, exchange: 30 };       // CRP · Exchange
+const ALLOW_OPEN_PKG    = true;                               // مطابق للإكسيل — ب-٨ لسه مفتوح
+// 🔴 Two DIFFERENT limits, in opposite directions. COD_MAX is documented in
+// api.yaml; COD_REFUND_MIN was measured live: -2700 came back
+// 400 · errorCode "3008" · "The Refund COD amount should be less than or
+// equal -2000 EGP", and NO shipment was created.
+const COD_MAX           = 30000;
+const COD_REFUND_MIN    = -2000;
+
+const MAX_UPLOAD_BATCH  = 25;   // ② of the three-cap chain (worker-builder ⑪)
+const UPLOAD_CONC       = 3;    // Bosta rate limits undocumented — measure, never guess
+
+// ─── §CONSTANTS::provinces ───
+// 🔴 Verbatim from `ecommoda-constants` §3.5. NO fuzzy text match on the
+// province name is permitted as a fallback: at least five provinces are spelled
+// differently on the two platforms (Beheira/Behira · Qalyubia/El Kalioubia · …),
+// so a province missing from this table STOPS its row with an explicit error.
+const PROVINCE_TABLE = [
+  { province: 'Cairo',          code: 'C',   cityId: 'FceDyHXwpSYYF9zGW', cityName: 'Cairo' },
+  { province: 'Alexandria',     code: 'ALX', cityId: 'Jrb6X6ucjiYgMP4T7', cityName: 'Alexandria' },
+  { province: 'Giza',           code: 'GZ',  cityId: '0064Qb0OgcA',       cityName: 'Giza' },
+  { province: 'Qalyubia',       code: 'KB',  cityId: 'yp3atroeTwnyiBNKE', cityName: 'El Kalioubia' },
+  { province: 'Port Said',      code: 'PTS', cityId: 'skFtf6ZmKo8kBEBDK', cityName: 'Port Said' },
+  { province: 'Suez',           code: 'SUZ', cityId: 'PickurJ5uJZ9rDTHW', cityName: 'Suez' },
+  { province: 'Dakahlia',       code: 'DK',  cityId: 'RrDhS8YYsXAwZ9Zfo', cityName: 'Dakahlia' },
+  { province: 'Al Sharqia',     code: 'SHR', cityId: '6ExcoGbpYHnggP8JD', cityName: 'Sharqia' },
+  { province: 'Monufia',        code: 'MNF', cityId: 'ruBSjGBDX9wpRa3cc', cityName: 'Monufia' },
+  { province: 'Gharbia',        code: 'GH',  cityId: 'K3RwC677J8kJytdZD', cityName: 'Gharbia' },
+  { province: 'Beheira',        code: 'BH',  cityId: 'g3GchTSmCgR2JynsJ', cityName: 'Behira' },
+  { province: 'Ismailia',       code: 'IS',  cityId: 'PJqNriLtFtx2cfkKP', cityName: 'Ismailia' },
+  { province: 'Kafr el-Sheikh', code: 'KFS', cityId: 'ByP7rFCjL6XzF6j4S', cityName: 'Kafr Alsheikh' },
+  { province: 'Damietta',       code: 'DT',  cityId: 'qoZvYcZ8Cqji4pGp5', cityName: 'Damietta' },
+  { province: 'Aswan',          code: 'ASN', cityId: 'kLvZ5JY6LJPL5chzN', cityName: 'Aswan' },
+  { province: 'Luxor',          code: 'LX',  cityId: 'wgYEdH2WMzxGE2Ztp', cityName: 'Luxor' },
+  { province: 'Red Sea',        code: 'BA',  cityId: 'r5TscLCNSjR2GimxQ', cityName: 'Red Sea' },
+  { province: 'Beni Suef',      code: 'BNS', cityId: 'LzbbvTzZ7D2CgE2PL', cityName: 'Bani Suif' },
+  { province: 'Faiyum',         code: 'FYM', cityId: 'BW5MiNxEirB7tuz2y', cityName: 'Fayoum' },
+  { province: 'Minya',          code: 'MN',  cityId: 'si6eLnKjXqTFTMBj9', cityName: 'Menya' },
+  { province: 'Asyut',          code: 'AST', cityId: '7mDPAohM3ArSZmWTm', cityName: 'Assuit' },
+  { province: 'Sohag',          code: 'SHG', cityId: 'n3EENg2adhuR9xBZK', cityName: 'Sohag' },
+  { province: 'Qena',           code: 'KN',  cityId: 'vfTHTes3uGjAszgtg', cityName: 'Qena' },
+  { province: 'North Sinai',    code: 'SIN', cityId: 'ZuCaDAVQlPT',       cityName: 'North Sinai' },
+  { province: 'South Sinai',    code: 'JS',  cityId: 'nG_c44vHQht',       cityName: 'South Sinai' },
+  { province: 'Matrouh',        code: 'MT',  cityId: 'KBpGiRZJMIx',       cityName: 'Matrouh' },
+  { province: 'New Valley',     code: 'WAD', cityId: 'w4yDVHVJWqa4HpbzA', cityName: 'New Valley' },
+  // Two special cases — abolished as governorates in 2011; Bosta runs on 28
+  // cities and has no separate city for either. They are ZONES inside another.
+  { province: '6th of October', code: 'SU',  cityId: '0064Qb0OgcA',       cityName: 'Giza',
+    zoneOnly: { en: '6 October', ar: '٦ اكتوبر' } },
+  { province: 'Helwan',         code: 'HU',  cityId: 'FceDyHXwpSYYF9zGW', cityName: 'Cairo',
+    zoneOnly: { en: 'Helwan',    ar: 'حلوان' } },
+];
+// A Bosta city with no Shopify counterpart — matched as a separate city when
+// the free-text address names it.
+const NORTH_COAST = { cityId: '2hGtNLfRgqGrJjnW9', cityName: 'North Coast',
+                      hints: ['الساحل الشمالي', 'north coast', 'الساحل الشمالى'] };
+
+const PROVINCE_BY_NAME = new Map(PROVINCE_TABLE.map((r) => [r.province.toLowerCase(), r]));
+const PROVINCE_BY_CODE = new Map(PROVINCE_TABLE.map((r) => [r.code.toUpperCase(), r]));
 
 const DISCOVERY_PAGE_SIZE = 100;
 const DISCOVERY_MAX_PAGES = 10;
@@ -376,6 +518,53 @@ function numericOrderId(order) {
   const legacy = cleanText(order?.legacyResourceId);
   if (legacy) return legacy;
   return cleanText(order?.id).split('/').pop() || null;
+}
+
+// ─── §HELPERS::assertBostaEnv ───
+// worker-builder ⑧ — a missing secret must stop the call by name, not fail
+// silently inside a fetch. Scoped to the Bosta paths so the pre-v6 endpoints
+// keep working on a Worker that has no BOSTA_API_KEY yet.
+function assertBostaEnv(env) {
+  if (env.BOSTA_API_KEY === undefined || env.BOSTA_API_KEY === null || String(env.BOSTA_API_KEY).trim() === '') {
+    const err = new Error(
+      'متغير ناقص في الـ Worker: BOSTA_API_KEY — ضِفه من Dashboard → Settings → '
+      + 'Variables ثم Promote النسخة. (شغّل ?action=diag)',
+    );
+    err.status = 500;
+    throw err;
+  }
+}
+
+// ─── §HELPERS::normPhone ───
+// COMPARISON key only — never the value sent to Bosta. Strips everything to
+// bare digits so "01009619555", "+201009619555" and "+20 10 09619555" all
+// collapse to the same string; without it we send the same number twice as
+// `phone` and `secondPhone`.
+const normPhone = (p) => String(p || '').replace(/\D/g, '').replace(/^20/, '').replace(/^0/, '');
+
+// ─── §HELPERS::wirePhone ───
+// 🔴 The value actually sent. Measured live (PHASE2 ش-٣): this store holds
+// THREE shapes — `01…`, `+201…`, and `+20 12 71043044` WITH SPACES (#53849).
+// Passing the raw field through would put a spaced string in `receiver.phone`.
+// Output is always the local `01…` form.
+function wirePhone(p) {
+  const d = normPhone(p);
+  return d ? '0' + d : '';
+}
+
+// ─── §HELPERS::normText ───
+// Arabic/English normalisation for matching: diacritics, alef/yaa/taa-marbuta
+// variants, punctuation, whitespace.
+function normText(s) {
+  return String(s || '')
+    .replace(/[ً-ْٰـ]/g, '')
+    .replace(/[إأآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[ؤئ]/g, 'ء')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 // ══════════════════════════════════════════════════════
@@ -878,11 +1067,19 @@ function buildDetailsQuery() {
           totalOutstandingSet { shopMoney { amount currencyCode } }
           shippingAddress {
             name
+            # v6.0.0 — firstName is the ONLY name field Bosta actually requires
+            # (receiver.required = [firstName, phone]); provinceCode is the
+            # primary key into the locked province table; the province NAME is
+            # only the fallback. All three were missing while this file was
+            # Excel-only — Bosta needs them and the matcher needs the code.
+            firstName
+            lastName
             phone
             address1
             address2
             city
             province
+            provinceCode
             zip
           }
           customer {
@@ -1037,7 +1234,12 @@ async function fetchDetailsGroupWithFallback(env, token, ids) {
   return fetchNodesWithCostFallback(env, token, buildDetailsQuery(), ids);
 }
 
-async function fetchCandidateOrders(env, token, job) {
+// v6.0.0 — `catalog` is optional and best-effort. When it is present every row
+// also carries its Bosta address plan and the payload preview the upload will
+// use; when Bosta is unreachable the tool still returns candidates and the
+// Excel path still works, with `catalogError` saying why the plans are missing.
+// A silent `addressPlan: null` would read as "no district matched".
+async function fetchCandidateOrders(env, token, job, catalog = null) {
   const discovery = await fetchDiscoveryOrders(env, token, job);
   const ids = discovery.candidates.map(o => o.id);
   const orders = [];
@@ -1065,6 +1267,18 @@ async function fetchCandidateOrders(env, token, job) {
       // `lineItems` is dropped for the same reason (v5.5.0): the page gets the
       // resolved `outgoingItems` list, never the raw lines it could re-total.
       const { returns, lineItems, ...rest } = order;
+      // v6.0.0 — the Bosta-facing view of the row, resolved server-side for the
+      // same reason `returns` and `lineItems` are dropped: the page must not be
+      // able to recompute the package, the money or the address itself.
+      const parts = catalog ? buildPayloadParts({ ...order, currentCycle: current, outgoingItems: outgoing.items }, job.jobType) : null;
+      // Per-order isolation: a plan that throws must cost that ONE row its
+      // plan, not the whole batch. `fetch_candidates` also feeds the Excel
+      // path, which needs no plan at all.
+      let plan = null;
+      if (catalog) {
+        try { plan = resolveAddress(order, catalog); }
+        catch (e) { plan = { ok: false, error: `فشل حساب خطة العنوان: ${e.message}` }; }
+      }
       orders.push({
         ...rest,
         // The ONE list of pieces leaving the warehouse, already resolved
@@ -1077,6 +1291,20 @@ async function fetchCandidateOrders(env, token, job) {
         orderId: numericOrderId(order),
         currentCycle: current,
         cycleInfo: info,
+        // Null together, always — both come from the catalogue.
+        addressPlan: plan,
+        bostaPreview: parts && {
+          cod: parts.cod,
+          codRaw: parts.raw,
+          codClipped: parts.clipped,
+          codRemainder: parts.remainder,
+          goodsValue: parts.goodsValue,
+          returnCount: parts.returnCount,
+          returnDescription: parts.returnDescription,
+          outgoingCount: parts.outgoingCount,
+          outgoingDescription: parts.outgoingDescription,
+          uniqueRef: buildUniqueRef({ name: order.name, currentCycle: current }, job.jobType),
+        },
       });
     }
   }
@@ -1085,6 +1313,7 @@ async function fetchCandidateOrders(env, token, job) {
     orders,
     pageInfo: {
       ...discovery.pageInfo,
+      catalogLoaded: !!catalog,
       discoveryCount: discovery.candidates.length,
       detailBatchSize: DETAILS_BATCH_SIZE,
       detailsFetched: orders.length,
@@ -1327,6 +1556,936 @@ async function verifyManualStatus(env, token, orders, expectedValue, expectedPri
 }
 
 // ══════════════════════════════════════════════════════
+// §BOSTA — v6.0.0, direct upload of R/E shipments
+// ══════════════════════════════════════════════════════
+// The address engine below (§BOSTA::catalog … §BOSTA::resolveAddress) is a
+// VERBATIM copy of `Bosta-Orders-Upload` index.js v1.3.0. It is pure — it only
+// reads `order.shippingAddress` — and it carries its own test suite there
+// (tests/address-matching.test.cjs). Do not "improve" it here in isolation:
+// a change belongs in both copies, or in the shared block proposed for
+// `bosta-api-helper`. The only S2-specific part starts at §BOSTA::buildRePayload.
+//
+// ⚠️ Authorization is the RAW key with no "Bearer" — Bearer returns 401 with no
+// useful message.
+function bostaHeaders(env) {
+  return { Authorization: env.BOSTA_API_KEY, 'Content-Type': 'application/json' };
+}
+
+// ─── §BOSTA::catalog ───
+// The city catalogue barely changes → cache it. KV when the binding exists,
+// otherwise the Cache API (no binding needed). One call per order is banned.
+const CATALOG_TTL_SECONDS = 24 * 3600;
+// 🔴 Tool-specific URL. Sharing the S1 tool's cache key across Workers would
+// make one tool's stale catalogue silently serve the other.
+const CATALOG_CACHE_URL   = 'https://bosta-return-exchange-exporter.internal/catalog/districts-v1';
+let   catalogMemo = null;
+
+async function readCatalogCache(env) {
+  if (catalogMemo && (Date.now() - catalogMemo.at) < CATALOG_TTL_SECONDS * 1000) return catalogMemo.value;
+  try {
+    if (env.CATALOG_KV) {
+      const raw = await env.CATALOG_KV.get('bosta_districts_v1', 'json');
+      if (raw) { catalogMemo = { at: Date.now(), value: raw }; return raw; }
+    } else {
+      const hit = await caches.default.match(CATALOG_CACHE_URL);
+      if (hit) { const v = await hit.json(); catalogMemo = { at: Date.now(), value: v }; return v; }
+    }
+  } catch { /* the cache is not a source of truth — a miss just refetches */ }
+  return null;
+}
+
+async function writeCatalogCache(env, value) {
+  catalogMemo = { at: Date.now(), value };
+  try {
+    if (env.CATALOG_KV) {
+      await env.CATALOG_KV.put('bosta_districts_v1', JSON.stringify(value), { expirationTtl: CATALOG_TTL_SECONDS });
+    } else {
+      await caches.default.put(CATALOG_CACHE_URL, new Response(JSON.stringify(value), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${CATALOG_TTL_SECONDS}` },
+      }));
+    }
+  } catch { /* same reason */ }
+}
+
+// ─── §BOSTA::normalizeCatalog ───
+// The response shape is not precisely documented, so normalise more than one
+// possible shape instead of assuming a single one.
+function normalizeCatalog(raw) {
+  const cities = Array.isArray(raw?.data) ? raw.data
+               : Array.isArray(raw?.cities) ? raw.cities
+               : Array.isArray(raw) ? raw : [];
+  const out = [];
+  for (const c of cities) {
+    const cityId   = c?._id || c?.cityId || c?.id || null;
+    const cityName = c?.name || c?.cityName || '';
+    const cityAr   = c?.nameAr || c?.otherName || c?.cityOtherName || '';
+    const rawDistricts = Array.isArray(c?.districts) ? c.districts
+                       : Array.isArray(c?.zones) ? c.zones.flatMap((z) => (z?.districts || []).map((d) => ({ ...d, zoneName: z?.name, zoneOtherName: z?.otherName || z?.nameAr })))
+                       : [];
+    const districts = [];
+    for (const d of rawDistricts) {
+      const id = d?._id || d?.districtId || d?.id || null;
+      if (!id) continue;
+      districts.push({
+        id,
+        name:   d?.districtName || d?.name || '',
+        nameAr: d?.districtOtherName || d?.otherName || d?.nameAr || '',
+        zone:   d?.zoneName || d?.zone?.name || '',
+        zoneAr: d?.zoneOtherName || d?.zone?.otherName || '',
+        dropOff: d?.dropOffAvailability,
+      });
+    }
+    if (cityId) out.push({ cityId, cityName, cityAr, districts });
+  }
+  return { fetchedAt: new Date().toISOString(), cities: out };
+}
+
+// ─── §BOSTA::getCatalog ───
+async function getCatalog(env, { force = false } = {}) {
+  assertBostaEnv(env);
+  if (!force) {
+    const cached = await readCatalogCache(env);
+    if (cached) return cached;
+  }
+  const url = `${BOSTA_BASE}/cities/getAllDistricts?countryId=${BOSTA_COUNTRY_ID}`;
+  let resp, text;
+  try {
+    resp = await fetch(url, { headers: bostaHeaders(env) });
+    text = await resp.text();
+  } catch (e) {
+    // ❌ never catch(_){} here — this failure must surface, not turn into
+    // "no districts found".
+    throw new Error(`كتالوج بوسطة: فشل الاتصال — ${e.message}`);
+  }
+  if (!resp.ok) throw new Error(`كتالوج بوسطة: HTTP ${resp.status} — ${text.slice(0, 180)}`);
+  let raw;
+  try { raw = JSON.parse(text); }
+  catch { throw new Error(`كتالوج بوسطة: رد مش JSON — ${text.slice(0, 180)}`); }
+
+  const cat = normalizeCatalog(raw);
+  if (!cat.cities.length) throw new Error('كتالوج بوسطة: الرد مفيهوش أي مدينة — شكل الرد اتغيّر');
+  await writeCatalogCache(env, cat);
+  return cat;
+}
+
+// ─── §BOSTA::availableDistricts ───
+// Filtering on dropOffAvailability === true is mandatory.
+// ⚠️ If the field is missing from the whole catalogue the filter empties the
+// list — that case is REPORTED (in diag and in the row plan) instead of
+// silently becoming "no match".
+function availableDistricts(city) {
+  if (!city) return { list: [], fieldMissing: false };
+  const withField = city.districts.filter((d) => d.dropOff !== undefined);
+  const fieldMissing = city.districts.length > 0 && withField.length === 0;
+  const list = fieldMissing ? [] : city.districts.filter((d) => d.dropOff === true);
+  return { list, fieldMissing };
+}
+
+// ─── §BOSTA::ensureNormalized ───
+function ensureNormalized(catalog) {
+  if (!catalog || catalog._normalized) return catalog;
+  for (const c of catalog.cities) {
+    c.cityNameN = normText(c.cityName);
+    c.cityArN   = normText(c.cityAr);
+    for (const d of c.districts) {
+      d.nameN   = normText(d.name);
+      d.nameArN = normText(d.nameAr);
+      // 🔴 "generic" = the district is named after the city/governorate itself.
+      // Customers habitually write their governorate into the address, so such
+      // a match carries almost no information — and it is exactly the one that
+      // used to win on length and send the shipment to the wrong branch.
+      d.generic = (!!d.nameN   && (d.nameN   === c.cityNameN || d.nameN   === c.cityArN))
+               || (!!d.nameArN && (d.nameArN === c.cityNameN || d.nameArN === c.cityArN));
+    }
+    c.zoneIndex = buildZoneIndex(c);
+  }
+  catalog._normalized = true;
+  return catalog;
+}
+
+// ─── §BOSTA::buildZoneIndex ───
+// City → zone → district. The ZONE is the name a customer actually writes when
+// the district carries a compound administrative label:
+//   address  : "العبور الحي الخامس بلوك ١٦٠٢٧"
+//   districts: "المنطقة 01 (العبور)" · "دار مصر - العبور" · "احياء العبور الجديده"
+//   zone     : "العبور"  ← this is what matches
+function buildZoneIndex(city) {
+  const byKey = new Map();
+  for (const d of city.districts) {
+    if (d.dropOff !== true) continue;
+    const en = (d.zone || '').trim(), ar = (d.zoneAr || '').trim();
+    if (!en && !ar) continue;
+    const key = normText(en) + '|' + normText(ar);
+    let z = byKey.get(key);
+    if (!z) {
+      z = { zone: en, zoneAr: ar, nameN: normText(en), nameArN: normText(ar), count: 0 };
+      z.generic = (!!z.nameN   && (z.nameN   === city.cityNameN || z.nameN   === city.cityArN))
+               || (!!z.nameArN && (z.nameArN === city.cityNameN || z.nameArN === city.cityArN));
+      byKey.set(key, z);
+    }
+    z.count++;
+  }
+  return [...byKey.values()];
+}
+
+// ─── §BOSTA::matchZonesIn ───
+// Same ranking as districts — the difference is the RESULT is a zone, so it
+// settles the CITY and not the district. A zone holds many districts; picking
+// one of them automatically would be a guess.
+function matchZonesIn(city, fields) {
+  const best = new Map();
+  // A province row can name a cityId that Bosta's live catalogue does not
+  // carry, and then `city` is null here. Reading `city.zoneIndex` would throw
+  // and take the whole candidate fetch down with it — including the Excel
+  // fallback that is supposed to survive any Bosta problem.
+  if (!city) return [];
+  for (const f of fields) {
+    const ftext = f.textN;
+    if (!ftext) continue;
+    for (const z of (city.zoneIndex || [])) {
+      for (const n of [z.nameN, z.nameArN]) {
+        if (!n || n.length < 3 || !ftext.includes(n)) continue;
+        const hit = {
+          zone: z.zone, zoneAr: z.zoneAr, count: z.count,
+          tier: f.tier, field: f.key, fieldLabel: f.label,
+          matched: n, matchedText: n === z.nameArN ? z.zoneAr : z.zone,
+          exact: ftext === n, generic: !!z.generic,
+        };
+        const key = z.nameN + '|' + z.nameArN;
+        const prev = best.get(key);
+        if (!prev || betterHit(hit, prev) < 0) best.set(key, hit);
+        break;
+      }
+    }
+  }
+  return [...best.values()].sort(betterHit);
+}
+
+// ─── §BOSTA::addressFields ───
+// The address boxes stay SEPARATE and ordered by specificity — never glued into
+// one string. 🔴 Gluing destroyed the information that decides the match:
+// `city` = "سيدي سالم" is far more specific than a mention of "كفر الشيخ"
+// inside `address1`. Without this ordering the ranking falls back to length,
+// and length favours the governorate over the town.
+function addressFields(sa) {
+  return [
+    { key: 'city',     label: 'مدينة شوبيفاي', text: sa.city     || '' },
+    { key: 'address1', label: 'العنوان',        text: sa.address1 || '' },
+    { key: 'address2', label: 'العنوان ٢',      text: sa.address2 || '' },
+  ].filter((f) => f.text).map((f, i) => ({ ...f, tier: i, textN: normText(f.text) }));
+}
+
+// ─── §BOSTA::rankHits ───
+//   ① non-generic beats generic  — "مصر الجديدة" beats "القاهرة"
+//   ② the more specific box wins — `city` > `address1` > `address2`
+//   ③ an exact match beats a partial one within the same box
+//   ④ longer wins ONLY when the shorter is contained in it — "مدينة نصر" > "نصر"
+// ⚠️ Length alone is NOT a tiebreaker: "المنصورة" and "اجا" in one address are
+// two SEPARATE matches, and the longer is not the more correct. That case is
+// declared AMBIGUOUS on purpose — one extra click beats a wrong branch.
+const HIT_KEY = (h) => [h.generic ? 1 : 0, h.tier, h.exact ? 0 : 1];
+
+function betterHit(a, b) {
+  const ka = HIT_KEY(a), kb = HIT_KEY(b);
+  for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i];
+  return b.matched.length - a.matched.length;
+}
+function dominates(a, b) {
+  const ka = HIT_KEY(a), kb = HIT_KEY(b);
+  for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] < kb[i];
+  return a.matched.length > b.matched.length && a.matched.includes(b.matched);
+}
+
+// ─── §BOSTA::matchDistrictsIn ───
+function matchDistrictsIn(city, fields, zoneOnly) {
+  const { list, fieldMissing } = availableDistricts(city);
+  if (!list.length || !fields.length) return { hits: [], fieldMissing };
+
+  let pool = list;
+  if (zoneOnly) {
+    const zEn = normText(zoneOnly.en), zAr = normText(zoneOnly.ar);
+    pool = list.filter((d) => {
+      const dz = normText(d.zone), dza = normText(d.zoneAr);
+      return (zEn && (dz === zEn || dza === zEn)) || (zAr && (dz === zAr || dza === zAr));
+    });
+  }
+
+  const best = new Map();
+  for (const f of fields) {
+    const ftext = f.textN;
+    if (!ftext) continue;
+    for (const d of pool) {
+      for (const n of [d.nameN, d.nameArN]) {
+        if (!n || n.length < 3 || !ftext.includes(n)) continue;
+        const hit = {
+          id: d.id, name: d.name, nameAr: d.nameAr, zone: d.zone,
+          tier: f.tier, field: f.key, fieldLabel: f.label,
+          matched: n, matchedText: n === d.nameArN ? d.nameAr : d.name,
+          exact: ftext === n, generic: !!d.generic,
+        };
+        const prev = best.get(d.id);
+        if (!prev || betterHit(hit, prev) < 0) best.set(d.id, hit);
+        break;
+      }
+    }
+  }
+  return { hits: [...best.values()].sort(betterHit), fieldMissing };
+}
+
+// ─── §BOSTA::matchDistrict ───
+// One candidate = settled · more than one = declared ambiguity.
+function matchDistrict(city, fields, zoneOnly) {
+  const { hits, fieldMissing } = matchDistrictsIn(city, fields, zoneOnly);
+  if (!hits.length) return { matches: [], fieldMissing };
+  const top = hits[0];
+  const matches = hits.filter((h) => h === top || !dominates(top, h));
+  return { matches, fieldMissing };
+}
+
+// ─── §BOSTA::findCrossCity ───
+// 🟠 The "city is doubtful" detector. Runs ONLY when nothing matched inside the
+// city the province table computed.
+//
+// Why at all: Bosta's grouping is not the administrative one (العبور is
+// Qalyubia administratively and sits under Cairo at Bosta), and customers also
+// pick the wrong governorate. Both look the same from here, and the result is
+// NOT "missing district" — it is a WRONG CITY, i.e. wrong branch and wrong price.
+//
+// 🔴 A suggestion only — auto-applying is banned. District names repeat across
+// governorates, so switching a shipment's city on a text match is the very trap
+// the locked province table exists to prevent.
+const CROSS_MIN_LEN      = 4;
+const CROSS_MAX_HITS     = 8;
+const CROSS_MAX_PER_CITY = 3;
+
+function findCrossCity(catalog, fields, skipCityId) {
+  const out = [];
+  for (const c of catalog.cities) {
+    if (c.cityId === skipCityId) continue;
+
+    // ① district match — settles the city AND the district
+    const { hits } = matchDistrictsIn(c, fields, null);
+    let taken = 0;
+    for (const h of hits) {
+      if (h.matched.length < CROSS_MIN_LEN || h.generic) continue;
+      if (++taken > CROSS_MAX_PER_CITY) break;
+      out.push({
+        kind: 'district',
+        cityId: c.cityId, cityName: c.cityName,
+        districtId: h.id, districtName: h.name, districtNameAr: h.nameAr, zone: h.zone,
+        matchedText: h.matchedText, fieldLabel: h.fieldLabel,
+        _rank: [h.tier, h.exact ? 0 : 1, -h.matched.length],
+      });
+    }
+
+    // ② zone match — settles the CITY only. This is what catches العبور.
+    let takenZ = 0;
+    for (const z of matchZonesIn(c, fields)) {
+      if (z.matched.length < CROSS_MIN_LEN || z.generic) continue;
+      if (out.some((o) => o.cityId === c.cityId && normText(o.zone || '') === normText(z.zone))) continue;
+      if (++takenZ > CROSS_MAX_PER_CITY) break;
+      out.push({
+        kind: 'zone',
+        cityId: c.cityId, cityName: c.cityName,
+        zone: z.zone, zoneAr: z.zoneAr, districtCount: z.count,
+        matchedText: z.matchedText, fieldLabel: z.fieldLabel,
+        _rank: [z.tier, z.exact ? 0 : 1, -z.matched.length],
+      });
+    }
+  }
+  out.sort((a, b) => {
+    for (let i = 0; i < 3; i++) if (a._rank[i] !== b._rank[i]) return a._rank[i] - b._rank[i];
+    return 0;
+  });
+  return out.slice(0, CROSS_MAX_HITS).map(({ _rank, ...rest }) => rest);
+}
+
+// ─── §BOSTA::findLocalZones ───
+// Same idea INSIDE the right city: nothing matched a district, but a zone
+// matched. The city is not wrong here — the gain is that the picker opens with
+// that zone's districts (7 instead of 590) instead of the employee searching.
+function findLocalZones(city, fields) {
+  if (!city) return [];
+  return matchZonesIn(city, fields)
+    .filter((z) => z.matched.length >= CROSS_MIN_LEN && !z.generic)
+    .slice(0, CROSS_MAX_PER_CITY)
+    .map((z) => ({
+      kind: 'zone', cityId: city.cityId, cityName: city.cityName,
+      zone: z.zone, zoneAr: z.zoneAr, districtCount: z.count,
+      matchedText: z.matchedText, fieldLabel: z.fieldLabel,
+    }));
+}
+
+// ─── §BOSTA::resolveAddress ───
+//   province → cityId deterministically from the locked table (no text fallback)
+//   one district match     → mode 'district'  · documented contract
+//   special province, none → mode 'zoneName'  · documented contract
+//   many matches or none   → mode 'province'  · undocumented contract
+function resolveAddress(order, catalog) {
+  ensureNormalized(catalog);
+  const sa = order.shippingAddress || {};
+  const provinceRaw = sa.province || '';
+  const codeRaw     = sa.provinceCode || '';
+
+  let row = PROVINCE_BY_CODE.get(String(codeRaw).toUpperCase())
+         || PROVINCE_BY_NAME.get(String(provinceRaw).toLowerCase())
+         || null;
+
+  const fields = addressFields(sa);
+
+  const normAddr = fields.map((f) => f.textN).join(' ');
+  const isNorthCoast = NORTH_COAST.hints.some((h) => normAddr.includes(normText(h)));
+  if (isNorthCoast && (row?.province === 'Matrouh' || row?.province === 'Alexandria')) {
+    row = { province: row.province, code: row.code, cityId: NORTH_COAST.cityId, cityName: NORTH_COAST.cityName };
+  }
+
+  if (!row) {
+    return {
+      ok: false,
+      error: `المحافظة "${provinceRaw || codeRaw || '—'}" مش في جدول ecommoda-constants §3.5 — `
+           + 'تتسجّل هناك الأول، ممنوع التخمين',
+    };
+  }
+
+  const city = catalog.cities.find((c) => c.cityId === row.cityId) || null;
+  if (!city) {
+    // The province table is locked and deterministic, so this means Bosta's
+    // catalogue changed under us. Say so by name instead of degrading into a
+    // silent "no district matched" — that would ship on the wrong city.
+    return {
+      ok: false,
+      error: `مدينة بوسطة "${row.cityName}" (${row.cityId}) مش موجودة في الكتالوج الحي — `
+           + 'كتالوج بوسطة اتغيّر. راجع الجدول في ecommoda-constants §3.5.',
+    };
+  }
+  const { matches, fieldMissing } = matchDistrict(city, fields, row.zoneOnly);
+
+  const base = {
+    ok: true,
+    province: row.province,
+    cityId: row.cityId,
+    cityName: row.cityName,
+    catalogWarning: fieldMissing ? 'dropOffAvailability غايب من كتالوج بوسطة — المطابقة اتعطّلت' : null,
+    candidates: matches.map((m) => ({
+      id: m.id, name: m.name, nameAr: m.nameAr, zone: m.zone,
+      matchedText: m.matchedText, fieldLabel: m.fieldLabel,
+    })),
+    crossCity: [],
+    localZones: [],
+  };
+
+  if (matches.length === 1) {
+    return { ...base, mode: 'district', districtId: matches[0].id, districtName: matches[0].name };
+  }
+  if (matches.length === 0 && row.zoneOnly) {
+    return { ...base, mode: 'zoneName', districtName: row.zoneOnly.en };
+  }
+  if (matches.length === 0) {
+    const localZones = findLocalZones(city, fields);
+    const crossCity  = findCrossCity(catalog, fields, row.cityId);
+    return {
+      ...base, mode: 'province', ambiguous: false,
+      localZones, crossCity,
+      // 🟠 Doubt is declared ONLY when a suggestion exists in ANOTHER city.
+      // A zone inside the same city is not doubt — it is help picking a district.
+      cityDoubt: crossCity.length > 0,
+    };
+  }
+  return { ...base, mode: 'province', ambiguous: true };
+}
+
+// ══════════════════════════════════════════════════════
+// §RE-UPLOAD — everything below is S2-specific
+// ══════════════════════════════════════════════════════
+
+// ─── §RE-UPLOAD::returnItems ───
+// What physically COMES BACK. Mirror image of §SHOPIFY::outgoingItems, and the
+// same protection: resolved server-side from the ONE open cycle so the page
+// never sees `returns[]` and cannot re-total it the pre-v5.2.0 way (Rule 15 ②).
+// Feeds `returnSpecs` on BOTH job types — measured live: Bosta stores the
+// returning package under `returnSpecs` for type 25 and type 30 alike.
+function resolveReturnItems(cycle) {
+  return (cycle?.returnLineItems?.edges || [])
+    .map((edge) => {
+      const li  = edge?.node?.fulfillmentLineItem?.lineItem;
+      const qty = edge?.node?.quantity || 1;
+      if (!li) return null;
+      return {
+        label: cleanText(li.sku) || cleanText(li.name) || null,
+        qty,
+        unitPrice: parseFloat(li.originalUnitPriceSet?.shopMoney?.amount || 0) || 0,
+      };
+    })
+    .filter((row) => row && row.label);
+}
+
+// Collapses a multi-line order note to one line. The Bosta `notes` field is a
+// single string and the courier reads it; a raw newline would break the row.
+function flattenNote(note) {
+  const text = cleanText(note).replace(/\s*\n+\s*/g, ' / ').replace(/\s{2,}/g, ' ').trim();
+  return text ? text.slice(0, 500) : null;
+}
+
+function describeItems(rows) {
+  return rows.map((r) => `${r.label} x${r.qty}`).join(' | ').slice(0, 900) || null;
+}
+function countItems(rows) {
+  return rows.reduce((sum, r) => sum + (r.qty || 1), 0);
+}
+function valueItems(rows) {
+  return rows.reduce((sum, r) => sum + (parseFloat(r.unitPrice) || 0) * (r.qty || 1), 0);
+}
+
+// ─── §RE-UPLOAD::uniqueRef ───
+// 🔴 Measured live, 10-09-2026 — this contradicts what `bosta-api-helper` 8.3
+// and `ecommoda-constants` §3.3 said, so read the table, not the old text:
+//
+//   same uref, original still alive        → 400 · errorCode "11000"
+//   same uref, after terminate             → 201  (terminate FREES the value)
+//   same businessReference, different uref → 201  (this is what Excel did)
+//   same uref on a DIFFERENT delivery type → 400 · "11000" (unique account-wide)
+//
+// So the guard is real and it is exactly the guard we want: it stops a second
+// paid shipment for a cycle that already has one, and it lets a corrected
+// re-upload through once the wrong one is terminated.
+//
+// `businessReference` stays `order.name` verbatim (ق-١) — every scanner in the
+// stack searches by it — and the per-cycle uniqueness lives in this hidden
+// field instead. `#12345` alone is banned here: that is precisely what
+// `Bosta-Orders-Upload` sends for the S1 shipment, so it would collide.
+function buildUniqueRef(order, jobType) {
+  const cycleName = cleanText(order?.currentCycle?.name);
+  const n = cycleName.match(/-R(\d+)$/i)?.[1] || null;
+  if (!n) {
+    return {
+      ok: false,
+      code: 'CYCLE_NAME_UNPARSEABLE',
+      value: cycleName || '—',
+      // Rule 13/14 — no silent fallback. A guessed counter would let the same
+      // cycle be uploaded twice under two different references.
+      action: 'اسم الدورة في شوبيفاي مش على الشكل المتوقع (#12345-R1) — مش قادرين نبني مرجع فريد '
+            + 'للشحنة، والرفع اتوقف بدل ما نخمّن رقم ونسمح برفع مكرر بفلوس. راجع الدورة في شوبيفاي.',
+    };
+  }
+  return { ok: true, uref: `${cleanText(order.name)}${jobType === 'exchange' ? '-EX' : '-R'}${n}` };
+}
+
+// ─── §RE-UPLOAD::buildRePayload ───
+// 🔴 THE DIRECTION FLIPS WITH THE TYPE. Measured live 10-09-2026:
+//
+//              CRP (25)                    Exchange (30)
+//   customer   pickupAddress               dropOffAddress
+//   warehouse  dropOffAddress (auto)       pickupAddress (auto)
+//
+// Bosta fills the warehouse side itself from `businessLocationId`. Sending the
+// customer address as `dropOffAddress` on a CRP returns HTTP 500
+// ("Cannot read properties of undefined (reading 'city')") — NOT a clean 400.
+function buildRePayload(order, plan, mode, jobType, parts) {
+  const sa = order.shippingAddress || {};
+
+  const fullName  = cleanText(sa.name) || `${cleanText(sa.firstName)} ${cleanText(sa.lastName)}`.trim();
+  const nameParts = fullName.split(/\s+/).filter(Boolean);
+  const firstName = cleanText(sa.firstName) || nameParts[0] || '';
+  const lastName  = cleanText(sa.lastName)  || nameParts.slice(1).join(' ');
+
+  const phone  = wirePhone(sa.phone);
+  const second = wirePhone(order?.customer?.phone);
+  const sendSecond = second && normPhone(second) !== normPhone(phone);
+
+  const firstLine = [
+    [sa.address1, sa.address2].filter(Boolean).join(' - '),
+    `${cleanText(sa.city)}- ${cleanText(sa.province)}`,
+  ].filter(Boolean).join(', ').trim();
+
+  // 🔴 The field is `city` — NOT `cityName`. The validator does not see
+  // `cityName` at all and drops it silently, so anything copied verbatim from
+  // the Bosta dashboard falls into this trap.
+  const address = { city: plan.cityName, firstLine };
+  if (mode === 'district') { address.districtId = plan.districtId; }
+  if (mode === 'zoneName') { address.cityId = plan.cityId; address.districtName = plan.districtName; }
+
+  const receiver = { firstName, phone };            // the documented required pair
+  if (lastName)   receiver.lastName    = lastName;
+  if (fullName)   receiver.fullName    = fullName;  // optional — sent WITH firstName, not instead
+  if (sendSecond) receiver.secondPhone = second;
+
+  const payload = {
+    type: BOSTA_TYPE_BY_JOB[jobType],
+    cod: parts.cod,                                  // 🔴 signed — see §RE-UPLOAD::resolveCod
+    goodsInfo: { amount: parts.goodsValue },         // ⚠️ carries a 1% insurance fee at Bosta
+    receiver,
+    // The returning package — present on BOTH types.
+    returnSpecs: {
+      packageType: 'Parcel',
+      size: 'SMALL',
+      packageDetails: { itemsCount: parts.returnCount, description: parts.returnDescription },
+    },
+    businessLocationId: BOSTA_LOCATION_ID,
+    businessReference: cleanText(order.name),        // ق-١ — verbatim, hash included
+    uniqueBusinessReference: parts.uref,             // ق-٢ — per-cycle, hidden from every search
+    allowToOpenPackage: ALLOW_OPEN_PKG,
+  };
+
+  if (jobType === 'exchange') {
+    payload.dropOffAddress = address;
+    // The outgoing package. `analyzeReturnCycles` already refuses an exchange
+    // with nothing going out (EXCHANGE_WITHOUT_ITEMS), so this is never empty.
+    payload.specs = {
+      packageType: 'Parcel',
+      size: 'SMALL',
+      packageDetails: { itemsCount: parts.outgoingCount, description: parts.outgoingDescription },
+    };
+  } else {
+    payload.pickupAddress = address;
+    // No `specs` on a CRP — nothing leaves the warehouse. Verified: accepted (201).
+  }
+
+  // ⚠️ `flexShippingInfo` is deliberately NOT sent. Bosta fills it in itself
+  // ({isOrderEligible:true, amountToBeCollected:100}) and marks it
+  // status:"Not Applicable" on R/E shipments, so sending it changes nothing.
+  const notes = flattenNote(order.note);
+  if (notes) payload.notes = notes;                  // `notes` is the official name; `deliveryNotes` does not exist
+  return payload;
+}
+
+// ─── §RE-UPLOAD::resolveCod ───
+// 🔴 `Bosta-Orders-Upload` wraps this value in Math.abs(). That is correct for
+// S1 (a negative outstanding there means the customer overpaid) and a disaster
+// here: it would turn "refund him 2,000" into "collect 2,000 from him".
+// The sign is load-bearing — three of four sampled R/E orders are negative.
+function resolveCod(order) {
+  const raw = parseFloat(order?.totalOutstandingSet?.shopMoney?.amount || 0) || 0;
+  const cod = Math.max(raw, COD_REFUND_MIN);
+  return {
+    cod,
+    raw,
+    // Bosta refuses anything below -2000 outright (400 · errorCode "3008"), so
+    // the clamp is required — but it is DECLARED, never silent. The remainder
+    // is settled at the office, and the employee has to see the number.
+    clipped: raw < COD_REFUND_MIN,
+    remainder: raw < COD_REFUND_MIN ? Math.abs(raw - COD_REFUND_MIN) : 0,
+  };
+}
+
+// ─── §RE-UPLOAD::buildPayloadParts ───
+// Everything the payload needs that comes from the cycle, in one place, so the
+// validation below and the payload builder can never disagree about it.
+function buildPayloadParts(order, jobType) {
+  const cycle    = order?.currentCycle || null;
+  const returns  = resolveReturnItems(cycle);
+  const outgoing = Array.isArray(order?.outgoingItems) ? order.outgoingItems : [];
+  const money    = resolveCod(order);
+
+  // Goods value = what is TRAVELLING. On an exchange that is the outgoing
+  // package; on a return it is the pieces coming back. Same rule the Excel
+  // file has used since v5.6.0.
+  const goodsValue = outgoing.length ? valueItems(outgoing) : valueItems(returns);
+
+  return {
+    ...money,
+    returnItems: returns,
+    returnCount: countItems(returns),
+    returnDescription: describeItems(returns),
+    outgoingCount: countItems(outgoing),
+    outgoingDescription: describeItems(outgoing),
+    goodsValue: Math.round(goodsValue * 100) / 100,
+  };
+}
+
+// ─── §RE-UPLOAD::validateReOrder ───
+// worker-builder ⑩① — every cheap check runs BEFORE the irreversible call.
+// Creating the shipment costs real money; a rejection afterwards leaves a paid
+// shipment nobody asked for.
+function validateReOrder(order, plan, parts, jobType) {
+  const problems = [];
+  const sa = order.shippingAddress || {};
+
+  if (!plan.ok) { problems.push(plan.error); return problems; }
+
+  if (!wirePhone(sa.phone) || normPhone(sa.phone).length < 8) {
+    problems.push('رقم تليفون الشحن ناقص أو غير صالح');
+  }
+  const fullName = cleanText(sa.name) || `${cleanText(sa.firstName)} ${cleanText(sa.lastName)}`.trim();
+  if (!fullName) problems.push('اسم المستلم فاضي — firstName إلزامي عند بوسطة');
+
+  const firstLineLen = [sa.address1, sa.address2, sa.city, sa.province].filter(Boolean).join(' ').length;
+  if (firstLineLen <= 5) problems.push('العنوان أقصر من الحد الأدنى (أكتر من ٥ حروف)');
+
+  if (parts.cod > COD_MAX) {
+    problems.push(`قيمة التحصيل ${parts.cod.toLocaleString('en-US')} أعلى من الحد الموثّق ${COD_MAX.toLocaleString('en-US')}`);
+  }
+
+  // A shipment with no package on either side is not a shipment. The exchange
+  // side is already blocked upstream (EXCHANGE_WITHOUT_ITEMS); this catches the
+  // return side, which nothing else checks.
+  if (!parts.returnCount) {
+    problems.push('مفيش ولا قطعة راجعة في الدورة المفتوحة — الشحنة مالهاش محتوى، الرفع اتوقف');
+  }
+  if (jobType === 'exchange' && !parts.outgoingCount) {
+    problems.push('مفيش ولا قطعة خارجة على الاستبدال — الرفع اتوقف');
+  }
+  return problems;
+}
+
+// ─── §RE-UPLOAD::createDelivery ───
+// 🔴 Success is `res.ok && body.success` — checking `=== 201` is BANNED.
+// The docs say 200 and the live call returned 201; testing an explicit number
+// means a shipment that really was created gets counted as a failure and the
+// employee re-uploads → a duplicate shipment with real money.
+async function createDelivery(env, payload, documented) {
+  const url = documented ? `${BOSTA_BASE}/deliveries?apiVersion=1` : `${BOSTA_BASE}/deliveries`;
+  let resp, text;
+  try {
+    resp = await fetch(url, { method: 'POST', headers: bostaHeaders(env), body: JSON.stringify(payload) });
+    text = await resp.text();
+  } catch (e) {
+    throw new Error(`بوسطة: فشل الاتصال — ${e.message}`);
+  }
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch { /* not JSON — shown raw below */ }
+
+  if (resp.ok && body?.success) {
+    const d = body.data && typeof body.data === 'object' ? body.data : body;
+    return {
+      ok: true,
+      status: resp.status,
+      trackingNumber: d?.trackingNumber != null ? String(d.trackingNumber) : null,
+      bostaId: d?._id || d?.id || null,
+    };
+  }
+  return {
+    ok: false,
+    status: resp.status,
+    errorCode: body?.errorCode != null ? String(body.errorCode) : null,   // 🔴 string, not number
+    message: body?.message || body?.error || text.slice(0, 300) || `HTTP ${resp.status}`,
+  };
+}
+
+// ─── §RE-UPLOAD::terminateDelivery ───
+// The undo. 🔴 By trackingNumber — the `_id` route returns 404.
+// After it succeeds the shipment DISAPPEARS (a later GET returns
+// "400 Delivery not found."), and the uniqueBusinessReference is freed, so a
+// corrected re-upload of the same cycle goes through.
+async function terminateDelivery(env, trackingNumber) {
+  const tn = cleanText(trackingNumber);
+  if (!tn) return { ok: false, status: 0, message: 'رقم التتبع فاضي' };
+  let resp, text;
+  try {
+    resp = await fetch(`${BOSTA_BASE}/deliveries/business/${encodeURIComponent(tn)}/terminate`, {
+      method: 'DELETE', headers: bostaHeaders(env),
+    });
+    text = await resp.text();
+  } catch (e) {
+    return { ok: false, status: 0, message: `فشل الاتصال ببوسطة — ${e.message}` };
+  }
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch { /* raw text below */ }
+  if (resp.ok) return { ok: true, status: resp.status };
+  return {
+    ok: false,
+    status: resp.status,
+    errorCode: body?.errorCode != null ? String(body.errorCode) : null,
+    message: body?.message || body?.error || text.slice(0, 200) || `HTTP ${resp.status}`,
+  };
+}
+
+// ─── §RE-UPLOAD::humanizeBostaError ───
+function humanizeBostaError(res) {
+  const code = res.errorCode;
+  if (code === '11000') {
+    return 'بوسطة رافضة: الدورة دي مرفوعة عندها بالفعل ومعاها شحنة شغّالة '
+         + '(uniqueBusinessReference مكرر). لو الشحنة القديمة غلط، ألغيها الأول بزرار «إلغاء الشحنة» وبعدين ارفع تاني.';
+  }
+  if (code === '3008') return `بوسطة رافضة: أقصى مبلغ استرداد عند الباب ${COD_REFUND_MIN} جنيه`;
+  if (code === '3003') return 'بوسطة رافضة: المنطقة غير موجودة عندها (District Not Found)';
+  if (code === '3002') return 'بوسطة رافضة: المدينة غير موجودة عندها';
+  if (code === '1028') return 'بوسطة رافضة: مفتاح الـ API غير صالح — راجع BOSTA_API_KEY';
+  // 🔴 A CRP built with the customer address in the wrong field answers 500 with
+  // NO errorCode, so the humaniser must survive a code-less failure.
+  if (res.status >= 500) {
+    return `بوسطة ردّت بخطأ داخلي (HTTP ${res.status}): ${res.message} — `
+         + 'غالبًا شكل العنوان غلط للنوع ده. بلّغ عن الأوردر ده بدل ما تعيد المحاولة.';
+  }
+  return `بوسطة رافضة (HTTP ${res.status}${code ? ` · كود ${code}` : ''}): ${res.message}`;
+}
+
+// ─── §RE-UPLOAD::uploadOne ───
+// Four result states, not two — worker-builder Step 5A ④.
+// 🔴 `warning` here means THE SHIPMENT EXISTS at Bosta with a tracking number
+// and something after it did not complete. It must never be shown as failure:
+// re-uploading buys a second shipment with real money.
+async function uploadOne(env, order, catalog, job, override) {
+  const actions = [];
+  const row = {
+    orderId: cleanText(order.id),
+    orderName: cleanText(order.name),
+    status: 'error',
+    actions,
+    trackingNumber: null,
+    bostaId: null,
+    uref: null,
+    contractUsed: null,
+    citySent: null,
+    cityAuto: null,
+    districtSent: null,
+    cityOverridden: false,
+    codSent: null,
+    codClipped: false,
+    codRemainder: 0,
+    warnings: [],
+    error: null,
+  };
+
+  const plan  = resolveAddress(order, catalog);
+  const parts = buildPayloadParts(order, job.jobType);
+
+  const problems = validateReOrder(order, plan, parts, job.jobType);
+  if (problems.length) { row.error = problems.join(' · '); return row; }
+
+  const ref = buildUniqueRef(order, job.jobType);
+  if (!ref.ok) { row.error = `${ref.code}: ${ref.action}`; return row; }
+  row.uref = ref.uref;
+
+  // ─── the employee's manual override beats the automatic match ───
+  // 🔴 It may change the CITY, not only the district: Bosta's grouping is not
+  // the administrative one, and customers pick the wrong governorate. Without
+  // it those rows have no manual fix at all — and a wrong city is not a neutral
+  // fallback like a missing district, it decides the branch and the price.
+  // ⚠️ The override is written INTO planUsed on purpose: the payload, the row
+  // fields and the 3003 fallback all read from it, so the fallback keeps the
+  // corrected city. A side variable would silently resend the wrong one.
+  let mode = plan.mode;
+  const planUsed = { ...plan };
+
+  const ovCityId = override?.cityId || null;
+  if (ovCityId && ovCityId !== plan.cityId) {
+    const ovCity = catalog.cities.find((c) => c.cityId === ovCityId);
+    if (!ovCity) {
+      row.error = `المدينة المختارة يدويًا (${ovCityId}) مش موجودة في كتالوج بوسطة — `
+                + 'الرفع اتوقف بدل ما يتبعت على المدينة الأصلية';
+      return row;
+    }
+    planUsed.cityId   = ovCity.cityId;
+    planUsed.cityName = ovCity.cityName;
+    row.cityOverridden = true;
+  }
+
+  if (override?.districtId) {
+    const city = catalog.cities.find((c) => c.cityId === planUsed.cityId);
+    const { list } = availableDistricts(city);
+    const d = list.find((x) => x.id === override.districtId);
+    // 🔴 Not found = STOP, never a silent fall back to the automatic match. The
+    // employee explicitly picked a district; shipping to a different one
+    // without telling them is a paid shipment to an address they did not approve.
+    if (!d) {
+      row.error = `المنطقة المختارة يدويًا مش موجودة (أو مش متاحة للتسليم) في `
+                + `مدينة ${planUsed.cityName} عند بوسطة — الرفع اتوقف. افتح النافذة واختر من الأول.`;
+      return row;
+    }
+    mode = 'district';
+    planUsed.districtId   = d.id;
+    planUsed.districtName = d.name;
+  } else if (override?.forceProvince || row.cityOverridden) {
+    mode = 'province';
+  }
+
+  const parts2 = { ...parts, uref: ref.uref };
+  let documented = mode === 'district' || mode === 'zoneName';
+  let payload = buildRePayload(order, planUsed, mode, job.jobType, parts2);
+
+  let res;
+  try {
+    res = await createDelivery(env, payload, documented);
+  } catch (e) {
+    row.error = e.message;
+    return row;
+  }
+
+  row.contractUsed = documented ? 'documented' : 'undocumented';
+  row.citySent     = planUsed.cityName;
+  row.cityAuto     = plan.cityName;
+  row.districtSent = (mode === 'district' || mode === 'zoneName') ? planUsed.districtName : null;
+  row.codSent      = parts.cod;
+  row.codClipped   = parts.clipped;
+  row.codRemainder = parts.remainder;
+
+  // 🔴 errorCode is a STRING — comparing it to the number 3003 means this
+  // fallback never runs.
+  if (!res.ok && String(res.errorCode) === '3003' && documented) {
+    row.warnings.push(`بوسطة رفضت المنطقة "${row.districtSent}" — اترفعت على مستوى المحافظة بدلها`);
+    mode = 'province';
+    documented = false;
+    payload = buildRePayload(order, planUsed, 'province', job.jobType, parts2);
+    try {
+      res = await createDelivery(env, payload, false);
+    } catch (e) {
+      row.error = e.message;
+      return row;
+    }
+    row.contractUsed = 'undocumented';
+    row.districtSent = null;
+  }
+
+  if (!res.ok) { row.error = humanizeBostaError(res); return row; }
+
+  actions.push(`رفع شحنة ${job.label} على بوسطة (${row.contractUsed === 'documented' ? 'بالمنطقة' : 'بالمحافظة'})`);
+  row.trackingNumber = res.trackingNumber;
+  row.bostaId        = res.bostaId;
+
+  if (parts.clipped) {
+    row.warnings.push(
+      `العميل ليه ${Math.abs(parts.raw).toLocaleString('en-US')} — بوسطة هترجّع `
+      + `${Math.abs(COD_REFUND_MIN).toLocaleString('en-US')} بس (حد بوسطة)، والباقي `
+      + `${parts.remainder.toLocaleString('en-US')} يتسوّى مكتبيًا`,
+    );
+  }
+  if (row.cityOverridden) {
+    row.warnings.push(`المدينة اتغيّرت يدويًا من ${row.cityAuto} إلى ${row.citySent}`);
+  }
+
+  // 🔴 Past this point the shipment EXISTS and costs money. Everything after it
+  // is a warning, never an error (worker-builder ⑩②).
+  if (!res.trackingNumber) {
+    row.status = 'warning';
+    row.warnings.push('بوسطة قبلت الشحنة بس ما رجّعتش رقم تتبع — دوّر عليها على الداشبورد برقم الأوردر قبل أي إعادة رفع');
+    return row;
+  }
+
+  row.status = row.warnings.length ? 'warning' : 'success';
+  return row;
+}
+
+// ─── §RE-UPLOAD::runUploadBatch ───
+// Conservative parallelism: Bosta publishes no rate limits anywhere, so the
+// number is measured, never guessed (`bosta-api-helper` — "صفر ذكر لـ rate
+// limits في التوثيق").
+// ⚠️ Results come back in INPUT order regardless of completion order — the page
+// pairs them with its rows by index (worker-builder ⑬).
+async function runUploadBatch(env, orders, catalog, job, overrides) {
+  const out = new Array(orders.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < orders.length) {
+      const i = cursor++;
+      const order = orders[i];
+      try {
+        out[i] = await uploadOne(env, order, catalog, job, overrides[cleanText(order.id)] || null);
+      } catch (e) {
+        out[i] = {
+          orderId: cleanText(order.id), orderName: cleanText(order.name),
+          status: 'error', actions: [], warnings: [],
+          trackingNumber: null, error: `خطأ غير متوقع: ${e.message}`,
+        };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(UPLOAD_CONC, orders.length) }, worker));
+  return out;
+}
+
+// ══════════════════════════════════════════════════════
 // §HANDLER
 // ══════════════════════════════════════════════════════
 export default {
@@ -1411,7 +2570,20 @@ export default {
         const employee = cleanText(body.employee);
 
         const token = await getAccessToken(env);
-        const result = await fetchCandidateOrders(env, token, job);
+
+        // v6.0.0 — the catalogue is best-effort. Bosta being unreachable must
+        // not take the Excel path down with it, so the failure is reported
+        // rather than thrown: every row simply arrives without an address plan
+        // and the page disables the direct-upload button and says why.
+        let catalog = null;
+        let catalogError = null;
+        try {
+          catalog = await getCatalog(env);
+        } catch (e) {
+          catalogError = e.message;
+        }
+
+        const result = await fetchCandidateOrders(env, token, job, catalog);
 
         await writeLog(env.DB, {
           tool: TOOL_NAME,
@@ -1423,6 +2595,8 @@ export default {
             expectedStatus: job.expectedStatus,
             courier: 'Bosta',
             duplicateCheckMode: 'export_only_on_excel_click',
+            catalogLoaded: !!catalog,
+            catalogError,
             pageInfo: result.pageInfo,
           },
         });
@@ -1435,6 +2609,8 @@ export default {
           orders: result.orders,
           duplicates: {},
           duplicateCheckMode: 'export_only_on_excel_click',
+          catalogLoaded: !!catalog,
+          catalogError,
           pageInfo: result.pageInfo,
         }, 200, request);
       }
@@ -1650,6 +2826,327 @@ export default {
       }
       // ──────────────────────────────────────────────────────
 
+      // ─── §RE-UPLOAD-ENDPOINTS — v6.0.0 ────────────────────
+      // Without cityId: every Bosta city (for the city picker).
+      // With cityId: that city's districts, filtered to dropOffAvailability.
+      if (action === 'get_districts') {
+        const catalog = await getCatalog(env, { force: url.searchParams.get('force') === '1' });
+        ensureNormalized(catalog);
+        const cityId = cleanText(url.searchParams.get('cityId'));
+
+        if (!cityId) {
+          return json({
+            ok: true,
+            fetchedAt: catalog.fetchedAt,
+            cities: catalog.cities.map((c) => ({
+              cityId: c.cityId,
+              cityName: c.cityName,
+              cityAr: c.cityAr,
+              districtCount: availableDistricts(c).list.length,
+            })),
+          }, 200, request);
+        }
+
+        const city = catalog.cities.find((c) => c.cityId === cityId);
+        if (!city) return json({ ok: false, error: 'المدينة دي مش في كتالوج بوسطة' }, 404, request);
+        const { list, fieldMissing } = availableDistricts(city);
+        return json({
+          ok: true,
+          cityId: city.cityId,
+          cityName: city.cityName,
+          // Reported, never silent: an empty list because Bosta stopped sending
+          // the field is a different fact from a city with no drop-off areas.
+          catalogWarning: fieldMissing ? 'dropOffAvailability غايب من كتالوج بوسطة — القايمة اتفضّت بسببه مش لأن مفيش مناطق' : null,
+          districts: list.map((d) => ({ id: d.id, name: d.name, nameAr: d.nameAr, zone: d.zone, zoneAr: d.zoneAr })),
+        }, 200, request);
+      }
+
+      // Creates REAL, PAID shipments. Order of operations is fixed by
+      // worker-builder ⑩: every cheap check first, the irreversible call next,
+      // and everything after it is a warning — never an error.
+      if (action === 'upload_re') {
+        assertPost(request);
+        assertBostaEnv(env);
+
+        const body = await request.json().catch(() => ({}));
+        const job = getJobConfig(body.jobType);
+        const employee = cleanText(body.employee);
+        const orders = normalizeOrderPayload(body.orders);
+        const overrides = body.overrides && typeof body.overrides === 'object' ? body.overrides : {};
+
+        if (!employee) return json({ ok: false, error: 'employee مطلوب' }, 400, request);
+        if (!orders.length) return json({ ok: false, error: 'لا توجد أوردرات للرفع' }, 400, request);
+        // ② of the three-cap chain — a paste guard and the Cloudflare subrequest
+        // ceiling, NOT the page's chunk size and NOT the query-cost cap.
+        if (orders.length > MAX_UPLOAD_BATCH) {
+          return json({ ok: false, error: `أقصى عدد في الدفعة الواحدة ${MAX_UPLOAD_BATCH} أوردر` }, 400, request);
+        }
+
+        const token = await getAccessToken(env);
+
+        // ① One open R/E cycle at a time, re-read from Shopify — not trusted
+        // from the page. In v5 this gate stood in front of a metafield write;
+        // now it stands in front of a paid shipment, so it matters more, not
+        // less. Rule 15 ① — reject + log, before anything irreversible.
+        const blockedCycles = await findBlockedCycleOrders(env, token, orders, job.jobType);
+        if (blockedCycles.length) {
+          const { logged, logError } = await logCycleBlocks(env.DB, blockedCycles, job, employee);
+          return json({
+            ok: false,
+            code: 'CYCLE_BLOCKED',
+            error: 'فيه أوردرات حالة دورات الاسترجاع فيها مش واضحة — اتمنع الرفع على بوسطة لحد ما تتصلّح في شوبيفاي',
+            blocked: blockedCycles,
+            logged,
+            logError,
+          }, 409, request);
+        }
+
+        // ② Re-read the full rows from Shopify. The page sends ids and names
+        // only, so the address, the money and the cycle contents all come from
+        // Shopify at upload time — never from a screen that may be minutes old.
+        const catalog = await getCatalog(env);
+        const fresh = await fetchNodesWithCostFallback(env, token, buildDetailsQuery(), orders.map((o) => o.id));
+        const byId = new Map();
+        const lateBlocks = [];
+        for (const order of fresh) {
+          const { current, outgoing, info } = analyzeReturnCycles(order, job.jobType);
+          // The guard above ran on a separate, cheaper query. Re-checking the
+          // full read closes the window between the two: a cycle that changed
+          // in those seconds would otherwise be shipped anyway. Cheap here,
+          // because this analysis is being computed regardless.
+          if (info.blocked) {
+            lateBlocks.push({
+              id: order.id, name: order.name,
+              s2Status: cleanText(order?.s2Status?.value) || null,
+              code: info.blockReason.code, value: info.blockReason.value, action: info.blockReason.action,
+            });
+            continue;
+          }
+          byId.set(order.id, { ...order, currentCycle: current, outgoingItems: outgoing.items });
+        }
+        if (lateBlocks.length) {
+          const { logged, logError } = await logCycleBlocks(env.DB, lateBlocks, job, employee);
+          return json({
+            ok: false,
+            code: 'CYCLE_BLOCKED',
+            error: 'حالة الدورات اتغيّرت بين الفحص والرفع — الرفع اتوقف قبل أي شحنة',
+            blocked: lateBlocks,
+            logged,
+            logError,
+          }, 409, request);
+        }
+
+        const missing = orders.filter((o) => !byId.has(o.id));
+        if (missing.length) {
+          // worker-builder Step 5A ④ — "we could not read it" is never "fine".
+          return json({
+            ok: false,
+            code: 'ORDER_NOT_READABLE',
+            error: 'شوبيفاي ما رجّعتش كل الأوردرات وقت الرفع — الرفع اتوقف كله بدل ما يتم على جزء',
+            missing: missing.map((o) => o.name),
+          }, 409, request);
+        }
+
+        // ③ The irreversible part.
+        const ordered = orders.map((o) => byId.get(o.id));
+        const results = await runUploadBatch(env, ordered, catalog, job, overrides);
+
+        // ④ S2 is written ONLY for rows whose shipment actually exists, and it
+        // reuses confirm_upload's write+verify pair so there is one code path
+        // for the metafield and its verification.
+        const uploaded = results
+          .map((r, i) => ({ r, order: orders[i] }))
+          .filter(({ r }) => r.status !== 'error' && r.trackingNumber);
+
+        const now = nowToSecond();
+        let s2Error = null;
+        // 🔴 PER ORDER, not per batch. `verifyManualStatus` already answers per
+        // order, and one mismatch used to mark every uploaded row as a failed
+        // write — logging the old status for orders that did move and dropping
+        // their `metafields_change` row, so a correct update vanished from the
+        // cycle-time KPIs. Only a thrown error is genuinely batch-wide.
+        const s2Failed = new Set();
+
+        if (uploaded.length) {
+          const targets = uploaded.map(({ order }) => order);
+          try {
+            await setManualStatus(env, token, targets, job.nextStatus, now);
+            const mismatches = await verifyManualStatus(env, token, targets, job.nextStatus, now);
+            for (const m of mismatches) s2Failed.add(m.id);
+            if (mismatches.length) {
+              s2Error = `التحقق رجّع قيم غير متوقعة على: ${mismatches.map((m) => m.name).join('، ')}`;
+            }
+          } catch (e) {
+            // The write itself failed — we cannot tell which orders landed, so
+            // every uploaded row is treated as unverified.
+            s2Error = e.message;
+            for (const { order } of uploaded) s2Failed.add(order.id);
+          }
+
+          for (const { r, order } of uploaded) {
+            if (!s2Failed.has(order.id)) { r.actions.push(`تحديث S2 إلى ${job.nextStatus}`); continue; }
+            // A failure here NEVER turns a row red. The shipment exists and is
+            // paid for; red makes the employee upload again and buy a second
+            // one. It downgrades to warning and says what to fix by hand.
+            r.status = 'warning';
+            r.warnings.push(
+              `الشحنة اترفعت (${r.trackingNumber}) لكن تحديث الحالة إلى ${job.nextStatus} فشل: ${s2Error} — `
+              + 'غيّر الحالة يدويًا. **متعيدش الرفع** — ده بيعمل شحنة تانية بفلوس.',
+            );
+            r.shopifyWriteFailed = true;
+          }
+        }
+        const s2Written = uploaded.length > 0 && s2Failed.size === 0;
+
+        // ⑤ Logging. `type` splits by EXTERNAL EFFECT (worker-builder ⑭), which
+        // is why a failed upload and a failed write-back are different values:
+        // one is safe to retry and the other is not.
+        const logRows = results.map((r, i) => {
+          const order = orders[i];
+          const type = r.status === 'error' ? UPLOAD_FAILED_TYPE
+                     : r.shopifyWriteFailed ? WRITE_FAILED_TYPE
+                     : UPLOAD_TYPE_BY_JOB[job.jobType];
+          return {
+            timestamp: now,
+            tool: TOOL_NAME,
+            type,
+            employee,
+            orderId: order.id,
+            orderName: order.name,
+            valueBefore: order.s2Status || job.expectedStatus,
+            // The status only moved for rows that actually got there.
+            valueAfter: (r.status !== 'error' && !r.shopifyWriteFailed) ? job.nextStatus : (order.s2Status || job.expectedStatus),
+            notes: r.status === 'error'
+              ? `فشل رفع ${job.label} على بوسطة — ${r.error}`
+              : `رفع ${job.label} على بوسطة · تتبع ${r.trackingNumber || '—'}${r.warnings.length ? ` · ${r.warnings.join(' · ')}` : ''}`,
+            extra: {
+              jobType: job.jobType,
+              result: r.status,
+              trackingNumber: r.trackingNumber,
+              bostaId: r.bostaId,
+              uniqueBusinessReference: r.uref,
+              businessReference: order.name,
+              contractUsed: r.contractUsed,
+              citySent: r.citySent,
+              cityAuto: r.cityAuto,
+              // The measurement that says which cities deserve a row in the
+              // province table instead of a manual fix every time.
+              cityOverridden: r.cityOverridden,
+              districtSent: r.districtSent,
+              codSent: r.codSent,
+              codClipped: r.codClipped,
+              codRemainder: r.codRemainder,
+              cycleName: order.cycleName || null,
+              warnings: r.warnings,
+              error: r.error,
+            },
+          };
+        });
+
+        let logged = true;
+        let logError = null;
+        try {
+          await writeLogsBatch(env.DB, logRows);
+        } catch (e) {
+          // Step 5A ⑦ — a D1 failure does not undo the shipments, but it must
+          // never be silent.
+          logged = false;
+          logError = e.message;
+        }
+
+        // Cross-tool status history — cycle-time / R-E-cycle KPIs read only
+        // tool='metafields_change', so this S2 move has to appear there too.
+        const s2Landed = uploaded.filter(({ order }) => !s2Failed.has(order.id));
+        if (s2Landed.length) {
+          try {
+            await writeLogsBatch(env.DB, s2Landed.map(({ order }) => ({
+              timestamp: now,
+              tool: 'metafields_change',
+              type: 'update',
+              employee,
+              orderId: order.id,
+              orderName: order.name,
+              valueBefore: order.s2Status || job.expectedStatus,
+              valueAfter: job.nextStatus,
+              notes: `status_2_r_e: ${order.s2Status || job.expectedStatus} → ${job.nextStatus} (via ${TOOL_NAME} upload_re)`,
+              extra: { metafieldKey: 'custom.status_2_r_e', sourceTool: TOOL_NAME, jobType: job.jobType },
+            })));
+          } catch (e) {
+            logged = false;
+            logError = `${logError ? logError + ' | ' : ''}metafields_change: ${e.message}`;
+          }
+        }
+
+        const counts = results.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, {});
+        return json({
+          ok: true,
+          jobType: job.jobType,
+          nextStatus: job.nextStatus,
+          // ⚠️ Ordering contract: `results[i]` belongs to `orders[i]` from the
+          // request, whatever order the uploads finished in.
+          results,
+          counts,
+          s2Written,
+          s2Error,
+          logged,
+          logError,
+        }, 200, request);
+      }
+
+      // The undo. Terminating frees the uniqueBusinessReference, so a corrected
+      // re-upload of the same cycle goes through afterwards — that pairing is
+      // the whole reason this endpoint exists rather than a dashboard visit.
+      if (action === 'cancel_re') {
+        assertPost(request);
+        assertBostaEnv(env);
+
+        const body = await request.json().catch(() => ({}));
+        const employee = cleanText(body.employee);
+        const trackingNumber = cleanText(body.trackingNumber);
+        const orderId = cleanText(body.orderId) || null;
+        const orderName = cleanText(body.orderName) || null;
+        const reason = cleanText(body.reason) || null;
+
+        if (!employee) return json({ ok: false, error: 'employee مطلوب' }, 400, request);
+        if (!trackingNumber) return json({ ok: false, error: 'trackingNumber مطلوب' }, 400, request);
+
+        const res = await terminateDelivery(env, trackingNumber);
+
+        let logged = true;
+        let logError = null;
+        try {
+          await writeLog(env.DB, {
+            tool: TOOL_NAME,
+            type: CANCEL_TYPE,
+            employee,
+            orderId,
+            orderName,
+            notes: res.ok
+              ? `إلغاء شحنة بوسطة ${trackingNumber}${reason ? ` — ${reason}` : ''}`
+              : `فشل إلغاء شحنة بوسطة ${trackingNumber} — ${res.message}`,
+            extra: { trackingNumber, result: res.ok ? 'success' : 'error', status: res.status, errorCode: res.errorCode || null, message: res.message || null, reason },
+          });
+        } catch (e) {
+          logged = false;
+          logError = e.message;
+        }
+
+        if (!res.ok) {
+          return json({ ok: false, error: `فشل الإلغاء: ${res.message}`, status: res.status, logged, logError }, 502, request);
+        }
+        return json({
+          ok: true,
+          trackingNumber,
+          // 🔴 The S2 status is deliberately NOT rolled back here. Undoing a
+          // status move is a different decision from cancelling a shipment, and
+          // guessing which one the employee meant would rewrite live state.
+          note: 'الشحنة اتلغت عند بوسطة. حالة الأوردر على شوبيفاي ما اتغيّرتش — غيّرها يدويًا لو محتاج.',
+          logged,
+          logError,
+        }, 200, request);
+      }
+      // ──────────────────────────────────────────────────────
+
       // ─── §LOG-ENDPOINTS ───────────────────────────────────
       // CSV multi-select params, per html-builder Log Filter Model v2 —
       // ?employees=ahmed,sara & ?types=scan,export_return
@@ -1701,12 +3198,32 @@ export default {
           d1 = { ok: false, error: e.message };
         }
 
+        // v6.0.0 — Bosta is now a write path, so diag has to say whether the
+        // key is set and whether the catalogue actually parses. A catalogue
+        // that returns zero cities means the response SHAPE changed, not that
+        // Bosta has no cities — so the counts are reported, never a bare ok.
+        let bosta = { ok: false, keySet: false, error: null, cities: null, districts: null, dropOffDistricts: null, fetchedAt: null };
+        try {
+          assertBostaEnv(env);
+          bosta.keySet = true;
+          const catalog = await getCatalog(env);
+          ensureNormalized(catalog);
+          const districts = catalog.cities.reduce((n, c) => n + c.districts.length, 0);
+          const dropOff = catalog.cities.reduce((n, c) => n + availableDistricts(c).list.length, 0);
+          bosta = { ok: true, keySet: true, error: null, cities: catalog.cities.length, districts, dropOffDistricts: dropOff, fetchedAt: catalog.fetchedAt };
+        } catch (e) {
+          bosta.error = e.message;
+        }
+
         return json({
           ok: true,
           workerVersion: WORKER_VERSION,
           envKeys,
           shopify,
           d1,
+          bosta,
+          bostaTypes: BOSTA_TYPE_BY_JOB,
+          codLimits: { max: COD_MAX, refundMin: COD_REFUND_MIN },
           origin: request.headers.get('Origin') || null,
           allowedOrigins: ALLOWED_ORIGINS,
         }, 200, request);

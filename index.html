@@ -282,6 +282,10 @@
     .btn-green:hover:not(:disabled) { filter: brightness(.95); }
     .btn-purple { background: var(--purple); color: #fff; }
     .btn-purple:hover:not(:disabled) { filter: brightness(.95); }
+    /* A real red outline, not red text on a plain border — cancelling a paid
+       shipment should not look like a neutral action. */
+    .btn-red-outline { background: var(--surface); color: var(--red); border-color: var(--red-border); }
+    .btn-red-outline:hover:not(:disabled) { background: var(--red-light); border-color: var(--red); }
     .btn-secondary { background: var(--surface); color: var(--text-secondary); border-color: var(--border-strong); }
     .btn-secondary:hover:not(:disabled) { color: var(--text-primary); border-color: var(--text-secondary); }
     .btn-warning { background: var(--amber); color: #fff; border-color: var(--amber); }
@@ -757,6 +761,97 @@
       .cycle-review-table .export-dup-table-head,
       .cycle-review-table .export-dup-table-row { grid-template-columns: 100px 140px 1fr; }
     }
+
+    /* ═══ v6.0.0 — direct Bosta upload ═══ */
+    .badge-neutral { background: var(--surface-2); color: var(--text-secondary); border-color: var(--border-strong); }
+
+    .upload-note { margin-top: 10px; display: grid; gap: 6px; }
+    .uw-warn, .uw-err {
+      padding: 9px 12px; border-radius: var(--radius-sm); font-size: 12.5px; line-height: 1.7;
+      border: 1px solid;
+    }
+    .uw-warn { background: var(--amber-light); color: var(--amber-dark); border-color: var(--amber-border); }
+    .uw-err  { background: var(--red-light);   color: var(--red-dark);   border-color: var(--red-border); }
+
+    /* The address cell is a button: the plan is a decision the employee can
+       overrule, so it has to look pressable rather than like static text. */
+    .addr-btn {
+      display: block; width: 100%; text-align: right; cursor: pointer;
+      background: none; border: 1px dashed transparent; border-radius: var(--radius-sm);
+      padding: 4px 6px; font: inherit; color: inherit;
+    }
+    .addr-btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
+    .addr-sub { color: var(--text-muted); font-size: 11px; margin-top: 3px; }
+    .addr-doubt { border-color: var(--amber-border); background: var(--amber-light); }
+
+    .district-modal, .upload-result-modal { max-width: 720px; width: 94vw; }
+    .dm-order { font-weight: 800; font-size: 15px; }
+    .dm-addr  { color: var(--text-secondary); font-size: 12.5px; margin: 4px 0 12px; line-height: 1.7; }
+    .dm-sug-hdr { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+    .dm-suggest { display: grid; gap: 6px; margin-bottom: 14px; }
+    .dm-sug {
+      display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+      text-align: right; cursor: pointer; font: inherit;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--surface); padding: 8px 10px; width: 100%;
+    }
+    .dm-sug span { font-size: 11.5px; color: var(--text-muted); }
+    .dm-sug:hover { border-color: var(--accent); background: var(--accent-light); }
+    /* The match the engine already found goes first and stays visibly the
+       match — burying it in its alphabetical place among 400 rows is the
+       opposite of what a match-result window is for. */
+    .dm-sug-match { border-color: var(--green-border); background: var(--green-light); }
+    .dm-sug-cross { border-color: var(--amber-border); background: var(--amber-light); }
+    .dm-city-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .dm-lbl { font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; }
+    .dm-city-row select, .dm-search {
+      flex: 1; padding: 8px 10px; border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm); font: inherit; background: var(--surface);
+    }
+    .dm-search { width: 100%; margin-bottom: 8px; }
+    .dm-list { max-height: 320px; overflow-y: auto; display: grid; gap: 4px; }
+    .dm-loading { padding: 16px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
+    .dm-item {
+      display: flex; justify-content: space-between; gap: 10px; align-items: center;
+      text-align: right; cursor: pointer; font: inherit; width: 100%;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--surface); padding: 7px 10px;
+    }
+    .dm-item:hover { border-color: var(--accent); background: var(--accent-light); }
+    .dm-item.sel { border-color: var(--green); background: var(--green-light); font-weight: 700; }
+    .dm-item-name { font-size: 12.5px; }
+    /* 🔴 The zone name is shown IN FULL — never truncated. The clipped part is
+       exactly what tells one zone from another ("برج العرب الجديده - احياء…"),
+       and the zone is what settles the CITY. */
+    .dm-item-zone { font-size: 11px; color: var(--text-muted); text-align: left; }
+
+    .ur-counts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .ur-count { font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px; border: 1px solid; }
+    .ur-ok   { background: var(--green-light); color: var(--green); border-color: var(--green-border); }
+    .ur-warn { background: var(--amber-light); color: var(--amber-dark); border-color: var(--amber-border); }
+    .ur-err  { background: var(--red-light);   color: var(--red-dark);   border-color: var(--red-border); }
+    .ur-note {
+      font-size: 12.5px; line-height: 1.8; margin-bottom: 12px;
+      color: var(--amber-dark);
+    }
+    .ur-note:empty { display: none; }
+    .ur-rows { display: grid; gap: 8px; max-height: 55vh; overflow-y: auto; }
+    .ur-row { border: 1px solid var(--border); border-right-width: 4px; border-radius: var(--radius-sm); padding: 9px 11px; }
+    .ur-row-ok   { border-right-color: var(--green); }
+    .ur-row-warn { border-right-color: var(--amber); background: var(--amber-light); }
+    .ur-row-err  { border-right-color: var(--red);   background: var(--red-light); }
+    .ur-row-hd { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+    .ur-tn { font-size: 12px; color: var(--text-secondary); }
+    .ur-row-act { font-size: 11.5px; color: var(--text-muted); margin-top: 4px; }
+    .ur-row-msg { font-size: 12px; line-height: 1.7; margin-top: 4px; }
+    .ur-msg-warn { color: var(--amber-dark); }
+    .ur-msg-err  { color: var(--red-dark); }
+    .btn-xs { padding: 3px 9px; font-size: 11.5px; }
+
+    @media (max-width: 640px) {
+      .dm-city-row { flex-direction: column; align-items: stretch; }
+      .ur-row-hd { flex-direction: column; align-items: flex-start; }
+    }
   </style>
 </head>
 <body>
@@ -865,8 +960,13 @@
         </div>
 
         <div class="actions-row">
-          <button class="btn btn-green" id="exportBtn" onclick="exportCurrentOrders()" disabled>📥 تصدير الكل (رفع بوسطة)</button>
+          <!-- v6.0.0 — the API path is the primary button; Excel stays as the
+               fallback for the day Bosta changes the contract or the key is
+               unreachable, and for any order the API refuses. -->
+          <button class="btn btn-green" id="uploadBtn" onclick="uploadCurrentOrders()" disabled>🚀 رفع الكل على بوسطة</button>
+          <button class="btn" id="exportBtn" onclick="exportCurrentOrders()" disabled>📥 تصدير Excel بدل الرفع</button>
         </div>
+        <div class="upload-note" id="catalogWarn" style="display:none;"></div>
 
         <div class="status-bar" id="statusBar"></div>
       </div>
@@ -949,6 +1049,7 @@
                   <th class="sortable-th" data-sort-key="s2" onclick="toggleOrderSort('s2')">S2<span class="sort-icon" data-sort-key="s2"></span></th>
                   <th class="sortable-th" data-sort-key="courier" onclick="toggleOrderSort('courier')">Courier<span class="sort-icon" data-sort-key="courier"></span></th>
                   <th>الدورة المفتوحة</th>
+                  <th>عنوان بوسطة</th>
                   <th>Export Status</th>
                 </tr>
               </thead>
@@ -1210,11 +1311,23 @@
   <div class="eco-overlay" id="changelogOverlay" onclick="closeChangelogOnBackdrop(event)">
     <div class="eco-modal">
       <div class="eco-modal-hdr">
-        <span id="changelogTitle">V5.6.0 — Changelog</span>
+        <span id="changelogTitle">V6.0.0 — Changelog</span>
         <button class="modal-close-x" onclick="closeChangelog()">✕</button>
       </div>
       <div class="eco-modal-body">
         <div class="hint">
+          <b>V6.0.0 — الأداة بقت ترفع على بوسطة بنفسها</b><br>
+          - 🚀 <b>زرار «رفع الكل على بوسطة»</b> بينشئ الشحنات بالـ API وبيحدّث S2 في نفس النداء. قبل كده كانت خطوتين منفصلتين (تصدير ملف → رفعه بالإيد → ترجع تأكد)، والسجل بيقول التمن: في <b>يونيو ويوليو 2026 اتصدّر 30 أوردر واتأكد منهم صفر</b> — الشحنة راحت لبوسطة والحالة فضلت <span class="mono">Confirmed + RETURN/EXCHANGE</span> شهرين. دمج الخطوتين بيقفل الفجوة دي هيكليًا.<br>
+          - 📥 <b>تصدير Excel اتساب موجود</b> كخطة بديلة — لو عقد بوسطة اتغيّر، أو المفتاح مش متاح، أو أوردر الـ API رافضه.<br>
+          - 📍 <b>عمود «عنوان بوسطة»</b> جديد: بيبيّن المنطقة اللي المطابقة لقتها، وبيتفتح على نافذة اختيار فيها الاقتراحات أول القايمة. محرك المطابقة اتنقل كما هو من أداة <span class="mono">Bosta-Orders-Upload</span> — بكتالوج بوسطة الحي، ومطابقة الزون، وجدول المحافظات المقفول.<br>
+          - 🟠 <b>صفوف «المدينة مشكوك فيها» مستثناة من «تحديد الكل»</b>. المنطقة الناقصة عادية (بتدخل مسار العناوين غير الواضحة عند بوسطة)، لكن <b>المدينة الغلط بتحدد الفرع والتسعيرة</b>.<br>
+          - 💰 <b>مبلغ الاسترداد بقى معلن.</b> بوسطة مابترجّعش أكتر من 2,000 عند الباب (<span class="mono">errorCode 3008</span>) — الأداة بتقص عند الحد <b>وبتقول للموظف الباقي كام</b> بدل القص الصامت اللي كان في الإكسيل.<br>
+          - 🔴 <b>«تم جزئيًا» (أصفر) مش فشل.</b> معناها الشحنة <b>موجودة عند بوسطة</b> ومعاها رقم تتبع وحاجة بعدها ما تمّتش. <b>إعادة الرفع بتعمل شحنة تانية بفلوس حقيقية</b> — صلّح اللي مكتوب في الصف، أو استخدم زرار «إلغاء الشحنة».<br>
+          - ↩️ <b>زرار إلغاء الشحنة</b> جنب كل نتيجة. الإلغاء عند بوسطة بيحرّر مرجع الدورة، فالرفع تاني بعد تصحيح العنوان بيعدّي. (بيلغي الشحنة بس — <b>مابيرجّعش</b> حالة الأوردر.)<br>
+          - ⛔ حارس الدورات بقى قدّام <b>شحنة بفلوس</b> مش قدّام ميتافيلد، فبيتفحص مرتين: قبل الرفع، وتاني على القراءة الكاملة قبل أول نداء لبوسطة.<br>
+          - 🔐 محتاج سر جديد على الـ Worker: <span class="mono">BOSTA_API_KEY</span> + <b>Promote</b>. من غيره زرار الرفع بيفضل مقفول والتصدير شغّال عادي.<br>
+          - ⏸️ <b>رقم التتبع مش بيتكتب في ميتافيلد</b> (قرار مؤجَّل): <span class="mono">custom.bosta_tracking_number</span> واحد وبتاع شحنة الشحن الأصلية، ومفيش مقابل لـ S2. الرقم عايش في سجل العمليات وعند بوسطة تحت رقم الأوردر.<br>
+          <br>
           <b>V5.6.0</b><br>
           - 🔴 <b>إصلاح قطع الاستبدال بعد تعديل الأوردر.</b> لما قطعة الاستبدال اللي شوبيفاي عملها تتشال بتعديل أوردر وتتحط قطعة تانية بالإيد (بيحصل لما المقاس/اللون يتغيّر بعد ما الاستبدال اتعمل رسمي)، <span class="mono">exchangeLineItems</span> بتاعة الدورة بتفضى <b>خالص</b> — وشوبيفاي في الـ Admin لسه بتقول «Exchange item for return #X» على السطر المشال، يعني الشاشة والـ API بيقولوا حاجتين مختلفين. النتيجة كانت: بادج ⚠️ «من غير قطع استبدال»، و"Package Description" و"No. of Items" فاضيين في ملف بوسطة، و<span class="mono">Goods Value</span> بيرجع لسعر <b>القطعة الراجعة</b> بدل الخارجة. مقيس حيًا على <span class="mono">#53531</span> و<span class="mono">#53701</span> (الأخير: 2600 بدل 2400 — غلط في الفلوس فعلي).<br>
           - المصدر البديل: سطور الأوردر اللي <span class="mono">currentQuantity &gt; 0</span> و<span class="mono">unfulfilledQuantity &gt; 0</span> — دي بالظبط القطعة المستنية تتشحن. متأكد عليها على 25 أوردر بدورة مفتوحة: فاضية في كل استرجاع صافي، ومطابقة 1:1 لـ <span class="mono">exchangeLineItems</span> في الاستبدال السليم (<span class="mono">#53227</span>). الدورة فضلت <b>المصدر الأساسي</b> والبديل fallback مش دمج — الدمج كان هيعدّ القطعة مرتين.<br>
@@ -1355,6 +1468,58 @@
     </div>
   </div>
 
+  <!-- v6.0.0 — district picker. The employee's manual choice OVERRIDES the
+       automatic match, and it may change the CITY as well as the district:
+       Bosta's grouping is not the administrative one (العبور is Qalyubia on
+       paper and sits under Cairo at Bosta) and customers pick the wrong
+       governorate. Without a city override those rows have no manual fix at
+       all — and a wrong city is not a neutral fallback, it decides the branch
+       and the price. -->
+  <div class="modal-overlay" id="districtOverlay" onclick="if(event.target===this)closeDistrictModal()">
+    <div class="modal district-modal">
+      <div class="modal-hdr">
+        <span>📍 اختيار منطقة بوسطة</span>
+        <button class="modal-close-x" onclick="closeDistrictModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="dm-order" id="dmOrder">—</div>
+        <div class="dm-addr" id="dmAddr">—</div>
+        <div class="dm-suggest" id="dmSuggest"></div>
+        <div class="dm-city-row">
+          <label class="dm-lbl" for="dmCity">المدينة عند بوسطة</label>
+          <select id="dmCity" onchange="onDistrictCityChange()"></select>
+        </div>
+        <input type="text" id="dmSearch" class="dm-search" placeholder="ابحث عن المنطقة…" oninput="renderDistrictList()" />
+        <div class="dm-list" id="dmList"></div>
+      </div>
+      <div class="modal-ftr">
+        <button class="btn btn-red-outline" onclick="clearDistrictChoice()">مسح الاختيار اليدوي</button>
+        <button class="btn btn-green" id="dmConfirm" onclick="confirmDistrictChoice()" disabled>تثبيت المنطقة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload results. 🔴 Four states, not two — and yellow is NOT failure:
+       it means the shipment EXISTS at Bosta with a tracking number and
+       something after it did not complete. Re-uploading a yellow row buys a
+       second shipment with real money. -->
+  <div class="modal-overlay" id="uploadResultOverlay" onclick="if(event.target===this)closeUploadResults()">
+    <div class="modal upload-result-modal">
+      <div class="modal-hdr">
+        <span>🚀 نتيجة الرفع على بوسطة</span>
+        <button class="modal-close-x" onclick="closeUploadResults()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="ur-counts" id="urCounts"></div>
+        <div class="ur-note" id="urNote"></div>
+        <div class="ur-rows" id="urRows"></div>
+      </div>
+      <div class="modal-ftr">
+        <button class="btn" onclick="closeUploadResults()">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="statusConfirmOverlay" onclick="if(event.target===this)closeStatusConfirmModal()">
     <div class="modal status-confirm-modal">
       <div class="modal-hdr">
@@ -1401,8 +1566,8 @@
     </div>
   </div>
   <script>
-    const TOOL_VERSION = '5.6.0';
-    const MIN_WORKER_VERSION = '5.5.0'; // lowest Worker version this page relies on (order.outgoingItems — an older Worker omits it and the file silently loses Package Description / No. of Items)
+    const TOOL_VERSION = '6.0.0';
+    const MIN_WORKER_VERSION = '6.0.0'; // v6.0.0 — this page calls upload_re / cancel_re / get_districts and reads order.addressPlan. An older Worker has none of them: the upload button would 404 and every row would show "no plan" as if nothing matched.
     const SHOP_DOMAIN = '6c7e1a-53.myshopify.com';
     const CFG_KEY = 'bosta_exchange_export_config_v3';
     const LOG_PAGE_SIZE = 100;
@@ -1493,6 +1658,14 @@
           { value: 'confirm_return',           label: 'Status Update — Return' },
           { value: 'confirm_exchange',         label: 'Status Update — Exchange' },
           { value: 'cycle_block',              label: 'منع — دورات الاسترجاع' },
+          { value: 'upload_re_return',         label: '🚀 رفع بوسطة — استرجاع' },
+          { value: 'upload_re_exchange',       label: '🚀 رفع بوسطة — استبدال' },
+          { value: 're_upload_failed',         label: '❌ فشل الرفع (مفيش شحنة)' },
+          // 🔴 The one to look at first: the shipment EXISTS and only the
+          // write-back failed, so these rows need a manual status fix — and
+          // must never be re-uploaded.
+          { value: 're_shopify_write_failed',  label: '⚠️ الشحنة اترفعت والحالة ما اتكتبتش' },
+          { value: 're_cancelled',             label: '↩️ إلغاء شحنة بوسطة' },
         ],
         selected: new Set(),
       },
@@ -1715,6 +1888,10 @@
 
     const state = {
       jobType: 'return',
+      // v6.0.0 — false when Bosta's catalogue could not be read. The direct
+      // upload is then disabled (no address plans) while Excel keeps working.
+      catalogLoaded: false,
+      catalogError: null,
       orders: [],
       selectedOrderIds: new Set(),
       exportedOrders: [],
@@ -1725,6 +1902,13 @@
       isFetching: false,
       logs: [],
     };
+
+    // v6.0.0 — declared here, beside `state`, and NOT next to the upload code
+    // that uses them: `selectableOrders()` is defined much earlier and reads
+    // `addressOverrides`, so a `const` further down would sit in the temporal
+    // dead zone for any call made during page setup.
+    const addressOverrides = new Map();   // manual district/city choices, keyed by order id
+    let dmState = { orderId: null, cities: [], districts: [], cityId: null, districtId: null };
 
     let logOffset = 0;
     let logHasNextPage = false;
@@ -2236,8 +2420,21 @@
       return !!order?.cycleInfo?.blocked;
     }
 
+    // Two different sets, and conflating them is a real bug:
+    //   selectableOrders()   — what the employee MAY select (and export).
+    //   autoSelectOrders()   — what gets ticked automatically.
+    // 🟠 A doubtful CITY is left out of the automatic tick and of "تحديد الكل"
+    // (same rule as the S1 tool) because a wrong city decides the branch and
+    // the price. But it is still perfectly exportable to Excel — the sheet
+    // carries no Bosta district at all — so it must stay SELECTABLE, and the
+    // button labels must count it, or the page would claim "تصدير الكل" while
+    // quietly dropping rows.
     function selectableOrders() {
       return state.orders.filter((order) => !isCycleBlocked(order));
+    }
+
+    function autoSelectOrders() {
+      return selectableOrders().filter((order) => !isCityDoubtful(order));
     }
 
     function blockedOrders() {
@@ -2266,17 +2463,24 @@
       const master = document.getElementById('selectAllOrders');
       if (!master) return;
 
-      const total = selectableOrders().length;
+      // The box tracks what "تحديد الكل" actually selects, so ticking it lands
+      // on ✓ rather than sticking on indeterminate whenever a 🟠 row exists.
+      const auto = autoSelectOrders().length;
       const selected = getSelectedOrders().length;
-      master.checked = total > 0 && selected === total;
-      master.indeterminate = selected > 0 && selected < total;
-      master.disabled = total === 0;
+      master.checked = auto > 0 && selected >= auto;
+      master.indeterminate = selected > 0 && selected < auto;
+      master.disabled = selectableOrders().length === 0;
     }
 
     function toggleSelectAllOrders(master) {
       state.selectedOrderIds = master.checked
-        ? new Set(selectableOrders().map(order => order.id))
+        ? new Set(autoSelectOrders().map(order => order.id))
         : new Set();
+
+      if (master.checked) {
+        const skipped = selectableOrders().length - autoSelectOrders().length;
+        if (skipped) showToast(`${skipped} صف المدينة فيهم مشكوك فيها — مش متحددين. راجعهم وحدّدهم بإيدك.`, 'info', 5000);
+      }
 
       if (!master.checked) state.exportDuplicates = {};
       renderOrders();
@@ -2303,6 +2507,18 @@
 
       updateExportBtnLabel();
       document.getElementById('exportBtn').disabled = selectedCount === 0;
+
+      const upBtn = document.getElementById('uploadBtn');
+      if (upBtn) {
+        const total = selectableOrders().length;
+        // Without the catalogue there are no address plans, so a direct upload
+        // would be a guess — the Excel path stays available and the banner says
+        // why this one is off.
+        upBtn.disabled = selectedCount === 0 || !state.catalogLoaded;
+        upBtn.textContent = (selectedCount > 0 && selectedCount < total)
+          ? `🚀 رفع المحدد على بوسطة (${selectedCount})`
+          : '🚀 رفع الكل على بوسطة';
+      }
 
       syncSelectAllOrders();
     }
@@ -2463,8 +2679,13 @@
         });
 
         state.orders = data.orders || [];
-        // Blocked orders are never selected — not even by "تحديد الكل".
-        state.selectedOrderIds = new Set(selectableOrders().map((order) => order.id));
+        state.catalogLoaded = !!data.catalogLoaded;
+        state.catalogError = data.catalogError || null;
+        addressOverrides.clear();
+        renderCatalogWarning();
+        // Blocked cycles and 🟠 doubtful cities are not ticked automatically.
+        // A doubtful row can still be ticked by hand once reviewed.
+        state.selectedOrderIds = new Set(autoSelectOrders().map((order) => order.id));
         state.exportedOrders = [];
         state.exportDuplicates = {};
         state.allowRepeatExport = false;
@@ -2783,6 +3004,398 @@
       renderOrdersTable(sorted, exportedIds);
     }
 
+    // ═══════════════════════════════════════════════════════
+    // §UPLOAD — v6.0.0, direct Bosta upload
+    // ═══════════════════════════════════════════════════════
+    // 🟠 A row whose CITY is doubtful is excluded from "select all" — same rule
+    // the S1 tool uses. A missing district is a neutral fallback (Bosta's
+    // Unclear Addresses flow handles it); a wrong city is not, because the city
+    // decides the branch and the price.
+    function planOf(order) {
+      const ov = addressOverrides.get(order.id);
+      const plan = order.addressPlan || null;
+      if (!plan || !plan.ok) return { plan, ov, mode: null, doubt: false };
+      let mode = plan.mode;
+      if (ov?.districtId) mode = 'district';
+      else if (ov?.cityId || ov?.forceProvince) mode = 'province';
+      return { plan, ov, mode, doubt: !ov && !!plan.cityDoubt };
+    }
+
+    function isCityDoubtful(order) { return planOf(order).doubt; }
+
+    function addressCellHtml(order) {
+      const plan = order.addressPlan;
+      if (!plan) {
+        return '<span class="badge badge-warn" title="الـ Worker ما رجّعش خطة عنوان — غالبًا كتالوج بوسطة مش متاح">— بلا خطة</span>';
+      }
+      if (!plan.ok) {
+        return `<span class="badge badge-err" title="${escapeHtml(plan.error)}">محافظة مش في الجدول</span>`;
+      }
+      const { ov, mode, doubt } = planOf(order);
+      const btn = (inner, cls, title) =>
+        `<button class="addr-btn ${cls}" title="${escapeHtml(title)}" onclick="openDistrictModal('${escapeHtml(order.id)}')">${inner}</button>`;
+
+      const city = escapeHtml(ov?.cityName || plan.cityName);
+      const cityMoved = ov?.cityId && ov.cityId !== plan.cityId;
+
+      if (mode === 'district') {
+        const d = escapeHtml(ov?.districtName || plan.districtName);
+        return btn(`<span class="badge badge-ok">${d}</span><div class="addr-sub">${city}${cityMoved ? ' ✏️' : ''}</div>`,
+                   'addr-ok', 'المنطقة اتطابقت — اضغط لتغييرها');
+      }
+      if (mode === 'zoneName') {
+        return btn(`<span class="badge badge-ok">${escapeHtml(plan.districtName)}</span><div class="addr-sub">${city} · زون</div>`,
+                   'addr-ok', 'محافظة اتلغت إداريًا — بتتبعت كزون جوه مدينة تانية');
+      }
+      if (doubt) {
+        const sug = (plan.crossCity || [])[0];
+        return btn(`<span class="badge badge-warn">🟠 المدينة مشكوك فيها</span><div class="addr-sub">${city}${sug ? ` → ${escapeHtml(sug.cityName)}؟` : ''}</div>`,
+                   'addr-doubt', 'العنوان بيطابق مكان في مدينة تانية — المدينة بتحدد الفرع والتسعيرة. اضغط لتراجعها.');
+      }
+      if (plan.ambiguous) {
+        return btn(`<span class="badge badge-warn">أكتر من مطابقة</span><div class="addr-sub">${city} · ${(plan.candidates || []).length} احتمال</div>`,
+                   'addr-warn', 'أكتر من منطقة مطابقة — اختر واحدة');
+      }
+      return btn(`<span class="badge badge-neutral">🏙️ المحافظة بس</span><div class="addr-sub">${city}${cityMoved ? ' ✏️' : ''}</div>`,
+                 'addr-plain', 'مفيش مطابقة منطقة — الشحنة هتدخل مسار العناوين غير الواضحة عند بوسطة. اضغط لتحدد منطقة.');
+    }
+
+    function renderCatalogWarning() {
+      const el = document.getElementById('catalogWarn');
+      if (!el) return;
+      const doubt = state.orders.filter(isCityDoubtful).length;
+      const clipped = state.orders.filter((o) => o.bostaPreview?.codClipped).length;
+      const bits = [];
+      if (!state.catalogLoaded) {
+        bits.push(`<div class="uw-err">🔴 كتالوج بوسطة مش متاح — الرفع المباشر متوقّف والتصدير Excel شغّال عادي.${state.catalogError ? ` (${escapeHtml(state.catalogError)})` : ''}</div>`);
+      }
+      if (doubt) {
+        bits.push(`<div class="uw-warn">🟠 ${doubt} أوردر المدينة فيهم مشكوك فيها — <b>مستثنيين من «تحديد الكل»</b>. افتح عمود «عنوان بوسطة» وراجعهم قبل ما تحددهم.</div>`);
+      }
+      if (clipped) {
+        bits.push(`<div class="uw-warn">💰 ${clipped} أوردر مبلغ الاسترداد فيهم أكبر من 2,000 — بوسطة هترجّع 2,000 بس والباقي يتسوّى مكتبيًا.</div>`);
+      }
+      el.innerHTML = bits.join('');
+      el.style.display = bits.length ? 'block' : 'none';
+    }
+
+    // ─── the picker ───
+    async function openDistrictModal(orderId) {
+      const order = state.orders.find((o) => o.id === orderId);
+      if (!order || !order.addressPlan?.ok) return;
+      const { plan, ov } = planOf(order);
+      dmState = { orderId, cities: dmState.cities, districts: [], cityId: ov?.cityId || plan.cityId, districtId: ov?.districtId || plan.districtId || null };
+
+      const addr = order.shippingAddress || {};
+      document.getElementById('dmOrder').textContent = order.name;
+      document.getElementById('dmAddr').textContent =
+        [addr.city, addr.address1, addr.address2, addr.province].filter(Boolean).join(' — ');
+      document.getElementById('dmSearch').value = '';
+      renderDistrictSuggestions(plan);
+      // 🔴 Disabled until the district list is actually loaded. Without this the
+      // button kept the PREVIOUS order's enabled state, so confirming early (or
+      // after a failed load) stored an override with no district and dropped
+      // the automatically matched one from a paid shipment.
+      document.getElementById('dmConfirm').disabled = true;
+      document.getElementById('dmList').innerHTML = '<div class="dm-loading">جاري التحميل…</div>';
+      document.getElementById('districtOverlay').classList.add('open');
+
+      if (!dmState.cities.length) {
+        try {
+          const data = await apiFetch('get_districts', { method: 'GET' });
+          dmState.cities = data.cities || [];
+        } catch (e) { showToast('فشل تحميل مدن بوسطة: ' + e.message, 'error'); return; }
+      }
+      renderDistrictCities();
+      await loadDistrictsFor(dmState.cityId);
+    }
+
+    // The suggestions are the whole point of the modal: the match already found
+    // the likely answer, so it goes at the TOP as one click — not buried in its
+    // alphabetical place among 400 rows.
+    function renderDistrictSuggestions(plan) {
+      const box = document.getElementById('dmSuggest');
+      const bits = [];
+      for (const c of (plan.candidates || [])) {
+        bits.push(`<button class="dm-sug dm-sug-match" onclick="pickSuggestion('${escapeHtml(plan.cityId)}','${escapeHtml(c.id)}')">
+          <b>✅ ${escapeHtml(c.name)}</b><span>${escapeHtml(c.matchedText)} — من ${escapeHtml(c.fieldLabel)}</span></button>`);
+      }
+      for (const z of (plan.localZones || [])) {
+        bits.push(`<button class="dm-sug" onclick="pickSuggestion('${escapeHtml(z.cityId)}',null,'${escapeHtml(z.zone)}')">
+          <b>📍 زون ${escapeHtml(z.zone)}</b><span>${escapeHtml(z.districtCount)} منطقة جوّه ${escapeHtml(z.cityName)}</span></button>`);
+      }
+      for (const c of (plan.crossCity || [])) {
+        const label = c.kind === 'district' ? `🟠 ${escapeHtml(c.cityName)} → ${escapeHtml(c.districtName)}` : `🟠 ${escapeHtml(c.cityName)} → زون ${escapeHtml(c.zone)}`;
+        bits.push(`<button class="dm-sug dm-sug-cross" onclick="pickSuggestion('${escapeHtml(c.cityId)}',${c.districtId ? `'${escapeHtml(c.districtId)}'` : 'null'},${c.zone ? `'${escapeHtml(c.zone)}'` : 'null'})">
+          <b>${label}</b><span>${escapeHtml(c.matchedText)} — من ${escapeHtml(c.fieldLabel)}</span></button>`);
+      }
+      box.innerHTML = bits.length
+        ? `<div class="dm-sug-hdr">اقتراحات المطابقة — ضغطة واحدة</div>${bits.join('')}`
+        : '<div class="dm-sug-hdr">مفيش اقتراح — اختر من القايمة</div>';
+    }
+
+    async function pickSuggestion(cityId, districtId, zone) {
+      dmState.cityId = cityId;
+      dmState.districtId = districtId || null;
+      renderDistrictCities();
+      await loadDistrictsFor(cityId, zone || null);
+      updateDistrictConfirm();
+    }
+
+    function renderDistrictCities() {
+      const sel = document.getElementById('dmCity');
+      sel.innerHTML = dmState.cities
+        .map((c) => `<option value="${escapeHtml(c.cityId)}" ${c.cityId === dmState.cityId ? 'selected' : ''}>${escapeHtml(c.cityName)} (${c.districtCount})</option>`)
+        .join('');
+    }
+
+    async function onDistrictCityChange() {
+      dmState.cityId = document.getElementById('dmCity').value;
+      dmState.districtId = null;
+      await loadDistrictsFor(dmState.cityId);
+      updateDistrictConfirm();
+    }
+
+    async function loadDistrictsFor(cityId, zoneFilter) {
+      const list = document.getElementById('dmList');
+      list.innerHTML = '<div class="dm-loading">جاري التحميل…</div>';
+      try {
+        const data = await apiFetch('get_districts', { method: 'GET', params: { cityId } });
+        dmState.districts = data.districts || [];
+        if (data.catalogWarning) showToast(data.catalogWarning, 'error', 6000);
+        // A zone suggestion narrows the list (7 rows instead of 590) — it does
+        // NOT pick a district. The zone settles the CITY; choosing one of its
+        // districts automatically would be a guess.
+        document.getElementById('dmSearch').value = zoneFilter || '';
+      } catch (e) {
+        list.innerHTML = `<div class="dm-loading">فشل التحميل: ${escapeHtml(e.message)}</div>`;
+        dmState.districts = [];
+        document.getElementById('dmConfirm').disabled = true;
+        return;
+      }
+      renderDistrictList();
+      updateDistrictConfirm();
+    }
+
+    function renderDistrictList() {
+      const q = (document.getElementById('dmSearch').value || '').trim().toLowerCase();
+      const rows = dmState.districts.filter((d) =>
+        !q || (d.name || '').toLowerCase().includes(q) || (d.nameAr || '').includes(q)
+          || (d.zone || '').toLowerCase().includes(q) || (d.zoneAr || '').includes(q));
+      const list = document.getElementById('dmList');
+      if (!rows.length) { list.innerHTML = '<div class="dm-loading">مفيش نتيجة</div>'; return; }
+      list.innerHTML = rows.slice(0, 400).map((d) => `
+        <button class="dm-item ${d.id === dmState.districtId ? 'sel' : ''}" onclick="selectDistrict('${escapeHtml(d.id)}')">
+          <span class="dm-item-name">${escapeHtml(d.name)}${d.nameAr ? ` · ${escapeHtml(d.nameAr)}` : ''}</span>
+          <span class="dm-item-zone">${escapeHtml(d.zone || 'بلا زون')}</span>
+        </button>`).join('');
+    }
+
+    function selectDistrict(id) {
+      dmState.districtId = id;
+      renderDistrictList();
+      updateDistrictConfirm();
+    }
+
+    function updateDistrictConfirm() {
+      // The list has to be loaded before a choice means anything: confirming
+      // with an empty list is how "city only" got stored over a good match.
+      document.getElementById('dmConfirm').disabled = !dmState.cityId || !dmState.districts.length;
+    }
+
+    function confirmDistrictChoice() {
+      const order = state.orders.find((o) => o.id === dmState.orderId);
+      if (!order) return;
+      const city = dmState.cities.find((c) => c.cityId === dmState.cityId);
+      const district = dmState.districts.find((d) => d.id === dmState.districtId);
+
+      // Closing without picking anything, on the city the matcher already
+      // chose, is not a decision — it is a look. Storing an override here would
+      // force province mode and throw away a district the engine had matched.
+      if (!district && dmState.cityId === order.addressPlan?.cityId) {
+        addressOverrides.delete(order.id);
+        closeDistrictModal();
+        applyOrderFilters();
+        showToast('ما اتغيّرش حاجة — المطابقة التلقائية زي ما هي', 'info');
+        return;
+      }
+
+      addressOverrides.set(order.id, {
+        cityId: dmState.cityId,
+        cityName: city?.cityName || null,
+        districtId: district?.id || null,
+        districtName: district?.name || null,
+        // City chosen but no district = ship at city level, which is far better
+        // than the wrong city and enters Bosta's unclear-address flow normally.
+        forceProvince: !district,
+      });
+      closeDistrictModal();
+      applyOrderFilters();
+      showToast(`اتثبتت لـ ${order.name}: ${city?.cityName || ''}${district ? ' → ' + district.name : ' (محافظة بس)'}`, 'success');
+    }
+
+    function clearDistrictChoice() {
+      if (dmState.orderId) addressOverrides.delete(dmState.orderId);
+      closeDistrictModal();
+      applyOrderFilters();
+    }
+
+    function closeDistrictModal() { document.getElementById('districtOverlay').classList.remove('open'); }
+
+    // ─── the upload ───
+    async function uploadCurrentOrders() {
+      if (!currentEmployee) { showToast('سجّل الدخول أولاً', 'error'); return; }
+      if (!isConfigured()) { openSettings(); return; }
+      const selected = state.orders.filter((o) => state.selectedOrderIds.has(o.id));
+      if (!selected.length) { showToast('مفيش أوردرات محددة', 'error'); return; }
+
+      const noPlan = selected.filter((o) => !o.addressPlan || !o.addressPlan.ok);
+      if (noPlan.length) {
+        showToast(`${noPlan.length} أوردر بلا خطة عنوان صالحة — شيلهم من التحديد الأول`, 'error', 6000);
+        return;
+      }
+
+      // Confirm before an irreversible, paid action — and say the number out
+      // loud, because this is the point where money is spent.
+      const doubtful = selected.filter(isCityDoubtful).length;
+      const clipped = selected.filter((o) => o.bostaPreview?.codClipped).length;
+      const lines = [
+        `هيتعمل ${selected.length} شحنة ${JOB_META[state.jobType].label} على بوسطة بفلوس حقيقية.`,
+        doubtful ? `⚠️ منهم ${doubtful} المدينة فيهم مشكوك فيها.` : '',
+        clipped ? `⚠️ ومنهم ${clipped} مبلغ الاسترداد فيهم هيتقص عند 2000.` : '',
+        '',
+        'تمام؟',
+      ].filter(Boolean);
+      if (!confirm(lines.join('\n'))) return;
+
+      const btn = document.getElementById('uploadBtn');
+      const exportBtn = document.getElementById('exportBtn');
+      btn.disabled = true; exportBtn.disabled = true;
+      const original = btn.textContent;
+      showStatus(`جاري الرفع على بوسطة… (0/${selected.length})`, 'info');
+
+      const overrides = {};
+      for (const o of selected) {
+        const ov = addressOverrides.get(o.id);
+        if (ov) overrides[o.id] = ov;
+      }
+
+      const all = [];
+      let s2Failures = 0;
+      try {
+        // ① of the three-cap chain — the page chunks so one call finishes in
+        // 8–12 seconds. It is NOT the Worker's MAX_UPLOAD_BATCH and NOT the
+        // Shopify query-cost cap; the three are different limits at three
+        // different stations.
+        const CHUNK = 10;
+        for (let i = 0; i < selected.length; i += CHUNK) {
+          const slice = selected.slice(i, i + CHUNK);
+          btn.textContent = `⏳ ${i}/${selected.length}`;
+          const data = await apiFetch('upload_re', {
+            method: 'POST',
+            body: {
+              jobType: state.jobType,
+              employee: currentEmployee.username,
+              orders: slice.map((o) => ({
+                id: o.id, name: o.name,
+                s2Status: o.s2Status?.value || null,
+                courier: o.courier?.value || null,
+                cycleName: o.currentCycle?.name || null,
+                cycleCreatedAt: o.currentCycle?.createdAt || null,
+              })),
+              overrides,
+            },
+          });
+          all.push(...(data.results || []));
+          if (data.s2Error) s2Failures++;
+          if (data.logged === false) showToast('⚠️ الرفع تم لكن الكتابة في السجل فشلت: ' + (data.logError || ''), 'error', 8000);
+          showStatus(`جاري الرفع… (${Math.min(i + CHUNK, selected.length)}/${selected.length})`, 'info');
+        }
+      } catch (e) {
+        // A CYCLE_BLOCKED rejection arrives here with its per-order reasons.
+        if (e.data?.code === 'CYCLE_BLOCKED') {
+          renderUploadResults(all, e.data.blocked || []);
+          showStatus('اتمنع الرفع — راجع الدورات', 'error');
+          btn.disabled = false; exportBtn.disabled = false; btn.textContent = original;
+          return;
+        }
+        showToast('فشل الرفع: ' + e.message, 'error', 8000);
+      }
+
+      btn.textContent = original;
+      btn.disabled = false; exportBtn.disabled = false;
+
+      renderUploadResults(all, []);
+      const okCount = all.filter((r) => r.status === 'success').length;
+      const warn = all.filter((r) => r.status === 'warning').length;
+      const err = all.filter((r) => r.status === 'error').length;
+      showStatus(`تم: ${okCount} ✅ · ${warn} ⚠️ · ${err} ❌`, err ? 'error' : warn ? 'warn' : 'success');
+      await fetchCandidates();
+    }
+
+    function renderUploadResults(results, blocked) {
+      const counts = { success: 0, warning: 0, error: 0 };
+      results.forEach((r) => { counts[r.status] = (counts[r.status] || 0) + 1; });
+
+      document.getElementById('urCounts').innerHTML = `
+        <span class="ur-count ur-ok">✅ ${counts.success || 0} نجح</span>
+        <span class="ur-count ur-warn">⚠️ ${counts.warning || 0} تم جزئيًا</span>
+        <span class="ur-count ur-err">❌ ${counts.error || 0} فشل</span>
+        ${blocked.length ? `<span class="ur-count ur-err">⛔ ${blocked.length} متوقّف</span>` : ''}`;
+
+      document.getElementById('urNote').innerHTML = (counts.warning || 0)
+        ? '🔴 <b>«تم جزئيًا» (أصفر) مش فشل.</b> الشحنة <b>موجودة عند بوسطة فعلًا</b> ومعاها رقم تتبع، وحاجة بعدها ما تمّتش. <b>متعيدش الرفع</b> — ده بيعمل شحنة تانية بفلوس. صلّح اللي مكتوب في الصف، أو ألغِ الشحنة وارفع تاني.'
+        : '';
+
+      const rows = [];
+      for (const b of blocked) {
+        rows.push(`<div class="ur-row ur-row-err">
+          <div class="ur-row-hd"><b>${escapeHtml(b.name)}</b><span class="badge badge-err">⛔ ${escapeHtml(b.code)}</span></div>
+          <div class="ur-row-msg">${escapeHtml(b.action)}</div></div>`);
+      }
+      for (const r of results) {
+        const cls = r.status === 'success' ? 'ok' : r.status === 'warning' ? 'warn' : 'err';
+        const badge = r.status === 'success' ? '<span class="badge badge-ok">✅ تم</span>'
+                    : r.status === 'warning' ? '<span class="badge badge-warn">⚠️ تم جزئيًا</span>'
+                    : '<span class="badge badge-err">❌ فشل</span>';
+        const tn = r.trackingNumber
+          ? `<span class="ur-tn">تتبع: <b>${escapeHtml(r.trackingNumber)}</b></span>
+             <button class="btn btn-red-outline btn-xs" onclick="cancelShipment('${escapeHtml(r.trackingNumber)}','${escapeHtml(r.orderId || '')}','${escapeHtml(r.orderName || '')}',this)">إلغاء الشحنة</button>`
+          : '';
+        rows.push(`<div class="ur-row ur-row-${cls}">
+          <div class="ur-row-hd"><b>${escapeHtml(r.orderName)}</b>${badge}${tn}</div>
+          ${(r.actions || []).length ? `<div class="ur-row-act">${(r.actions || []).map(escapeHtml).join(' · ')}</div>` : ''}
+          ${(r.warnings || []).map((w) => `<div class="ur-row-msg ur-msg-warn">⚠️ ${escapeHtml(w)}</div>`).join('')}
+          ${r.error ? `<div class="ur-row-msg ur-msg-err">${escapeHtml(r.error)}</div>` : ''}
+        </div>`);
+      }
+      document.getElementById('urRows').innerHTML = rows.join('') || '<div class="ur-row">مفيش نتائج</div>';
+      document.getElementById('uploadResultOverlay').classList.add('open');
+    }
+
+    function closeUploadResults() { document.getElementById('uploadResultOverlay').classList.remove('open'); }
+
+    // Terminating frees the uniqueBusinessReference, so a corrected re-upload of
+    // the same cycle goes through afterwards. That pairing is why this button
+    // exists instead of a trip to the Bosta dashboard.
+    async function cancelShipment(trackingNumber, orderId, orderName, btn) {
+      if (!currentEmployee) { showToast('سجّل الدخول أولاً', 'error'); return; }
+      if (!confirm(`إلغاء شحنة ${trackingNumber} عند بوسطة؟\n\nحالة الأوردر على شوبيفاي مش هتترجع — غيّرها يدويًا لو محتاج.`)) return;
+      const reason = prompt('سبب الإلغاء (اختياري):') || '';
+      btn.disabled = true; btn.textContent = '⏳';
+      try {
+        await apiFetch('cancel_re', {
+          method: 'POST',
+          body: { employee: currentEmployee.username, trackingNumber, orderId, orderName, reason },
+        });
+        btn.textContent = 'اتلغت ✅';
+        showToast(`اتلغت شحنة ${trackingNumber}`, 'success');
+      } catch (e) {
+        btn.disabled = false; btn.textContent = 'إلغاء الشحنة';
+        showToast('فشل الإلغاء: ' + e.message, 'error', 8000);
+      }
+    }
+
     function renderOrdersTable(rows, exportedIds) {
       const tbody = document.getElementById('ordersRows');
       const table = document.getElementById('ordersTable');
@@ -2793,7 +3406,7 @@
       tbody.innerHTML = '';
 
       if (hasAnyOrders && !rows.length) {
-        tbody.innerHTML = `<tr><td colspan="7" class="data-empty">لا توجد أوردرات مطابقة للفلاتر</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="data-empty">لا توجد أوردرات مطابقة للفلاتر</td></tr>`;
         syncSelectAllOrders();
         return;
       }
@@ -2823,6 +3436,7 @@
           <td><span class="badge badge-type">${escapeHtml(order.s2Status?.value || JOB_META[state.jobType].expected)}</span></td>
           <td><span class="badge badge-ok">${escapeHtml(order.courier?.value || 'Bosta')}</span></td>
           <td>${cycleCellHtml(order)}</td>
+          <td>${addressCellHtml(order)}</td>
           <td>${exportBadge}</td>
         `;
         tbody.appendChild(tr);
@@ -3214,6 +3828,11 @@
         confirm_return: 'Status Update — Return',
         confirm_exchange: 'Status Update — Exchange',
         cycle_block: 'منع — دورات الاسترجاع',
+        upload_re_return: '🚀 رفع بوسطة — استرجاع',
+        upload_re_exchange: '🚀 رفع بوسطة — استبدال',
+        re_upload_failed: '❌ فشل الرفع (مفيش شحنة)',
+        re_shopify_write_failed: '⚠️ الشحنة اترفعت والحالة ما اتكتبتش',
+        re_cancelled: '↩️ إلغاء شحنة بوسطة',
         login: 'Login',
         logout: 'Logout',
       };

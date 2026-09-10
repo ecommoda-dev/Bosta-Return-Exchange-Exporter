@@ -24,7 +24,18 @@ database_id   = "90db62d3-bd7e-4d92-912b-10fc78eeb565"
 [vars]
 SHOP_DOMAIN = "6c7e1a-53.myshopify.com"
 
+# ─── KV (اختياري) ────────────────────────────────────
+# كاش كتالوج مدن/مناطق بوسطة. من غير الـ namespace ده الكاش بيشتغل تلقائيًا
+# على Cache API — كافي وشغّال بلا أي إعداد. لو اتعمل namespace، فك التعليق
+# وحطّ الـ id والكود بيستخدمه من غير أي تغيير تاني.
+# [[kv_namespaces]]
+# binding = "CATALOG_KV"
+# id      = ""
+
 # ⚠️ الأسرار مبتتكتبش هنا أبدًا.
 #    Worker → Settings → Variables and Secrets → علّم Secret
-#    الأسرار المطلوبة: WORKER_SECRET · CLIENT_ID · CLIENT_SECRET
+#    الأسرار المطلوبة: WORKER_SECRET · CLIENT_ID · CLIENT_SECRET · BOSTA_API_KEY
+#                                                                  ↑ جديد في v6.0.0
 #    وبعدها: Deployments → Version History → ⋯ → Promote version
+#    من غير الـ Promote، BOSTA_API_KEY بيفضل undefined و?action=diag
+#    هيقول keySet:false — والرفع المباشر هيفضل مقفول (والتصدير Excel شغّال عادي).
