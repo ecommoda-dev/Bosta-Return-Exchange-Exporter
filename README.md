@@ -3,6 +3,18 @@
 # Bosta Return / Exchange Exporter
 
 ![version](https://img.shields.io/badge/version-v6.0.0-blue)
+![status](https://img.shields.io/badge/الحالة-قيد_التصفية-orange)
+
+> ## 🔴 الأداة دي اتدمجت — استخدم [`Bosta-Orders-Upload`](https://github.com/ecommoda-dev/Bosta-Orders-Upload)
+>
+> من **13-09-2026** الأداة دي اتنقلت بالكامل جوّه `Bosta-Orders-Upload` v2.0.0،
+> اللي بقت بترفع التلات أنواع من نفس الشاشة: **شحن عادي (10) · استرجاع (25) ·
+> استبدال (30)**، بمبدّل نوع الرفع فوق الفلاتر.
+>
+> **الواجهة الجديدة:** <https://ecommoda-dev.github.io/Bosta-Orders-Upload/>
+>
+> **الريبو ده لسه شغّال بالتوازي** لحد ما الجديدة تستقر — متمسحش حاجة منه.
+> الترتيب الكامل للتصفية في `CLAUDE.md` فوق. **أي تعديل جديد يتعمل هناك مش هنا.**
 
 أداة داخلية لفريق EcomModa — فحص أوردرات الاسترجاع والاستبدال الجاهزة
 للرفع على بوسطة، و**رفعها على بوسطة مباشرةً بالـ API**: الأداة بتنشئ الشحنة
