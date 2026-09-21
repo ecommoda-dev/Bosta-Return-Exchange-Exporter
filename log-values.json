@@ -1,0 +1,44 @@
+{
+  "tool": "bosta_exchange_export",
+  "since": null,
+  "types": {
+    "login": {
+      "result": null,
+      "stage": null,
+      "desc": "دخول موظف"
+    },
+    "logout": {
+      "result": null,
+      "stage": null,
+      "desc": "خروج موظف"
+    },
+    "cycle_block": {
+      "result": null,
+      "stage": null,
+      "desc": "تحديث S2 اتمنع — الأوردر في دورة حياة مابتسمحش"
+    },
+    "re_cancelled": {
+      "result": [
+        "error",
+        "success"
+      ],
+      "stage": null,
+      "desc": "إلغاء شحنة بوسطة قديمة ضمن مسار الاسترجاع/الاستبدال"
+    },
+    "scan": {
+      "result": null,
+      "stage": null,
+      "desc": "فحص دفعة أوردرات مطابقة لمعايير التصدير"
+    },
+    "update": {
+      "result": null,
+      "stage": null,
+      "desc": "تحديث ميتافيلد S2 (status_2_r_e) بعد التصدير"
+    }
+  },
+  "dynamicTypes": [
+    "job.confirmType",
+    "job.exportType",
+    "job.manualConfirmType"
+  ]
+}
