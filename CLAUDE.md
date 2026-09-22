@@ -241,18 +241,29 @@ git show 91c6027~1:3.33.html
 
 | المهارة | الإصدار وقت آخر تعديل |
 |---|---|
-| ecommoda-worker-builder | v2.0.0 |
+| ecommoda-worker-builder | v3.7.0 |
 | ecommoda-html-builder | v6.2.0 |
 | ecommoda-order-lifecycle | v1.2.0 |
-| ecommoda-constants | v1.4.3 |
+| ecommoda-constants | v3.1.0 |
 
-آخر مطابقة: 02-09-2026 · `index.js` v5.4.0 · `index.html` v5.5.0
+آخر مطابقة: 22-09-2026 · `index.js` v6.0.1 · `index.html` v5.5.0
 🔴 البصمة دي **ما اتحدّثتش** في v5.5.0/v5.6.0 ولا في v6.0.0 — راجع «مسائل مفتوحة».
 v6.0.0 اتكتب على `bosta-api-helper` v1.1.0 (Step 8 كاملة) و`worker-builder`
-v3.0.0 **للبنود اللي لمسها بس** (5A ④ · ⑩ · ⑪ · ⑫ · ⑬ · ⑭) — مش مراجعة كاملة،
-والبصمة متسابة زي ما هي عن قصد بدل ما تدّعي مراجعة ما حصلتش.
-🔴 معلّقة: — `cycle_block` + الخمس قيم بتوع v6.0.0 مستنيين التسجيل في
-`ecommoda-constants` §7
+v3.0.0 **للبنود اللي لمسها بس** (5A ④ · ⑩ · ⑪ · ⑫ · ⑬ · ⑭) — مش مراجعة كاملة.
+v6.0.1 (22-09-2026): استبدال `check-log-values.mjs` بالنسخة المصلَّحة (كانت
+بتفوّت `{ tool, type }` shorthand في صمت) + تنفيذ الحارس الديناميكي (الطبقة ٥ ·
+`worker-builder` Step 7-ج) في `writeLog`/`writeLogsBatch` — `LOG_REGISTRY`
+مبني من `log-values.json` بعد تسجيل ١٠ قيم كانت ديناميكية غير مسجّلة
+(`upload_re_*` · `re_upload_failed` · `re_shopify_write_failed` ·
+`export_*` · `confirm_*` · `manual_confirm_*`) + تصحيح `update` ليتسجّل تحت
+`tool: 'metafields_change'` (الصف الحقيقي اللي بيتكتب، مش تحت اسم الأداة).
+مراقبة بس — صفر تعديل على منطق تشغيلي.
+🔴 معلّقة: — `cycle_block` + الخمس قيم بتوع v6.0.0 (+ الست قيم الإضافية اللي
+اتسجّلت في v6.0.1) لسه مستنيين التسجيل في `ecommoda-constants` §7 (الجدول
+هناك اتنقل لـ `log-values.json` بتاع كل ريبو من 21-09-2026 — التسجيل دلوقتي
+هنا في الملف نفسه، وده اللي حصل في هذا التسليم).
+البصمة لسه متسابة عن قصد بدل ما تدّعي مراجعة كاملة ما حصلتش — محتاجة
+`skills-sweep`.
 
 ## مسائل مفتوحة
 

@@ -31,14 +31,66 @@
       "desc": "فحص دفعة أوردرات مطابقة لمعايير التصدير"
     },
     "update": {
+      "tool": "metafields_change",
       "result": null,
       "stage": null,
-      "desc": "تحديث ميتافيلد S2 (status_2_r_e) بعد التصدير"
+      "desc": "صف السجل المشترك cross-tool (tool='metafields_change') — بيتكتب مع أي تحديث S2 عشان KPIs زمن الدورة تشوفه. مش بيتكتب تحت اسم الأداة نفسها."
+    },
+    "upload_re_return": {
+      "result": ["success", "warning"],
+      "stage": "write",
+      "desc": "رفع شحنة استرجاع (type 25) على بوسطة بالـ API — v6.0.0"
+    },
+    "upload_re_exchange": {
+      "result": ["success", "warning"],
+      "stage": "write",
+      "desc": "رفع شحنة استبدال (type 30) على بوسطة بالـ API — v6.0.0"
+    },
+    "re_upload_failed": {
+      "result": "error",
+      "stage": "write",
+      "desc": "الرفع على بوسطة فشل — مفيش شحنة اتعملت أصلًا، إعادة المحاولة آمنة"
+    },
+    "re_shopify_write_failed": {
+      "result": "warning",
+      "stage": "write",
+      "desc": "الشحنة اتعملت عند بوسطة بفلوس فعلية، لكن الكتابة الرجعية لتحديث S2 على شوبيفاي فشلت — ممنوع إعادة الرفع"
+    },
+    "export_return": {
+      "result": null,
+      "stage": null,
+      "desc": "تصدير ملف إكسيل بوسطة — مسار الاسترجاع (خطة بديلة للرفع المباشر بالـ API)"
+    },
+    "export_exchange": {
+      "result": null,
+      "stage": null,
+      "desc": "تصدير ملف إكسيل بوسطة — مسار الاستبدال (خطة بديلة للرفع المباشر بالـ API)"
+    },
+    "confirm_return": {
+      "result": null,
+      "stage": null,
+      "desc": "تأكيد رفع بوسطة (بعد تصدير إكسيل) وتحديث S2 إلى In-Return — استرجاع"
+    },
+    "confirm_exchange": {
+      "result": null,
+      "stage": null,
+      "desc": "تأكيد رفع بوسطة (بعد تصدير إكسيل) + إرسال فواتير للمخزن، وتحديث S2 إلى Ready — استبدال"
+    },
+    "manual_confirm_return": {
+      "result": null,
+      "stage": null,
+      "desc": "تأكيد يدوي: تم رفع الأوردر على داشبورد بوسطة — استرجاع (record_manual_confirmation، endpoint غير مستخدم من الواجهة الحالية)"
+    },
+    "manual_confirm_exchange": {
+      "result": null,
+      "stage": null,
+      "desc": "تأكيد يدوي: تم رفع الأوردر على داشبورد بوسطة وإرسال الفاتورة للمخزن — استبدال (record_manual_confirmation، endpoint غير مستخدم من الواجهة الحالية)"
     }
   },
   "dynamicTypes": [
     "job.confirmType",
     "job.exportType",
-    "job.manualConfirmType"
+    "job.manualConfirmType",
+    "r.status === 'error' ? UPLOAD_FAILED_TYPE : r.shopifyWriteFailed ? WRITE_FAILED_TYPE : UPLOAD_TYPE_BY_JOB[job.jobType]"
   ]
 }

@@ -1,7 +1,13 @@
 // ═══════════════════════════════════════════════════════════════
-// Bosta Return/Exchange Exporter — Worker v6.0.0
+// Bosta Return/Exchange Exporter — Worker v6.0.1
 // EcomModa Internal Tools
-// skills: worker-builder v2.0.0 · html-builder v6.2.0 · order-lifecycle v1.2.0 · constants v1.4.3 — 02-09-2026
+// skills: worker-builder v3.7.0 · html-builder v6.2.0 · order-lifecycle v1.2.0 · constants v3.1.0 — 22-09-2026
+// v6.0.1 (22-09-2026): fixed `check-log-values.mjs` (old copy missed the
+// `{ tool, type }` shorthand and silently passed with a partial view of the
+// registry) + added the Layer 5 dynamic-log-value guard (worker-builder
+// Step 7-ج) to writeLog/writeLogsBatch. Monitoring only — no operational
+// logic changed. See log-values.json for the 10 newly-registered types this
+// uncovered (v6.0.0's own upload/export/confirm types were never registered).
 // ⚠️ The stamp above is STILL deliberately not bumped. v6.0.0 was written
 // against worker-builder v3.0.0 for the parts it touches (Step 5A ④ four
 // result states · ⑩ ordering around an irreversible action · ⑪ the three-cap
@@ -275,7 +281,7 @@
 // §CONSTANTS
 // ══════════════════════════════════════════════════════
 const TOOL_NAME = 'bosta_exchange_export';
-const WORKER_VERSION = '6.0.0';
+const WORKER_VERSION = '6.0.1';
 const SHOPIFY_API_VERSION = '2026-01';
 const LOG_EXPORT_MAX = 2000;
 
@@ -618,7 +624,71 @@ async function registerPin(db, username, pin) {
   return true;
 }
 
+// ════════════════════════════════════════════════════════════
+// §LOG-REG — الحارس الديناميكي لقيم اللوج (الطبقة ٥ · worker-builder Step 7-ج)
+// ════════════════════════════════════════════════════════════
+// قطعة الأداة دي بس من log-values.json اللي جنبها — بتتحدّث معاه في نفس
+// الـ commit. ممنوع شحن سجل الـ٣٢ أداة هنا (Step 7-ب في السكيل بيقول ليه).
+const LOG_REGISTRY = {
+  bosta_exchange_export: new Set([
+    'login', 'logout', 'cycle_block', 're_cancelled', 'scan',
+    'upload_re_return', 'upload_re_exchange', 're_upload_failed', 're_shopify_write_failed',
+    'export_return', 'export_exchange', 'confirm_return', 'confirm_exchange',
+    'manual_confirm_return', 'manual_confirm_exchange',
+  ]),
+  metafields_change: new Set(['update']),
+};
+
+const isRegisteredLogValue = (tool, type) => !!LOG_REGISTRY[tool]?.has(type);
+
+// UPSERT على (source_tool, tool, type) — صف واحد لكل قيمة، hits بيعدّ. الحدث
+// الكامل مش بيضيع: الصف الأصلي موجود في logs وعليه _unregistered، والجدول ده
+// فهرس مش سجل تاني — عشان كده dedupe مش صف لكل حدث.
+const LOG_ALERT_SQL = `
+  INSERT INTO log_value_alerts
+    (source_tool, tool, type, first_seen, last_seen, hits,
+     worker_version, sample_order_name, sample_employee, sample_notes)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(source_tool, tool, type) DO UPDATE SET
+    last_seen         = excluded.last_seen,
+    hits              = log_value_alerts.hits + excluded.hits,
+    worker_version    = excluded.worker_version,
+    sample_order_name = excluded.sample_order_name,
+    sample_employee   = excluded.sample_employee,
+    sample_notes      = excluded.sample_notes,
+    status            = CASE WHEN log_value_alerts.status = 'ignored'
+                             THEN 'ignored' ELSE 'open' END
+`;
+
+// فشل التنبيه ممنوع يأثر على أي حاجة — try/catch صامت. بتجمّع التكرار جوّه
+// نفس الدفعة في صف واحد (hits) قبل ما تكتب.
+async function noteUnregisteredLogValues(db, entries) {
+  const byPair = new Map();
+  for (const e of entries) {
+    const key = `${e.tool}\u0000${e.type}`;
+    const acc = byPair.get(key);
+    if (acc) { acc.hits++; continue; }
+    byPair.set(key, { entry: e, hits: 1 });
+  }
+  const now = new Date().toISOString();
+  for (const { entry, hits } of byPair.values()) {
+    try {
+      await db.prepare(LOG_ALERT_SQL).bind(
+        TOOL_NAME, entry.tool ?? '(بدون tool)', entry.type ?? '(بدون type)',
+        now, now, hits, WORKER_VERSION ?? null,
+        entry.orderName ?? null, entry.employee ?? null,
+        entry.notes ? String(entry.notes).slice(0, 200) : null,
+      ).run();
+    } catch (e) { /* متعمّد: التنبيه فهرس، وفشله أهون من تعطيل الأداة */ }
+  }
+}
+
 async function writeLog(db, entry) {
+  const unregistered = !isRegisteredLogValue(entry.tool, entry.type);
+  const extra = unregistered
+    ? { ...(entry.extra || {}), _unregistered: true }
+    : entry.extra;
+
   await db.prepare(`
     INSERT INTO logs
       (timestamp, tool, type, employee, order_id, order_name,
@@ -637,8 +707,10 @@ async function writeLog(db, entry) {
     entry.valueBefore  ?? null,
     entry.valueAfter   ?? null,
     entry.notes        ?? null,
-    entry.extra ? JSON.stringify(entry.extra) : null,
+    extra ? JSON.stringify(extra) : null,
   ).run();
+
+  if (unregistered) await noteUnregisteredLogValues(db, [entry]);
 }
 
 // buildLogFilterSQL — shared WHERE-clause builder for getLogs/getLogsCount/
@@ -710,28 +782,38 @@ async function getLogsExport(db, { tool = null, employees = [], types = [], sear
 // batches multiple writeLog-shaped entries into one D1 batch() call.
 async function writeLogsBatch(db, entries) {
   if (!Array.isArray(entries) || !entries.length) return;
+  const unregisteredEntries = [];
   for (const group of chunks(entries, 40)) {
-    await db.batch(group.map((entry) => db.prepare(`
-      INSERT INTO logs
-        (timestamp, tool, type, employee, order_id, order_name,
-         sku, product_title, delta, value_before, value_after, notes, extra)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      entry.timestamp    ?? new Date().toISOString(),
-      entry.tool,
-      entry.type,
-      entry.employee     ?? null,
-      entry.orderId      ?? null,
-      entry.orderName    ?? null,
-      entry.sku          ?? null,
-      entry.productTitle ?? null,
-      entry.delta        ?? null,
-      entry.valueBefore  ?? null,
-      entry.valueAfter   ?? null,
-      entry.notes        ?? null,
-      entry.extra ? JSON.stringify(entry.extra) : null,
-    )));
+    await db.batch(group.map((entry) => {
+      const unregistered = !isRegisteredLogValue(entry.tool, entry.type);
+      if (unregistered) unregisteredEntries.push(entry);
+      const extra = unregistered
+        ? { ...(entry.extra || {}), _unregistered: true }
+        : entry.extra;
+      return db.prepare(`
+        INSERT INTO logs
+          (timestamp, tool, type, employee, order_id, order_name,
+           sku, product_title, delta, value_before, value_after, notes, extra)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        entry.timestamp    ?? new Date().toISOString(),
+        entry.tool,
+        entry.type,
+        entry.employee     ?? null,
+        entry.orderId      ?? null,
+        entry.orderName    ?? null,
+        entry.sku          ?? null,
+        entry.productTitle ?? null,
+        entry.delta        ?? null,
+        entry.valueBefore  ?? null,
+        entry.valueAfter   ?? null,
+        entry.notes        ?? null,
+        extra ? JSON.stringify(extra) : null,
+      );
+    }));
   }
+  // بعد اللوب مرة واحدة، مش جوّاه (worker-builder Step 7-ج).
+  if (unregisteredEntries.length) await noteUnregisteredLogValues(db, unregisteredEntries);
 }
 
 // Duplicate key = order name + CYCLE name (v5.3.0 — Ahmed's call).
